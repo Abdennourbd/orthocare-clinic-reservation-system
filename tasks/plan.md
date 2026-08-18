@@ -57,6 +57,7 @@ The scheduling engine (slot generation, overlap detection, atomic conflict-free 
   - Every backend slice is tested with a route-level integration test against the test DB, not just curl.
 - **Audit logging:** a shared `logAction(userId, action, entityType, entityId, detail)` helper is delivered in Task 12 (auth) and called by Tasks 13–21. `action` is an enum (`APPOINTMENT_CONFIRMED`, `PATIENT_CREATED`, `SMS_SENT`, etc.), `detail` is JSON for context. Later tasks call the helper; they do not re-implement audit.
 - **Shared slot-release function:** a `releaseSlot(appointmentId, reason)` domain function is introduced in Task 5 and called by every path that frees a slot (staff cancel in Task 14, self-service cancel in Task 8, reschedule). It emits a **slot-freed event** that Task 17 (waitlist) subscribes to. This makes waitlist notifications fire on *all* cancellations, not just staff-driven ones.
+- **Validation:** Zod schemas in `src/schemas/` — one module per endpoint group; shared between route handlers (server) and forms (client). Added in Task 1.
 - **CI:** GitHub Actions — build, lint, typecheck, test on every PR; `prisma migrate` + seed against a ephemeral test DB.
 - **Error monitoring:** Sentry in production (added to Task 23) — patient-adjacent data warrants observability.
 - **Vercel Blob:** configured in Task 1 (env + dependency), consumed in Task 15 (patient documents).
@@ -179,6 +180,126 @@ Next.js App Router route handlers under `/app/api/`. ~45 routes total. Admin rou
 |---|---|---|
 | GET | `/api/cron/reminders` | 24h-before reminders to CONFIRMED appointments |
 | GET | `/api/cron/no-show-followup` | Mark NO_SHOW + send follow-up SMS |
+
+## Code Structure
+
+Target directory layout. Created incrementally per task (empty dirs aren't tracked by git — the structure materializes as files land). Task 1 creates the skeleton; every later task fills its slice.
+
+```
+orthocare-clinic/
+├── .github/workflows/ci.yml        # CI: build + lint + typecheck + test (Task 1)
+├── .env.example                    # DATABASE_URL, MESSAGE_PROVIDER, CRON_SECRET, ...
+├── next.config.ts
+├── tailwind.config.ts
+├── tsconfig.json                   # paths: "@/*" → "./src/*"
+├── vitest.config.ts
+├── package.json
+├── prisma/
+│   ├── schema.prisma               # grows across Tasks 3a/3b/3c (lazy)
+│   └── seed.ts
+├── messages/                       # next-intl UI strings (chrome: nav, buttons, labels)
+│   ├── fr.json
+│   ├── ar.json
+│   └── en.json
+├── tests/
+│   ├── setup.ts                    # test DB reset between suites
+│   └── integration/                # route-level tests (booking, self-service, waitlist)
+└── src/
+    ├── middleware.ts               # locale negotiation + /admin auth guard
+    ├── app/
+    │   ├── [locale]/               # PUBLIC SITE — trilingual, RTL-aware
+    │   │   ├── layout.tsx          # html dir=rtl for ar, Header/Footer
+    │   │   ├── page.tsx            # home / hero
+    │   │   ├── services/page.tsx
+    │   │   ├── services/[slug]/page.tsx
+    │   │   ├── book/page.tsx       # booking wizard (Task 6)
+    │   │   ├── appointment/[token]/page.tsx   # self-service cancel/reschedule (Task 8)
+    │   │   ├── faq/page.tsx
+    │   │   ├── testimonials/page.tsx
+    │   │   ├── gallery/page.tsx
+    │   │   ├── about/page.tsx
+    │   │   └── contact/page.tsx
+    │   ├── admin/                  # DASHBOARD — FR-only, OUTSIDE [locale] (no /fr/admin)
+    │   │   ├── layout.tsx          # session guard + sidebar + notification bell
+    │   │   ├── login/page.tsx
+    │   │   ├── page.tsx            # dashboard home → KPIs (Task 18)
+    │   │   ├── appointments/page.tsx       # day view (Task 14)
+    │   │   ├── patients/page.tsx           # list + search (Task 13)
+    │   │   ├── patients/[id]/page.tsx      # profile + history + documents
+    │   │   ├── sms/page.tsx                # SMS center (Task 16)
+    │   │   ├── waitlist/page.tsx           # (Task 17)
+    │   │   ├── team/page.tsx               # (Task 20)
+    │   │   ├── content/page.tsx            # services/testimonials/FAQ/gallery (Task 21)
+    │   │   └── settings/page.tsx           # working hours, templates (Task 21)
+    │   └── api/                    # ~45 route handlers — mirrors endpoint table above
+    │       ├── services/route.ts + [slug]/route.ts
+    │       ├── slots/route.ts
+    │       ├── appointments/route.ts + [token]/{route,reschedule}.ts
+    │       ├── auth/{login,logout,me}/route.ts
+    │       ├── admin/{appointments,patients,documents,sms,waitlist,kpis,exports,team,services,testimonials,faqs,gallery,settings,audit,notifications}/...
+    │       └── cron/{reminders,no-show-followup}/route.ts
+    ├── components/
+    │   ├── public/                 # Header, Footer, Hero, LocaleSwitcher,
+    │   │   │                       # BookingWizard/ (step components), SlotPicker,
+    │   │   │                       # GoogleReviews, ContentSections
+    │   ├── admin/                  # Sidebar, DayView, AppointmentCard, PatientForm,
+    │   │                           # DuplicateWarning, SmsComposer, KpiCards, DataTable
+    │   └── ui/                     # primitives: Button, Input, Modal, Badge, Select...
+    ├── lib/                        # domain logic — framework-free where possible
+    │   ├── db.ts                   # Prisma client singleton
+    │   ├── i18n/
+    │   │   ├── config.ts           # locales, default, RTL map
+    │   │   └── localized.ts        # localized(field, locale) + fallback (Task 2)
+    │   ├── slots/                  # PURE slot engine (Task 4) — zero Next.js imports
+    │   │   ├── workingHours.ts     # parse Setting JSON → day windows
+    │   │   ├── engine.ts           # generateSlots, overlaps, availability
+    │   │   └── engine.test.ts      # colocated unit tests
+    │   ├── booking/                # (Task 5)
+    │   │   ├── bookSlot.ts         # transactional insert + in-tx re-check
+    │   │   ├── releaseSlot.ts      # shared cancel path → emits slot-freed
+    │   │   └── events.ts           # slot-freed emitter (waitlist subscribes, Task 17)
+    │   ├── auth/                   # (Task 12)
+    │   │   ├── session.ts          # signed cookie, tokenVersion check
+    │   │   └── password.ts         # hash/verify (argon2 or bcrypt)
+    │   ├── messaging/              # (Task 7)
+    │   │   ├── provider.ts         # MessageProvider interface
+    │   │   ├── mock.ts / twilio.ts / whatsapp.ts
+    │   │   ├── templates.ts        # render from Settings templates
+    │   │   └── index.ts            # env-selected factory
+    │   ├── audit/logAction.ts      # (Task 12)
+    │   ├── patients/duplicates.ts  # (Task 13)
+    │   ├── selfservice/tokens.ts   # SelfServiceToken create/verify (Task 8)
+    │   ├── kpis/aggregations.ts    # pure functions + tests (Task 18)
+    │   ├── export/{csv,xlsx}.ts    # (Task 19)
+    │   └── cron/{reminders,noShow}.ts   # logic, thin routes call these (Task 9)
+    ├── schemas/                    # zod request validation per endpoint group
+    │   ├── booking.ts, patients.ts, appointments.ts, sms.ts, ...
+    │   └── (shared types re-exported to client forms)
+    └── types/                      # shared domain types (Status, Role, locales)
+```
+
+**Structural decisions:**
+
+1. **`src/` layout** — root stays clean with this many top-level dirs; `middleware.ts` lives in `src/` (Next.js requirement when using `src/`).
+2. **Admin outside `[locale]`** — `/admin` is a canonical URL, FR-only by construction. No `/fr/admin`, no locale switcher in dashboard. Middleware guards it separately from public routes.
+3. **Self-service under `[locale]`** — patients open cancellation links in their language; the SMS link embeds the locale (`/ar/appointment/[token]`).
+4. **Pure domain logic in `lib/`** — slot engine, KPI aggregations, duplicate detection, and booking functions import **zero** Next.js modules. Unit-testable in isolation; route handlers stay thin (validate → call lib → respond).
+5. **`lib/booking/events.ts`** — the slot-freed event from the dependency graph lives here. `releaseSlot()` emits; waitlist (Task 17) subscribes. Self-service and staff cancels both flow through it by construction.
+6. **Colocated unit tests + `tests/integration/`** — `engine.test.ts` sits next to `engine.ts`; route-level tests that need the test DB live in `tests/integration/`.
+7. **Zod schemas in `src/schemas/`** — one module per endpoint group; shared between route handlers and client forms. (Zod added to dependencies — small addition to Architecture Decisions.)
+8. **`messages/` vs DB content** — UI chrome (nav, buttons, labels) in JSON files; CMS content (services, FAQ, testimonials) in DB via `localized()`. Two clear sources: translatable-by-dev vs editable-by-clinic.
+9. **Component boundaries** — `components/public/` never imports from `components/admin/` and vice versa; shared primitives only from `components/ui/`.
+10. **Cron logic in `lib/cron/`** — route handlers are thin wrappers (auth + call lib); logic is testable without HTTP.
+
+**Which task creates what:**
+- Task 1: root config files, `prisma/`, `messages/` (empty skeletons), `src/app` shell, CI
+- Task 2: `messages/*.json`, `src/lib/i18n/`, `components/public/` shell, `[locale]/layout.tsx`
+- Task 3a/3b: `prisma/schema.prisma` + `seed.ts`
+- Task 4: `lib/slots/` (pure + tests)
+- Task 5: `lib/booking/` (bookSlot, releaseSlot, events)
+- Tasks 6-11: `[locale]` pages + `components/public/` + `api/` public routes
+- Tasks 12-21: `/admin` pages + `components/admin/` + `api/admin/` routes
+- Tasks 22-23: provider impls + deploy config
 
 ## Dependency Graph
 

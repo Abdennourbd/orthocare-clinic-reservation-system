@@ -7,7 +7,7 @@ Task details + rationale live in `tasks/plan.md`. This is the working checklist.
 ## Phase 1: Foundation
 
 ## Task 1: Scaffold project
-**Description:** Initialize Next.js (App Router, TypeScript, Tailwind, ESLint), add Prisma + Postgres (dev + test DBs), Vitest, Vercel Blob env, GitHub Actions CI (build + lint + typecheck + test).
+**Description:** Initialize Next.js (App Router, TypeScript, Tailwind, ESLint) following the directory layout in `tasks/plan.md` → "Code Structure"; add Prisma + Postgres (dev + test DBs), Vitest, Zod, Vercel Blob env, GitHub Actions CI (build + lint + typecheck + test).
 **Acceptance criteria:**
 - [ ] `npm run dev` serves the app
 - [ ] `npm run lint` and `npm run typecheck` pass
@@ -15,6 +15,7 @@ Task details + rationale live in `tasks/plan.md`. This is the working checklist.
 - [ ] Basic layout renders
 - [ ] CI passes on PR (GHA workflow exists)
 - [ ] Vercel Blob env vars documented in `.env.example`
+- [ ] Structure matches plan.md "Code Structure" section (src/ layout, middleware.ts, messages/, prisma/, tests/)
 **Verification:** `npm run build` succeeds; `npx prisma migrate dev` + `prisma migrate deploy` against test DB succeed; CI green.
 **Dependencies:** None
 **Estimated scope:** Medium
