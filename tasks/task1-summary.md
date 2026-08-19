@@ -46,11 +46,20 @@ vitest.config.ts    package.json (+ scripts)   next.config.ts  tsconfig.json
 - The project URL shows Vercel's login screen until a custom domain is set
   (expected on the free tier without a domain configured).
 
+## Shared database (Neon)
+
+- The team shares **one Postgres database on Neon** (via Vercel). Both
+  developers put the same `DATABASE_URL` in their local `.env`, so data created
+  by one is visible to the other.
+- Local `TEST_DATABASE_URL` stays on a local Postgres so automated tests never
+  touch the shared DB.
+- Initial migration applied to the shared Neon DB; app connectivity verified.
+
 ## Not done
 
 - **Staging environment** — a second, permanent preview env with its own DB /
-  synthetic data / mock messaging. Env vars for it are documented; can be
-  added once a shared cloud DB exists.
+  synthetic data / mock messaging. Can be added later; the shared Neon DB and
+  env vars are already in place.
 - Known advisory: `deepmerge-ts` (Prisma CLI-only, non-exploitable in app;
   `fix --force` would downgrade Prisma — deferred).
 - Full domain schema + real seed land in Task 3a/3b.
@@ -61,4 +70,6 @@ vitest.config.ts    package.json (+ scripts)   next.config.ts  tsconfig.json
   `src/generated/prisma` (gitignored, regenerate with `npx prisma generate`),
   connection via `@prisma/adapter-pg`.
 - Tailwind 4 is config-less (`@tailwindcss/postcss`, no `tailwind.config.ts`).
-- Nothing committed/pushed yet.
+- Work is committed and pushed to `main` (auto-deploys to Vercel).
+- **To connect to the shared DB:** copy `DATABASE_URL` from Vercel → Storage →
+  your Neon database into your local `.env`. Keep `TEST_DATABASE_URL` local.
