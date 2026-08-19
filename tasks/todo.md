@@ -191,18 +191,22 @@ Task details + rationale live in `tasks/plan.md`. This is the working checklist.
 **Estimated scope:** Medium (2 days)
 **Skill:** A **scheduled-jobs / idempotency** skill (retries, at-least-once delivery, safe re-runs). No framework skill needed beyond Vercel Cron's basics — the risk here is duplicate messages, not the plumbing.
 
-## Task 10: Google Reviews embed
-**Description:** Official Google Reviews embed widget on public site (live rating).
+## Task 10: Google Reviews embed (+ location map)
+**Description:** Official Google Reviews embed widget on public site (live rating). Clinic wants **only 4★-and-up reviews shown** — the free embed can't filter by rating, so this needs the Google Places API (key + billing) or a third-party widget; confirm with the clinic (Open Question in plan.md) before implementing the filter. Also: **Google Maps location** — embedded map + one-click "Open in Google Maps" directions button on the contact page (and optionally home/footer).
 **Acceptance criteria:**
 - [ ] Widget renders on public page
 - [ ] Works across all 3 locales
+- [ ] **Only 4★+ reviews displayed** — if the clinic confirmed the Places API route; otherwise free embed shows all reviews (decision recorded in plan.md)
 - [ ] Allow-listed in the Content-Security-Policy; disclosed in the privacy notice as a data flow to Google
 - [ ] **Not loaded on `/[locale]/appointment/[token]` pages** (it would receive the token in the `Referer` header)
 - [ ] Page still renders correctly if the widget fails to load
-**Verification:** Manual check on public site in `/fr`, `/ar`, `/en`; confirm no widget request on the token page.
+- [ ] Clinic location map embeds on contact page with address
+- [ ] "Open in Google Maps" button opens directions in one click (mobile + desktop, no API key)
+- [ ] Map iframe allow-listed in CSP; also excluded from token pages
+**Verification:** Manual check on public site in `/fr`, `/ar`, `/en`; confirm no widget/map request on the token page; one-click directions opens the Maps app/page.
 **Dependencies:** Task 2
-**Estimated scope:** Small (0.5 day)
-**Skill:** None needed — an embed snippet plus a locale check. First candidate on the cut list if time runs short.
+**Estimated scope:** Small (0.5–1 day; the 4★ filter via Places API adds an API key + cost + server-side caching)
+**Skill:** None needed for the embed + map link — an embed snippet plus a locale check. The Places-API 4★ filter (if chosen) needs a **server-side fetch + cache** approach. First candidate on the cut list if time runs short.
 
 ## Task 11: Public content pages
 **Description:** Build public-facing content pages: services list + detail, FAQ, testimonials, gallery, about, contact, **privacy notice**. All consume `localized()` helper (Task 2) + content schema (Task 3b). The privacy notice states what is collected, why, which processors are involved (hosting, database, messaging, error monitoring — all outside Algeria), and how to request correction or deletion.
@@ -210,7 +214,7 @@ Task details + rationale live in `tasks/plan.md`. This is the working checklist.
 - [ ] Each page renders in all 3 locales with FR fallback
 - [ ] Services list links to detail; detail shows duration + description
 - [ ] Gallery, testimonials, FAQ render active items only
-- [ ] Contact page renders clinic info + map
+- [ ] Contact page renders clinic info + map (map embed + one-click directions from Task 10)
 - [ ] Privacy notice published in all 3 locales and linked from the booking form and the footer
 - [ ] Gallery images optimized and lazy-loaded; page weight measured on a throttled mobile connection
 - [ ] Content pages cached/revalidated rather than rendered fresh on every request
@@ -225,7 +229,7 @@ Task details + rationale live in `tasks/plan.md`. This is the working checklist.
 - [ ] Token page exposes minimum data only and loads no third-party scripts
 - [ ] Reminders + no-show + expiry cron run against seeded data (mock SMS); **each run twice sends once**
 - [ ] Rate limits reject a booking flood from one IP/phone
-- [ ] Google Reviews widget live in 3 locales
+- [ ] Google Reviews widget live in 3 locales; map embed + one-click directions working
 - [ ] Public content pages + privacy notice render in 3 locales
 - [ ] Review with human before proceeding
 

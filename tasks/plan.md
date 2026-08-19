@@ -48,13 +48,14 @@ The scheduling engine (slot generation, overlap detection, atomic conflict-free 
 | — | RBAC admin dashboard (admin + receptionist) | Core |
 | — | SMS center: single + broadcast with delay template | Core |
 | 1 | **WhatsApp** as full provider behind the same abstraction as SMS | In |
-| 2 | **Google Reviews** embed widget on public site | In |
+| 2 | **Google Reviews** embed widget on public site (+ show only 4★+ reviews if the clinic opts for the Places API route) | In |
 | 3 | **Self-service link** in confirmation SMS: cancel + reschedule | In |
 | 5 | **KPIs** dashboard (schedule, utilization, no-shows, new patients) | In |
 | 7 | **Waitlist** — notify patients when a slot frees | In |
 | 8 | **No-show follow-up** SMS (automatic, cron) | In |
 | 9 | **CSV/Excel export** of monthly activity | In |
 | 10 | **Duplicate patient detection** (same phone/name) | In |
+| 11 | **Google Maps location** — embedded map + one-click "Open in Google Maps" directions | In |
 | 4 | Patient intake form | Dropped |
 | 6 | Recall campaigns | Dropped |
 
@@ -87,6 +88,8 @@ The scheduling engine (slot generation, overlap detection, atomic conflict-free 
   - **No referrer leakage:** the token sits in the URL, so the token page sends `Referrer-Policy: no-referrer` and loads **no third-party scripts** (no Google Reviews widget, no analytics). Without this, an embedded script receives the token in the `Referer` header.
   - **Rotation and rate limits:** rescheduling issues a fresh token and revokes the old one; token lookups are rate-limited to prevent guessing; every self-service action is audited with actor `PATIENT`.
 - **Google Reviews:** official embed widget on the public site (no API key, live rating/reviews). It is a third-party script, so: it is allow-listed explicitly in the Content-Security-Policy, disclosed in the privacy notice as a data flow to Google, and **excluded from the self-service token pages**.
+  - **4★-and-up filter (clinic request):** the no-API-key embed widget shows *all* reviews and cannot filter by star rating. Showing only 4★+ reviews requires either the **Google Places API** (server-side fetch + filter; needs an API key and is usage-billed) or a third-party review widget. **Decision needed:** (a) keep the free embed showing all reviews, or (b) use the Places API to show only 4★+ reviews (adds an API key, cost, and server-side caching). Until decided, Task 10 defaults to the free embed; the 4★ filter is tracked as an Open Question.
+- **Google Maps / location:** the clinic location is shown on the contact page (and optionally home/footer) as an embedded Google Maps iframe with the clinic's address, plus a **one-click "Open in Google Maps" directions button** (a plain `google.com/maps/dir/?api=1&destination=<lat>,<lng>` link — no API key, works on mobile and desktop). The map is a Google iframe, so like the reviews widget it is allow-listed in the CSP and disclosed in the privacy notice as a data flow to Google. It is **not** loaded on self-service token pages.
 - **Waitlist:** `WaitlistEntry` per patient/service. When a slot frees (cancellation), eligible waitlist entries are notified via SMS.
 - **KPIs & exports:** computed on demand from appointments (no extra tables). CSV and XLSX generation in `lib/export`. An export is a **bulk extract of patient data**, therefore: ADMIN-only, audited as `EXPORT_GENERATED` with the row count and date range, and clinical notes excluded unless explicitly requested.
 - **Duplicate detection:** on patient creation/edit, flag existing patients sharing phone or name; requires staff acknowledgment to proceed.
@@ -328,7 +331,7 @@ orthocare-clinic/
     ├── components/
     │   ├── public/                 # Header, Footer, Hero, LocaleSwitcher,
     │   │   │                       # BookingWizard/ (step components), SlotPicker,
-    │   │   │                       # GoogleReviews, ContentSections
+    │   │   │                       # GoogleReviews, GoogleMaps, ContentSections
     │   ├── admin/                  # Sidebar, DayView, AppointmentCard, PatientForm,
     │   │                           # DuplicateWarning, SmsComposer, KpiCards, DataTable
     │   └── ui/                     # primitives: Button, Input, Modal, Badge, Select...
@@ -519,7 +522,7 @@ Implementation order is bottom-up: schema (3a) → slot engine + atomic booking 
 - [ ] Task 7: Message abstraction + providers (Mock, Twilio-ready, WhatsApp) + `SmsMessage` + `Notification` models — confirmation on booking + staff dashboard notification
 - [ ] Task 8: Self-service link — `SelfServiceToken` (revocable) in confirmation SMS; cancel + reschedule, both routing through `releaseSlot()` (Task 5)
 - [ ] Task 9: Reminders + no-show follow-up + **PENDING auto-expiry** cron (Vercel Cron, mock provider) — all idempotent; expiry routes through `releaseSlot()`
-- [ ] Task 10: Google Reviews embed widget on public site
+- [ ] Task 10: Google Reviews embed widget (+ 4★ filter if confirmed) + Google Maps location (embed + one-click directions)
 - [ ] Task 11: Public content pages — services list/detail, FAQ, testimonials, gallery, about, contact, **privacy notice** (uses `localized()` helper, depends on Task 3b content schema)
 
 ### Checkpoint: Public booking works end-to-end
@@ -529,7 +532,7 @@ Implementation order is bottom-up: schema (3a) → slot engine + atomic booking 
 - [ ] Self-service cancel/reschedule works; `releaseSlot()` fires + slot reflects change; page exposes only minimum data
 - [ ] Reminders + no-show + expiry cron run against seeded data (mock SMS logged); **running each twice sends exactly one message**
 - [ ] Rate limits reject a booking flood from one IP/phone
-- [ ] Google Reviews widget renders live rating across all 3 locales
+- [ ] Google Reviews widget renders live rating across all 3 locales; map + one-click directions work
 - [ ] Public content pages render in all 3 locales with FR fallback
 
 ### Phase 4: Admin Core
@@ -612,6 +615,7 @@ Implementation order is bottom-up: schema (3a) → slot engine + atomic booking 
 | Data loss with no tested restore | High | Point-in-time recovery enabled, Blob backups, **restore drill before go-live**, printable day sheet as paper fallback |
 | Site unreachable during clinic hours | Med | Uptime + cron alerting; printable day sheet; documented rollback (revert DNS) |
 | Ranking lost when replacing the live domain | Med | 301 redirects from every old URL, hreflang, canonicals, JSON-LD, per-locale sitemaps resubmitted |
+| 4★-and-up review filter adds a key/billing dependency | Low | Default to the free embed; only take the Places API route if the clinic confirms it's worth the key + cost; cache server-side |
 | Slow public site on mobile networks (Arabic fonts, gallery) | Med | Font subsetting, image optimization + lazy loading, caching/ISR for content pages, bundle budget in Task 23 |
 | Clinic actually has more than one chair | High | Single-resource assumption stated and confirmed before Task 4; `resourceId` seam kept in the engine so adding chairs is inputs, not a rewrite |
 | WhatsApp template approval delays go-live | Med | Submit templates early in Phase 3; SMS remains the fallback channel; tracked as an Open Question |
@@ -627,4 +631,5 @@ Implementation order is bottom-up: schema (3a) → slot engine + atomic booking 
 - Real messaging provider at go-live (Twilio vs local DZ SMS provider vs WhatsApp Business API) — Task 22 decides; interface keeps it swappable
 - Does the clinic want a lunch break in the schedule? (Assumed configurable, default off)
 - Broadcast + no-show SMS permissions: admin-only, or also receptionist? (Assumed admin-only for broadcasts; receptionist can send single SMS)
+- **Google Reviews 4★ filter** — the free embed can't filter by rating. To show only 4★+ reviews requires the Google Places API (API key + usage billing + server-side caching). Default for Task 10 is the free embed; decide whether the 4★ filter is worth the key/cost.
 - ~~Admin dashboard language: FR only, or also AR/EN?~~ **Resolved: FR-only dashboard, trilingual public site.**
