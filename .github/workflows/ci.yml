@@ -1,0 +1,69 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: orthocare_dev
+        ports:
+          - 5432:5432
+        # Health check so the job waits until Postgres is ready.
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/orthocare_dev
+      TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/orthocare_test
+      MESSAGE_PROVIDER: mock
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Create the dedicated test database (dev DB comes from the service).
+      - name: Create test database
+        run: |
+          psql "$DATABASE_URL" -c "CREATE DATABASE orthocare_test;"
+        env:
+          PGPASSWORD: postgres
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Apply migrations to test database
+        run: npx prisma migrate deploy
+        env:
+          DATABASE_URL: ${{ env.TEST_DATABASE_URL }}
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build

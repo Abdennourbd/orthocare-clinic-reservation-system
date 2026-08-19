@@ -1,0 +1,30 @@
+// Ortho'Care Clinic — Prisma schema
+// Task 1: minimal schema with the Postgres-backed rate-limit store.
+// The full domain model (User, Patient, Service, Appointment, content,
+// messaging, audit, etc.) is added incrementally in Tasks 3a/3b/3c.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// Rate-limit counters for public endpoints (Task 1).
+// One row per (key) — the key encodes the scope, e.g.:
+//   "ip:203.0.113.7:appointments"      per-IP limit on POST /api/appointments
+//   "phone:+213550123456:appointments" per-phone limit
+//   "ip:203.0.113.7:login"             per-IP login throttle
+//   "user:1:login"                     per-account login throttle
+// `windowStart` marks the start of the current fixed window; `count` is the
+// number of requests observed within it. Atomic upsert keeps this race-free.
+model RateLimitCounter {
+  key         String   @id
+  windowStart DateTime
+  count       Int      @default(0)
+  updatedAt   DateTime @updatedAt
+
+  @@index([windowStart])
+}
