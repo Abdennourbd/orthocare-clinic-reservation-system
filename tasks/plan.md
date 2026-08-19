@@ -10,6 +10,36 @@ The dashboard has two roles — **admin** and **receptionist** (created by admin
 
 The scheduling engine (slot generation, overlap detection, atomic conflict-free booking) is the heavy part of the backend and is built and tested first.
 
+## Goals, Non-Goals & Success Metrics
+
+**Goals**
+1. Let patients book a real appointment online, in their own language, without phoning the clinic.
+2. Cut the receptionist's phone workload for routine scheduling (booking, cancelling, rescheduling, reminding).
+3. Reduce no-shows through automatic reminders and easy self-service rescheduling.
+4. Give the clinic one reliable place for patient records, visit history and documents.
+5. Make the clinic easy to find online in French, Arabic and English.
+
+**Non-Goals** (explicitly out of scope for v1 — this list exists to prevent scope creep)
+- **No patient login or patient portal** — patients act only through their own appointment link. Keeps both the build and the attack surface small.
+- **No online payment** — payment happens at the clinic. Avoids card-security (PCI) obligations entirely.
+- **No insurance or reimbursement handling** — too complex for a first release.
+- **No multi-clinic / multi-branch support** — one clinic, one schedule.
+- **No per-practitioner or per-chair scheduling in v1** — see the single-resource assumption in Architecture Decisions; the code leaves a seam for it.
+- **No patient intake forms, no recall campaigns** — features 4 and 6, dropped and confirmed.
+
+**Success Metrics** — measured 3 months after launch
+
+| Metric | How it is measured | Target |
+|---|---|---|
+| Share of appointments booked online | `Appointment.source = ONLINE` ÷ all appointments | ≥ 30% |
+| Time from online booking to confirmation call | median of `confirmedAt − createdAt` | < 4 working hours |
+| No-show rate | `NO_SHOW` ÷ (`COMPLETED` + `NO_SHOW`) | ≥ 30% below today's baseline |
+| Slot utilization | booked minutes ÷ open minutes, per week | ≥ 70% |
+| Self-service usage | cancels/reschedules via link ÷ all cancellations | ≥ 40% |
+| Abandoned online bookings | auto-expired PENDING ÷ all online bookings | < 10% |
+
+> **Baseline first:** write down today's no-show rate and weekly appointment volume **before** launch. Without a "before" number, the "after" number proves nothing.
+
 ## Confirmed Feature Set
 
 | # | Feature | Status |
@@ -34,56 +64,97 @@ The scheduling engine (slot generation, overlap detection, atomic conflict-free 
 - **Database:** Postgres via Prisma ORM (Vercel Postgres or Neon).
 - **i18n:** `next-intl`. Locales `fr`, `ar`, `en` with Arabic RTL + locale switcher. DB-driven content uses per-locale fields.
 - **Messaging:** `MessageProvider` interface. Implementations: `MockProvider` (logs to DB, dev), `TwilioProvider` (SMS, prod), `WhatsAppProvider` (prod, same templates). Selected via env. Every message recorded in `SmsMessage` with a `batchId` for broadcasts. Templates stored in Settings.
+  - **Transactional vs non-transactional.** Transactional messages (booking received, confirmation, reschedule, cancellation) are always sent — they are the service the patient asked for. Non-transactional messages (waitlist offers, no-show follow-up, delay broadcasts) are **suppressed for patients with `messagingOptOut = true`**. The dispatcher enforces this in one place so no feature can bypass it.
+  - **Opt-out:** every non-transactional message carries a short opt-out instruction; staff can also flip the flag from the patient record.
+  - **WhatsApp go-live prerequisites:** Meta requires documented patient opt-in **and** pre-approved message templates for business-initiated messages. Approval takes review time — it is a scheduling dependency for Task 22, not a coding detail. Start template submission early.
+  - **Send idempotency:** automated sends are keyed so a retried or overlapping job cannot message the same patient twice (see `reminderSentAt` and the unique index on `SmsMessage`).
 - **Auth/RBAC:** staff users with roles `ADMIN` and `RECEPTIONIST`. Email/password, signed session cookie, middleware-protected `/admin` routes. Patients have **no login**. Every staff action (confirm, cancel, reschedule, SMS, patient edit) written to an **audit trail**.
+  - **Session cookie:** `HttpOnly`, `Secure`, `SameSite=Lax`, `__Host-` prefix, signed. Absolute expiry 12h, idle expiry 2h. `tokenVersion` mismatch invalidates instantly.
+  - **CSRF:** state-changing requests (POST/PATCH/DELETE) verify the `Origin`/`Referer` header against the site origin. `SameSite=Lax` alone is not treated as sufficient.
+  - **Passwords:** argon2id, minimum 12 characters, blocked against a common-password list. Failed logins are throttled and an account locks temporarily after repeated failures (see Abuse controls).
+  - **Password recovery:** **no public "forgot password" email flow** — an ADMIN issues a one-time reset from Team management, and the staff member must set a new password at next login (`mustChangePassword`). Fewer moving parts, smaller attack surface, and it matches how a small clinic actually works.
+  - **Least privilege for destructive/bulk actions:** deleting documents, generating exports, reading the audit log and managing settings/team are **ADMIN-only**. Receptionists keep everything needed for daily scheduling.
 - **Reservation model (slot-based):**
   - Each `Service` has `durationMinutes` (estimation time per consultation type).
   - `generateSlots(date, service)` → candidate start times inside working hours (configurable granularity, buffer, lunch break), minus overlap with existing active appointments.
   - Booking is **atomic**: availability re-checked inside a DB transaction before insert; conflicts return an error. Production-hardening option: Postgres range EXCLUDE constraint via raw SQL.
   - Status lifecycle: `PENDING` (online, awaiting phone call) → `CONFIRMED` (after call) → `COMPLETED` / `NO_SHOW` / `CANCELLED` / `RESCHEDULED`. Manual (phone) bookings can be created directly as `CONFIRMED`.
-- **Self-service link:** signed token (no DB row) embedded in confirmation SMS. Grants limited actions: cancel an appointment, or reschedule into an available slot. Signed with server secret, expires.
-- **Google Reviews:** official embed widget on the public site (no API key, live rating/reviews).
+  - **PENDING bookings expire automatically.** An unconfirmed online booking blocks its slot, so a cron auto-cancels it after `pendingExpiryHours` (default 24h) — and always before the appointment starts. Expiry runs through `releaseSlot()`, so the slot returns to availability and the waitlist is notified like any other cancellation.
+  - **Booking window rules** (all editable settings): minimum lead time before a slot can be booked (default 2h), maximum booking horizon (default 90 days), and past dates always rejected. Prevents "booked the 17:00 slot at 16:58" and calendars filled three years out.
+  - **Single-resource assumption (v1):** the clinic treats **one patient at a time** — any overlapping active appointment blocks a slot. This is stated deliberately because it is the most expensive assumption to discover late: with two chairs or two practitioners, every availability query changes. The slot engine therefore takes an optional `resourceId` parameter that defaults to a single implicit resource, so adding chairs later is a change of inputs rather than a rewrite. **Confirm the real number of chairs with the clinic before Task 4.**
+- **Self-service link:** revocable token (`SelfServiceToken` row) embedded in the confirmation SMS. Grants exactly two actions: cancel the appointment, or reschedule into an available slot. Expires; single-use for cancel.
+  - **Minimum disclosure — the token page shows only:** service name, date and time, clinic address/phone, and the patient's **first name**. It must never expose phone, email, birth date, clinical notes, visit history, documents, or any other appointment.
+  - **No referrer leakage:** the token sits in the URL, so the token page sends `Referrer-Policy: no-referrer` and loads **no third-party scripts** (no Google Reviews widget, no analytics). Without this, an embedded script receives the token in the `Referer` header.
+  - **Rotation and rate limits:** rescheduling issues a fresh token and revokes the old one; token lookups are rate-limited to prevent guessing; every self-service action is audited with actor `PATIENT`.
+- **Google Reviews:** official embed widget on the public site (no API key, live rating/reviews). It is a third-party script, so: it is allow-listed explicitly in the Content-Security-Policy, disclosed in the privacy notice as a data flow to Google, and **excluded from the self-service token pages**.
 - **Waitlist:** `WaitlistEntry` per patient/service. When a slot frees (cancellation), eligible waitlist entries are notified via SMS.
-- **KPIs & exports:** computed on demand from appointments (no extra tables). CSV and XLSX generation in `lib/export`.
+- **KPIs & exports:** computed on demand from appointments (no extra tables). CSV and XLSX generation in `lib/export`. An export is a **bulk extract of patient data**, therefore: ADMIN-only, audited as `EXPORT_GENERATED` with the row count and date range, and clinical notes excluded unless explicitly requested.
 - **Duplicate detection:** on patient creation/edit, flag existing patients sharing phone or name; requires staff acknowledgment to proceed.
 - **Working hours / Settings:** store open hours per weekday (Sat–Thu, 10h–17h; Fri closed), slot granularity, inter-appointment buffer — editable in dashboard.
-- **Patients:** admin-managed accounts — profile (name, phone, email, birth date, notes), visit history (from appointments + manual visit records), uploaded documents.
+- **Closure dates (`ScheduleException`):** weekly hours cannot express Eid, national holidays, vacation, or "closed Thursday afternoon". A closure is a date or date range, full-day or partial, with a reason, and the slot engine subtracts it from availability. Without this, patients book online on days the clinic is shut — worse for trust than having no online booking at all.
+  - **Existing appointments are never silently orphaned:** adding a closure that covers booked appointments shows the affected list and offers bulk cancel-and-notify or reschedule. Staff decide; the system never drops them quietly.
+- **Timezone:** the clinic operates in **Africa/Algiers (UTC+1, no daylight saving)**. All timestamps are stored in **UTC**; working hours, slot generation, day boundaries and KPI date ranges are computed **in clinic-local time**; the UI renders local time. Cron schedules are defined in UTC with the intended local hour written next to them. This is stated explicitly because Vercel runs UTC and Postgres stores UTC while the clinic thinks in local time — the classic silent one-hour drift in both slots and reminders.
+- **Abuse controls (public endpoints):** the two unauthenticated write paths are rate-limited — `POST /api/appointments` (per IP and per phone), `/api/auth/login` (per IP and per account, with temporary lockout after repeated failures), plus lighter limits on `GET /api/slots` and self-service token lookups. A cap on simultaneously active PENDING bookings per phone prevents one script from filling the calendar. Counters live in a small Postgres table (no new vendor); an optional bot check (Turnstile/hCaptcha) can be enabled on the booking form. Lockouts are audited.
+- **Security headers:** Content-Security-Policy (allow-listing the Google Reviews embed), HSTS, `frame-ancestors 'none'`, `Referrer-Policy`, `Permissions-Policy`, `X-Content-Type-Options: nosniff` — set centrally in `next.config.ts`/middleware, with a stricter `Referrer-Policy: no-referrer` on token pages.
+- **Consent & privacy notice:** the booking form captures explicit consent (checkbox) and stores `consentAt` + `consentVersion` on the patient. A privacy notice page in all three locales explains what is collected, why, who processes it (hosting, database, messaging, error monitoring), and how to ask for correction or deletion.
+- **Data retention & erasure:** retention windows are documented for message bodies, audit logs, documents and error-monitoring events. Because rows are never hard-deleted, an erasure request is satisfied by **anonymization**: identifying fields are scrubbed and `anonymizedAt` is set, while the appointment shell remains so historical statistics stay correct. Erasure is ADMIN-only and audited.
+- **Phone numbers are normalized to E.164** (`+213…`) on every write, stored alongside the display form, and indexed. Both duplicate detection and message delivery key off phone, and `0550123456` / `+213 550 12 34 56` / `00213550123456` are the same person — but not to a database index. Without normalization, duplicate detection fails *silently* and messages bounce.
+- **Patients:** admin-managed accounts — profile (name, phone, email, birth date, notes), visit history (from appointments + manual visit records), uploaded documents, consent record and messaging opt-out flag. Patients never log in.
 - **Documents:** patient documents (X-rays, photos, files) in Vercel Blob; metadata in DB, patient-scoped, staff-only access.
+  - **Stored privately, never as a public URL.** Confirm the Blob access mode available on the plan; if only public-URL blobs exist, downloads must go through the authenticated route `GET /api/admin/documents/[id]`, which checks the staff session per request and then streams the file or issues a short-lived signed URL. A public blob URL is unguessable but **permanent and login-free** — once it leaks into a chat, a browser history or an error report, an X-ray is exposed forever with no way to revoke it.
+  - **Upload hardening:** MIME allow-list (JPEG, PNG, PDF, DICOM), size cap, extension/content-type agreement check, `Content-Disposition: attachment` and `X-Content-Type-Options: nosniff` on download. An uploaded SVG or HTML file served inline from your own domain is stored cross-site scripting.
+  - Downloads and deletions are audited (`PATIENT_DOCUMENT_DOWNLOADED`, `PATIENT_DOCUMENT_DELETED`); deletion is ADMIN-only.
 - **Admin dashboard language: FR only.** Public site is trilingual (FR/AR/EN). Dashboard UI, labels, and validation messages are FR-only. Rationale: staff are local; trilingual admin UI doubles the dashboard effort for no audience. Decided — no longer an open question.
 - **i18n of DB-driven content:** per-locale fields stored as **JSON columns** (`name: {fr, ar, en}`, `description: {fr, ar, en}`). Helper `localized(field, locale, fallback='fr')` centralizes retrieval with FR fallback. Owned by Task 2 (helper) + Task 3b (schema). Avoids a translation table for 3 locales + short strings; Postgres JSON ops support queries if needed.
 - **Testing strategy:** Vitest + a dedicated test Postgres database.
   - **Unit tests (required):** slot engine (Task 4), atomic booking concurrency (Task 5), audit helper, auth/RBAC gating (Task 12), booking wizard happy + conflict paths (Task 6), KPI aggregations (Task 18), duplicate detection (Task 13).
-  - **Integration tests (required):** booking lifecycle (PENDING→CONFIRMED→COMPLETED), self-service cancel/reschedule, waitlist notification on cancellation.
+  - **Integration tests (required):** booking lifecycle (PENDING→CONFIRMED→COMPLETED), self-service cancel/reschedule, waitlist notification on cancellation, PENDING auto-expiry, cron idempotency (running twice sends exactly one message).
+  - **Authorization matrix test (required, standing):** one table-driven test walking **every** `/api/admin/*` route × {anonymous, receptionist, admin, deactivated user} and asserting the expected status code. In an RBAC system this is simultaneously the most likely bug and the most damaging one, and it is usually introduced by a later unrelated task — so the table is updated whenever a route is added. Plus negative tests for self-service tokens: expired, already used, revoked, and belonging to a different appointment.
   - **Manual verification:** visual UI, i18n/RTL rendering, real SMS in staging.
+  - **Test data is synthetic only.** No copy of production patient data is ever used in dev, test or staging.
   - Every backend slice is tested with a route-level integration test against the test DB, not just curl.
-- **Audit logging:** a shared `logAction(userId, action, entityType, entityId, detail)` helper is delivered in Task 12 (auth) and called by Tasks 13–21. `action` is an enum (`APPOINTMENT_CONFIRMED`, `PATIENT_CREATED`, `SMS_SENT`, etc.), `detail` is JSON for context. Later tasks call the helper; they do not re-implement audit.
+- **Audit logging:** a shared `logAction(actor, action, entityType, entityId, detail)` helper is delivered in Task 12 (auth) and called by Tasks 13–21. `action` is an enum, `detail` is JSON for context. Later tasks call the helper; they do not re-implement audit.
+  - **Actor model:** `actor` is `{type: 'STAFF'|'SYSTEM'|'PATIENT', userId?}`. Cron jobs (auto-expiry, no-show marking) act as `SYSTEM`; self-service cancel/reschedule acts as `PATIENT`. The original `logAction(userId, …)` signature could not express either, so Tasks 8, 9 and 17 would have had no valid value to pass.
+  - **Reads are audited too, not just writes.** For patient data, *who looked at and extracted what* matters as much as who changed it: viewing a patient record, downloading a document and generating an export are all logged.
+  - **Append-only:** the application never updates or deletes `AuditLog` rows. Reading the audit log is ADMIN-only, and reading it is itself audited (`AUDIT_VIEWED`).
 - **Shared slot-release function:** a `releaseSlot(appointmentId, reason)` domain function is introduced in Task 5 and called by every path that frees a slot (staff cancel in Task 14, self-service cancel in Task 8, reschedule). It emits a **slot-freed event** that Task 17 (waitlist) subscribes to. This makes waitlist notifications fire on *all* cancellations, not just staff-driven ones.
 - **Validation:** Zod schemas in `src/schemas/` — one module per endpoint group; shared between route handlers (server) and forms (client). Added in Task 1.
 - **CI:** GitHub Actions — build, lint, typecheck, test on every PR; `prisma migrate` + seed against a ephemeral test DB.
-- **Error monitoring:** Sentry in production (added to Task 23) — patient-adjacent data warrants observability.
+- **Error monitoring:** Sentry in production (added to Task 23) — patient-adjacent data warrants observability. Configured with `sendDefaultPii: false` and a `beforeSend` hook that strips request bodies, masks self-service tokens in URLs, and removes patient names from error messages. By default an error monitor is an excellent tool for shipping patient names and live tokens to a third party; a data-processing agreement with the vendor is noted in the privacy notice.
+- **Uptime & delivery monitoring:** an external uptime check on the public site and on `/api/health`, plus an alert if a cron job stops reporting or if message-send failures spike. Sentry catches errors, not silence — a reminder cron that quietly stops running produces no errors at all.
+- **Backups & business continuity:** managed Postgres point-in-time recovery enabled, Blob contents backed up, and **a restore actually tested once before go-live** — an untested backup is not a backup. Because this becomes the clinic's entire appointment book on day one, staff can print or export the day's schedule, giving them a paper fallback if the site is unreachable during clinic hours.
+- **Environments:** three — local dev, **staging** (own database, own Blob store, mock or sandbox messaging, synthetic data only), and production. Staging is provisioned in Task 1; Task 22's real-provider verification depends on it existing.
+- **SEO & local discoverability:** for a local clinic replacing a live domain this is a launch requirement, not a finishing touch — `hreflang` tags across the three locales (without them Google may treat FR/AR/EN pages as duplicates), **301 redirects from every existing clinicorthocare.com URL** (replacing a live site without them discards its accumulated ranking), `Dentist`/`MedicalBusiness` JSON-LD structured data with address, geo coordinates and opening hours, canonical URLs, per-locale sitemaps, and name/address/phone consistency with the Google Business Profile the reviews widget already points at.
 - **Vercel Blob:** configured in Task 1 (env + dependency), consumed in Task 15 (patient documents).
-- **Deployment:** Vercel + managed Postgres + Vercel Blob + Vercel Cron (reminders, no-show follow-up). Seed data migrated from the current site (services, testimonials, FAQ).
+- **Deployment:** Vercel + managed Postgres + Vercel Blob + Vercel Cron (reminders, no-show follow-up, PENDING expiry). Seed data migrated from the current site (services, testimonials, FAQ).
+- **Launch cutover:** DNS switch with the old site kept reachable until the new one is verified, 301 redirects in place from day one, per-locale sitemaps resubmitted, and a written rollback step (revert DNS) if something breaks on launch day.
+- **Cross-border data processing:** hosting, database, messaging and error monitoring all sit outside Algeria, so patient-adjacent data leaves the country. Algeria's Law 18-07 treats this as a restricted transfer. The processors used are listed in the privacy notice, and whether a formal declaration or authorization is required is an open question to settle with the clinic before go-live — it is a paperwork question with a lead time, not a technical blocker.
 
 ## Domain / Data Model
 
 Per-locale fields are JSON columns (`{fr, ar, en}`); see `localized()` helper in Architecture Decisions.
 
-- `User` — id, name, email, passwordHash, role (`ADMIN`|`RECEPTIONIST`), active, **tokenVersion** (int; bumped on deactivate to revoke live sessions), timestamps
-- `Patient` — id, firstName, lastName, phone (indexed, non-unique — for duplicate detection, not a constraint), email, birthDate, notes, **createdById** (nullable FK→User), **updatedById** (nullable FK→User), timestamps. **Soft-delete only** (`active=false`); never hard-delete (historical appointments reference it).
+- `User` — id, name, email, passwordHash, role (`ADMIN`|`RECEPTIONIST`), active, **tokenVersion** (int; bumped on deactivate **or password reset** to revoke live sessions), **mustChangePassword** (bool — set by an admin-issued reset), **lastLoginAt**, **failedLoginCount**, **lockedUntil** (nullable — temporary lockout after repeated failures), timestamps
+- `Patient` — id, firstName, lastName, phone (as typed, for display), **phoneE164** (normalized `+213…`, indexed, non-unique — this is the field duplicate detection and messaging use), email, birthDate, notes, **consentAt** / **consentVersion** (nullable — consent captured at online booking), **messagingOptOut** (bool, default false), **anonymizedAt** (nullable — set when an erasure request is honoured), **createdById** (nullable FK→User), **updatedById** (nullable FK→User), timestamps. **Soft-delete only** (`active=false`); never hard-delete (historical appointments reference it).
 - `Service` — id, slug, name (JSON per-locale), description (JSON per-locale), durationMinutes, price (optional), **currency** (default `DZD`), active. Soft-delete only.
-- `Appointment` — id, patientId, serviceId, startTime, endTime (= start + service.duration), status (`PENDING`|`CONFIRMED`|`COMPLETED`|`NO_SHOW`|`CANCELLED`|`RESCHEDULED`), source (`ONLINE`|`MANUAL`), **createdByUserId** (nullable — null for ONLINE bookings), **confirmedAt**/**confirmedByUserId** (nullable — null if never confirmed), **cancelledAt**, **completedAt**, **noShowAt**, visitNotes, timestamps. Timestamps per status make KPI queries cheap (no AuditLog walk).
+- `Appointment` — id, patientId, serviceId, startTime, endTime (= start + service.duration), **all times stored UTC**, status (`PENDING`|`CONFIRMED`|`COMPLETED`|`NO_SHOW`|`CANCELLED`|`RESCHEDULED`), source (`ONLINE`|`MANUAL`), **createdByUserId** (nullable — null for ONLINE bookings), **confirmedAt**/**confirmedByUserId** (nullable — null if never confirmed), **cancelledAt**, **cancelReason** (`STAFF`|`PATIENT_SELF_SERVICE`|`AUTO_EXPIRED`|`CLOSURE`), **completedAt**, **noShowAt**, **reminderSentAt** (nullable — without it a cron retry texts every patient twice), **resourceId** (nullable; unused in v1, reserved for a second chair/practitioner), visitNotes, timestamps. Timestamps per status make KPI queries cheap (no AuditLog walk).
 - `Visit` — manual history records: id, patientId, date, serviceId?, type, notes, treatment. **History = `COMPLETED` appointments UNION `Visit` rows.** Visits are for pre-system records or walk-in treatments that never had an appointment. Documented in schema.
-- `PatientDocument` — id, patientId, name, type, url, uploadedById, uploadedAt
+- `PatientDocument` — id, patientId, name, **mimeType** (validated against an allow-list), **sizeBytes**, blobKey (private — never a public URL), uploadedById, uploadedAt, **deletedAt**/**deletedById** (soft-delete)
 - `WaitlistEntry` — id, patientId, serviceId, preferredDates (**DateTime[]**), active, **notifiedAt** (nullable — prevents re-notifying on every cancellation), createdAt
-- `SmsMessage` — id, to, body, **patientId** (nullable — enables "messages for this patient" queries without phone matching), type (`CONFIRMATION`|`REMINDER`|`NO_SHOW`|`MANUAL`|`RESCHEDULE`|`DELAY`|`WAITLIST` — note: no `BROADCAST`; grouping is encoded by `batchId`), **templateId** (nullable — lineage to the template version), batchId, provider, status, appointmentId?, sentById, sentAt
-- `AuditLog` — id, userId, **action** (enum: `APPOINTMENT_CONFIRMED`, `APPOINTMENT_CANCELLED`, `APPOINTMENT_RESCHEDULED`, `APPOINTMENT_COMPLETED`, `APPOINTMENT_NO_SHOW`, `PATIENT_CREATED`, `PATIENT_UPDATED`, `SMS_SENT`, `PATIENT_DOCUMENT_UPLOADED`, `TEAM_MEMBER_CREATED`, `TEAM_MEMBER_DEACTIVATED`, `SETTINGS_UPDATED`, `WAITLIST_ENTRY_ADDED`), entityType, entityId, detail (JSON), createdAt
-- `Notification` *(new)* — staff in-app notification feed: id, userId, type (`NEW_BOOKING`|`CANCELLATION`|`WAITLIST_MATCH`|`NO_SHOW_ALERT`), payload (JSON), readAt, createdAt. Backs the dashboard notification center; without it, "staff notification" is hand-waved.
-- `SelfServiceToken` *(new, optional but recommended)* — id, appointmentId, usedAt, revokedAt, expiresAt. Replaces stateless signed token to give revocation + replay protection. Small cost; worth it for medical-adjacent data. If you keep stateless tokens, enforce ≤48h expiry.
+- `SmsMessage` — id, to (E.164), body, **patientId** (nullable — enables "messages for this patient" queries without phone matching), type (`CONFIRMATION`|`REMINDER`|`NO_SHOW`|`MANUAL`|`RESCHEDULE`|`DELAY`|`WAITLIST`|`EXPIRED` — note: no `BROADCAST`; grouping is encoded by `batchId`), **templateId** (nullable — lineage to the template version), batchId, provider, status, appointmentId?, sentById, sentAt. **Unique index on (appointmentId, type)** for automated types, so a retried cron cannot double-send.
+- `AuditLog` — id, **actorType** (`STAFF`|`SYSTEM`|`PATIENT`), **userId** (nullable — null for SYSTEM and PATIENT actors), **action** (enum), entityType, entityId, detail (JSON), **ipAddress** (nullable), createdAt. **Append-only** — the application never updates or deletes rows.
+  - Change actions: `APPOINTMENT_CONFIRMED`, `APPOINTMENT_CANCELLED`, `APPOINTMENT_RESCHEDULED`, `APPOINTMENT_COMPLETED`, `APPOINTMENT_NO_SHOW`, `APPOINTMENT_AUTO_CANCELLED`, `PATIENT_CREATED`, `PATIENT_UPDATED`, `PATIENT_ANONYMIZED`, `SMS_SENT`, `PATIENT_DOCUMENT_UPLOADED`, `PATIENT_DOCUMENT_DELETED`, `TEAM_MEMBER_CREATED`, `TEAM_MEMBER_DEACTIVATED`, `TEAM_MEMBER_ROLE_CHANGED`, `SETTINGS_UPDATED`, `CLOSURE_CREATED`, `CLOSURE_DELETED`, `WAITLIST_ENTRY_ADDED`
+  - Access/auth actions *(added — reads matter as much as writes for patient data)*: `LOGIN_SUCCESS`, `LOGIN_FAILED`, `LOGIN_LOCKED`, `LOGOUT`, `PASSWORD_RESET`, `PATIENT_RECORD_VIEWED`, `PATIENT_DOCUMENT_DOWNLOADED`, `EXPORT_GENERATED`, `AUDIT_VIEWED`
+  - Patient-initiated actions: `SELF_SERVICE_CANCELLED`, `SELF_SERVICE_RESCHEDULED`
+- `Notification` *(new)* — staff in-app notification feed: id, userId, type (`NEW_BOOKING`|`CANCELLATION`|`WAITLIST_MATCH`|`NO_SHOW_ALERT`|`PENDING_EXPIRED`), payload (JSON), readAt, createdAt. Backs the dashboard notification center; without it, "staff notification" is hand-waved. **Fan-out rule:** one row per **active** staff user, so nothing depends on a particular person being logged in.
+- `SelfServiceToken` *(new — now required, not optional)* — id, **tokenHash** (the raw token is never stored), appointmentId, usedAt, revokedAt, expiresAt, createdAt. Gives revocation and replay protection that a stateless signed token cannot. Rescheduling issues a new token and revokes the previous one. Expiry ≤ 48h after the appointment.
+- `ScheduleException` *(new)* — id, startDate, endDate, allDay (bool), startTime/endTime (nullable, for partial-day closures), reason (JSON per-locale, shown to patients as "closed"), serviceId (nullable — closure can be global or per service), createdById, createdAt. Subtracted from availability by the slot engine. Covers holidays, Eid, vacation and emergency closures.
 - `Testimonial`, `FaqItem`, `GalleryItem` — public content, JSON per-locale fields, `active`
-- `Setting` — key, **value (JSON string)**. Working-hours schema documented: `{mon:{open:"10:00",close:"17:00"}, tue:{...}, ... fri:{closed:true}, sat:{...}}`. Also stores slot granularity, inter-appointment buffer, lunch break, messaging templates.
+- `Setting` — key, **value (JSON string)**. Working-hours schema documented: `{mon:{open:"10:00",close:"17:00"}, tue:{...}, ... fri:{closed:true}, sat:{...}}` (times are **clinic-local**, Africa/Algiers). Also stores slot granularity, inter-appointment buffer, lunch break, messaging templates, and the booking-policy keys: `pendingExpiryHours` (24), `minLeadTimeMinutes` (120), `maxHorizonDays` (90), `clinicTimezone` (`Africa/Algiers`), `consentVersion`.
 
 ## API Endpoints
 
-Next.js App Router route handlers under `/app/api/`. ~45 routes total. Admin routes require staff session + role check via middleware; cron routes authenticate with `CRON_SECRET` header, not user session.
+Next.js App Router route handlers under `/app/api/`. ~50 routes total. Admin routes require staff session + role check via middleware; cron routes authenticate with `CRON_SECRET` header, not user session. **Public write endpoints are rate-limited** (per IP and per phone) and **ADMIN-only routes are marked below** — the same table drives the authorization matrix test.
 
 ### Public booking
 | Method | Path | Purpose |
@@ -91,22 +162,25 @@ Next.js App Router route handlers under `/app/api/`. ~45 routes total. Admin rou
 | GET | `/api/services` | List active services |
 | GET | `/api/services/[slug]` | Service detail |
 | GET | `/api/slots?serviceId=&date=` | Available slots for service on date |
-| POST | `/api/appointments` | Create PENDING appointment (public booking) |
-| GET | `/api/appointments/[token]` | Self-service lookup by signed token |
-| POST | `/api/appointments/[token]/cancel` | Self-service cancel |
-| POST | `/api/appointments/[token]/reschedule` | Self-service reschedule into available slot |
+| POST | `/api/appointments` | Create PENDING appointment (public booking) — rate-limited, consent required |
+| GET | `/api/appointments/[token]` | Self-service lookup — **minimum disclosure only** (service, date/time, clinic info, first name) |
+| POST | `/api/appointments/[token]/cancel` | Self-service cancel (audited, actor `PATIENT`) |
+| POST | `/api/appointments/[token]/reschedule` | Self-service reschedule into available slot; rotates the token |
 
 ### Auth
 | Method | Path | Purpose |
 |---|---|---|
-| POST | `/api/auth/login` | Staff login |
+| POST | `/api/auth/login` | Staff login — throttled, lockout after repeated failures, success/failure audited |
 | POST | `/api/auth/logout` | Staff logout |
 | GET | `/api/auth/me` | Current staff user |
+| POST | `/api/auth/change-password` | Set a new password (required when `mustChangePassword`) |
 
 ### Admin — Appointments
 | Method | Path | Purpose |
 |---|---|---|
 | GET | `/api/admin/appointments?date=` | Day view |
+| GET | `/api/admin/appointments/pending` | **Call queue** — PENDING bookings awaiting a confirmation call, oldest first, with time left before auto-expiry |
+| GET | `/api/admin/appointments/search?q=` | Find an appointment by patient phone or name (for "a patient is on the phone right now") |
 | GET | `/api/admin/appointments/[id]` | Detail |
 | POST | `/api/admin/appointments` | Manual booking (CONFIRMED) |
 | PATCH | `/api/admin/appointments/[id]` | Status change (confirm/cancel/complete/no-show) |
@@ -121,20 +195,22 @@ Next.js App Router route handlers under `/app/api/`. ~45 routes total. Admin rou
 | PATCH | `/api/admin/patients/[id]` | Edit |
 | GET | `/api/admin/patients/[id]/history` | Union of COMPLETED appointments + Visits |
 | POST | `/api/admin/patients/[id]/visits` | Add manual visit |
+| POST | `/api/admin/patients/[id]/anonymize` | **ADMIN only** — honour an erasure request (scrub identifiers, keep the appointment shell) |
 
 ### Admin — Documents
 | Method | Path | Purpose |
 |---|---|---|
 | POST | `/api/admin/patients/[id]/documents` | Upload (Vercel Blob) |
 | GET | `/api/admin/patients/[id]/documents` | List |
-| GET | `/api/admin/documents/[id]` | Download (staff-only, signed URL) |
-| DELETE | `/api/admin/documents/[id]` | Delete |
+| GET | `/api/admin/documents/[id]` | Download — session checked per request, streamed or short-lived signed URL, `attachment` + `nosniff`, audited |
+| DELETE | `/api/admin/documents/[id]` | Delete — **ADMIN only**, soft-delete + blob removal, audited |
 
 ### Admin — Messaging
 | Method | Path | Purpose |
 |---|---|---|
 | POST | `/api/admin/sms/single` | Single SMS to patient |
-| POST | `/api/admin/sms/broadcast` | Broadcast to day's appointments (delay template) |
+| POST | `/api/admin/sms/broadcast/preview` | Recipient list + count **before** sending (no send) |
+| POST | `/api/admin/sms/broadcast` | Broadcast to day's appointments (delay template) — **ADMIN only**, requires an idempotency key so a double-click cannot send twice |
 | GET | `/api/admin/sms?batchId=&patientId=` | Message history |
 | GET | `/api/admin/sms/batches` | Batch list |
 
@@ -149,7 +225,8 @@ Next.js App Router route handlers under `/app/api/`. ~45 routes total. Admin rou
 | Method | Path | Purpose |
 |---|---|---|
 | GET | `/api/admin/kpis?from=&to=` | KPI aggregates |
-| GET | `/api/admin/exports/appointments?month=&format=csv\|xlsx` | Monthly export |
+| GET | `/api/admin/exports/appointments?month=&format=csv\|xlsx` | Monthly export — **ADMIN only**, audited with row count |
+| GET | `/api/admin/exports/day-sheet?date=` | Printable day schedule (paper fallback if the site is down) |
 
 ### Admin — Team (ADMIN only)
 | Method | Path | Purpose |
@@ -157,6 +234,7 @@ Next.js App Router route handlers under `/app/api/`. ~45 routes total. Admin rou
 | GET | `/api/admin/team` | List staff |
 | POST | `/api/admin/team` | Create receptionist |
 | PATCH | `/api/admin/team/[id]` | Edit / deactivate (bumps tokenVersion) |
+| POST | `/api/admin/team/[id]/reset-password` | Issue a one-time password reset (bumps tokenVersion, sets `mustChangePassword`, audited) |
 
 ### Admin — Content
 | Method | Path | Purpose |
@@ -170,16 +248,21 @@ Next.js App Router route handlers under `/app/api/`. ~45 routes total. Admin rou
 | Method | Path | Purpose |
 |---|---|---|
 | GET | `/api/admin/settings` | Get all settings |
-| PATCH | `/api/admin/settings` | Update (working hours, slot config, templates) |
-| GET | `/api/admin/audit?userId=&entityType=&from=` | Audit log query |
+| PATCH | `/api/admin/settings` | Update (working hours, slot config, booking policy, templates) — **ADMIN only** |
+| GET | `/api/admin/closures` | List closure dates |
+| POST | `/api/admin/closures` | Create closure — **ADMIN only**; returns affected appointments for confirmation |
+| DELETE | `/api/admin/closures/[id]` | Remove closure — **ADMIN only** |
+| GET | `/api/admin/audit?userId=&entityType=&from=` | Audit log query — **ADMIN only**, read is itself audited |
 | GET | `/api/admin/notifications` | Staff notification feed |
 | PATCH | `/api/admin/notifications/[id]/read` | Mark read |
 
 ### Cron (Vercel Cron → route handlers; `CRON_SECRET` auth)
 | Method | Path | Purpose |
 |---|---|---|
-| GET | `/api/cron/reminders` | 24h-before reminders to CONFIRMED appointments |
-| GET | `/api/cron/no-show-followup` | Mark NO_SHOW + send follow-up SMS |
+| GET | `/api/cron/reminders` | 24h-before reminders to CONFIRMED appointments — idempotent (`reminderSentAt`) |
+| GET | `/api/cron/no-show-followup` | Mark NO_SHOW + send follow-up SMS — idempotent |
+| GET | `/api/cron/expire-pending` | Auto-cancel unconfirmed PENDING bookings via `releaseSlot()` (frees the slot, triggers waitlist) |
+| GET | `/api/health` | Uptime probe (no auth, no data) |
 
 ## Code Structure
 
@@ -189,7 +272,7 @@ Target directory layout. Created incrementally per task (empty dirs aren't track
 orthocare-clinic/
 ├── .github/workflows/ci.yml        # CI: build + lint + typecheck + test (Task 1)
 ├── .env.example                    # DATABASE_URL, MESSAGE_PROVIDER, CRON_SECRET, ...
-├── next.config.ts
+├── next.config.ts                  # security headers + CSP (Task 23)
 ├── tailwind.config.ts
 ├── tsconfig.json                   # paths: "@/*" → "./src/*"
 ├── vitest.config.ts
@@ -203,6 +286,7 @@ orthocare-clinic/
 │   └── en.json
 ├── tests/
 │   ├── setup.ts                    # test DB reset between suites
+│   ├── authz-matrix.test.ts        # every admin route × every role (Task 12, updated forever after)
 │   └── integration/                # route-level tests (booking, self-service, waitlist)
 └── src/
     ├── middleware.ts               # locale negotiation + /admin auth guard
@@ -215,6 +299,7 @@ orthocare-clinic/
     │   │   ├── book/page.tsx       # booking wizard (Task 6)
     │   │   ├── appointment/[token]/page.tsx   # self-service cancel/reschedule (Task 8)
     │   │   ├── faq/page.tsx
+    │   │   ├── privacy/page.tsx    # privacy notice, 3 locales (Task 11)
     │   │   ├── testimonials/page.tsx
     │   │   ├── gallery/page.tsx
     │   │   ├── about/page.tsx
@@ -223,21 +308,23 @@ orthocare-clinic/
     │   │   ├── layout.tsx          # session guard + sidebar + notification bell
     │   │   ├── login/page.tsx
     │   │   ├── page.tsx            # dashboard home → KPIs (Task 18)
-    │   │   ├── appointments/page.tsx       # day view (Task 14)
+    │   │   ├── appointments/page.tsx       # day view + call queue + search (Task 14)
     │   │   ├── patients/page.tsx           # list + search (Task 13)
     │   │   ├── patients/[id]/page.tsx      # profile + history + documents
     │   │   ├── sms/page.tsx                # SMS center (Task 16)
     │   │   ├── waitlist/page.tsx           # (Task 17)
     │   │   ├── team/page.tsx               # (Task 20)
     │   │   ├── content/page.tsx            # services/testimonials/FAQ/gallery (Task 21)
-    │   │   └── settings/page.tsx           # working hours, templates (Task 21)
-    │   └── api/                    # ~45 route handlers — mirrors endpoint table above
+    │   │   ├── settings/page.tsx           # working hours, booking policy, templates (Task 21)
+    │   │   ├── closures/page.tsx           # holidays / vacation / closures (Task 21)
+    │   │   └── audit/page.tsx              # audit log viewer, ADMIN only (Task 12)
+    │   └── api/                    # ~50 route handlers — mirrors endpoint table above
     │       ├── services/route.ts + [slug]/route.ts
     │       ├── slots/route.ts
     │       ├── appointments/route.ts + [token]/{route,reschedule}.ts
     │       ├── auth/{login,logout,me}/route.ts
     │       ├── admin/{appointments,patients,documents,sms,waitlist,kpis,exports,team,services,testimonials,faqs,gallery,settings,audit,notifications}/...
-    │       └── cron/{reminders,no-show-followup}/route.ts
+    │       └── cron/{reminders,no-show-followup,expire-pending}/route.ts
     ├── components/
     │   ├── public/                 # Header, Footer, Hero, LocaleSwitcher,
     │   │   │                       # BookingWizard/ (step components), SlotPicker,
@@ -250,8 +337,14 @@ orthocare-clinic/
     │   ├── i18n/
     │   │   ├── config.ts           # locales, default, RTL map
     │   │   └── localized.ts        # localized(field, locale) + fallback (Task 2)
+    │   ├── time/
+    │   │   └── clinicTime.ts       # UTC ↔ Africa/Algiers conversion, single source of truth (Task 4)
+    │   ├── phone/
+    │   │   └── normalize.ts        # E.164 normalization + display format (Task 3a)
     │   ├── slots/                  # PURE slot engine (Task 4) — zero Next.js imports
     │   │   ├── workingHours.ts     # parse Setting JSON → day windows
+    │   │   ├── exceptions.ts       # subtract ScheduleException closures (Task 4)
+    │   │   ├── policy.ts           # lead time, horizon, past-date rules (Task 4)
     │   │   ├── engine.ts           # generateSlots, overlaps, availability
     │   │   └── engine.test.ts      # colocated unit tests
     │   ├── booking/                # (Task 5)
@@ -259,8 +352,12 @@ orthocare-clinic/
     │   │   ├── releaseSlot.ts      # shared cancel path → emits slot-freed
     │   │   └── events.ts           # slot-freed emitter (waitlist subscribes, Task 17)
     │   ├── auth/                   # (Task 12)
-    │   │   ├── session.ts          # signed cookie, tokenVersion check
-    │   │   └── password.ts         # hash/verify (argon2 or bcrypt)
+    │   │   ├── session.ts          # signed cookie, tokenVersion check, idle/absolute expiry
+    │   │   ├── csrf.ts             # origin check on state-changing requests
+    │   │   └── password.ts         # hash/verify (argon2id), policy, reset
+    │   ├── security/
+    │   │   ├── rateLimit.ts        # per-IP / per-phone counters, Postgres-backed (Task 1)
+    │   │   └── headers.ts          # CSP + security header helpers (Task 23)
     │   ├── messaging/              # (Task 7)
     │   │   ├── provider.ts         # MessageProvider interface
     │   │   ├── mock.ts / twilio.ts / whatsapp.ts
@@ -271,7 +368,9 @@ orthocare-clinic/
     │   ├── selfservice/tokens.ts   # SelfServiceToken create/verify (Task 8)
     │   ├── kpis/aggregations.ts    # pure functions + tests (Task 18)
     │   ├── export/{csv,xlsx}.ts    # (Task 19)
-    │   └── cron/{reminders,noShow}.ts   # logic, thin routes call these (Task 9)
+    │   ├── seo/jsonld.ts           # Dentist/MedicalBusiness structured data (Task 23)
+    │   ├── privacy/anonymize.ts    # erasure-by-anonymization (Task 13)
+    │   └── cron/{reminders,noShow,expirePending}.ts   # logic, thin routes call these (Task 9)
     ├── schemas/                    # zod request validation per endpoint group
     │   ├── booking.ts, patients.ts, appointments.ts, sms.ts, ...
     │   └── (shared types re-exported to client forms)
@@ -289,29 +388,34 @@ orthocare-clinic/
 7. **Zod schemas in `src/schemas/`** — one module per endpoint group; shared between route handlers and client forms. (Zod added to dependencies — small addition to Architecture Decisions.)
 8. **`messages/` vs DB content** — UI chrome (nav, buttons, labels) in JSON files; CMS content (services, FAQ, testimonials) in DB via `localized()`. Two clear sources: translatable-by-dev vs editable-by-clinic.
 9. **Component boundaries** — `components/public/` never imports from `components/admin/` and vice versa; shared primitives only from `components/ui/`.
-10. **Cron logic in `lib/cron/`** — route handlers are thin wrappers (auth + call lib); logic is testable without HTTP.
+10. **Cron logic in `lib/cron/`** — route handlers are thin wrappers (auth + call lib); logic is testable without HTTP. Every cron function is **idempotent**: running it twice produces the same result and sends no duplicate message.
+11. **One place converts time** — `lib/time/clinicTime.ts` is the only module that knows the clinic timezone. Nothing else does date maths on local time, which is how one-hour drift bugs get in.
+12. **One place normalizes phone numbers** — `lib/phone/normalize.ts` is called on every write path (booking, manual create, import). Duplicate detection and messaging both read the normalized field only.
+13. **One place enforces authorization** — a `requireRole()` guard used by every admin route handler, with the route/role table mirrored in `tests/authz-matrix.test.ts`. Adding a route means adding a row to the test.
 
 **Which task creates what:**
-- Task 1: root config files, `prisma/`, `messages/` (empty skeletons), `src/app` shell, CI
+- Task 1: root config files, `prisma/`, `messages/` (empty skeletons), `src/app` shell, CI, `lib/security/rateLimit.ts`, staging environment
 - Task 2: `messages/*.json`, `src/lib/i18n/`, `components/public/` shell, `[locale]/layout.tsx`
 - Task 3a/3b: `prisma/schema.prisma` + `seed.ts`
-- Task 4: `lib/slots/` (pure + tests)
+- Task 4: `lib/slots/` (pure + tests), `lib/time/clinicTime.ts`
 - Task 5: `lib/booking/` (bookSlot, releaseSlot, events)
 - Tasks 6-11: `[locale]` pages + `components/public/` + `api/` public routes
 - Tasks 12-21: `/admin` pages + `components/admin/` + `api/admin/` routes
-- Tasks 22-23: provider impls + deploy config
+- Tasks 22-23: provider impls + deploy config + `lib/seo/jsonld.ts` + security headers
 
 ## Dependency Graph
 
 ```
 Prisma schema (split across 3a/3b/3c — see Task List)
    3a: User, Patient, Service, Appointment        → engine + auth + bookings
-   3b: Testimonial, FaqItem, GalleryItem, Setting  → public content + admin content mgmt
+   3b: Testimonial, FaqItem, GalleryItem, Setting,
+       ScheduleException                           → public content + admin content mgmt + closures
    3c: SmsMessage, AuditLog, Notification,
        WaitlistEntry, Visit, PatientDocument,
        SelfServiceToken                            → added lazily as features land
         │
-        ├── Slot engine (pure logic: working hours, slot gen, overlap)
+        ├── Slot engine (pure logic: working hours, closures, booking policy,
+        │                 clinic-timezone conversion, slot gen, overlap)
         │        │
         │        └── releaseSlot() shared domain function  ←───┐
         │                 │                                      │ slot-freed event
@@ -331,7 +435,8 @@ Prisma schema (split across 3a/3b/3c — see Task List)
         │        │
         │        ├── Self-service link ─── calls releaseSlot() ──┤
         │        │
-        │        └── Reminders + no-show cron (mock provider)
+        │        └── Reminders + no-show + expire-pending cron (mock provider)
+        │             (all idempotent; expiry calls releaseSlot → waitlist fires)
         │
         ├── Waitlist ─── subscribes to slot-freed event ─────────┘
         │             (fires on BOTH staff and self-service cancellations)
@@ -356,12 +461,37 @@ Implementation order is bottom-up: schema (3a) → slot engine + atomic booking 
 - `releaseSlot()` is a shared function introduced in Task 5, called by staff cancel (Task 14), self-service cancel (Task 8), and reschedule paths. Waitlist (Task 17) subscribes to its slot-freed event — so it fires on **all** cancellations, not just staff-driven ones.
 - Reminders + no-show cron are built in Phase 3 with the mock provider (they only need messaging + appointments). Real Twilio/WhatsApp wiring is Phase 6.
 
+**Dependency changes introduced by this revision** *(flagged explicitly — these alter existing task inputs)*:
+- **`logAction()` signature changed** from `(userId, …)` to `(actor, …)` where actor is `STAFF | SYSTEM | PATIENT`. Tasks 13–21 only *call* the helper, so this is cheap now and expensive after nine call sites exist. Tasks 8, 9 and 17 previously had **no valid value to pass** — they act as PATIENT and SYSTEM.
+- **Task 4 gains two inputs** — `ScheduleException` closures and the booking-policy settings. Both must land in **Task 3b**, otherwise Task 4 is written against an incomplete model and reworked.
+- **Task 3a gains fields consumed later** — `phoneE164` (Tasks 6, 7, 13), `reminderSentAt` (Task 9), consent fields (Tasks 6, 7), `cancelReason` (Tasks 8, 9, 14).
+- **Task 1 gains the rate-limit store and the staging environment.** Task 22's verification already assumed staging existed; nothing created it.
+- **Task 15 changes approach, not order** — private blob + authenticated download route rather than a public blob URL. Same dependency (Task 13).
+- **No task numbers changed.** Every addition folds into an existing task, so no existing dependency is broken.
+
 ## Task List
 
 > Tasks tracked in `tasks/todo.md`. Renumbered from v1 — see "Key dependency corrections" above for the rationale. Acceptance criteria + verification per task live in `tasks/todo.md`.
 
+**Sizing and sequencing** (one developer; day estimates live per task in `tasks/todo.md`)
+
+| Phase | Tasks | Estimate | Notes |
+|---|---|---|---|
+| 1. Foundation | 1–2 | 3–5 days | Nothing else can start |
+| 2. Scheduling engine | 3a–5 | 8–12 days | **Highest risk, on the critical path** |
+| 3. Public booking + comms | 6–11 | 13–18 days | Tasks 10 and 11 can run in parallel |
+| 4. Admin core | 12–15 | 13–17 days | Task 12 gates everything after it |
+| 5. Admin ops | 16–21 | 11–14 days | Mostly parallelizable |
+| 6. Production readiness | 22–23 | 5–7 days | WhatsApp template approval has external lead time |
+| **Total** | | **~54–73 days** | ≈ 13–18 weeks at 75% capacity |
+
+**Critical path:** 1 → 3a → 4 → 5 → 6 → 12 → 13 → 14 → 23. A day lost here is a day lost overall.
+**Parallelizable / can slip safely:** 10 (Google Reviews), 11 (content pages), 18–21 (admin ops).
+**Cut list if time runs short, in order:** Task 10 → Task 19 (export) → Task 17 (waitlist) → advanced KPIs in Task 18. **Never cut** the security items in Tasks 12 and 15, the authorization matrix test, or the backup restore drill — those are the ones that are painful to retrofit.
+**Plan to ~75% of available time.** Interruptions, clinic feedback rounds and provider paperwork are certain, not hypothetical.
+
 ### Phase 1: Foundation
-- [ ] Task 1: Scaffold project (Next.js + TS + Tailwind + ESLint + Prisma + Postgres + Vitest + Vercel Blob + GitHub Actions CI)
+- [ ] Task 1: Scaffold project (Next.js + TS + Tailwind + ESLint + Prisma + Postgres + Vitest + Vercel Blob + GitHub Actions CI) + rate-limit store + **staging environment**
 - [ ] Task 2: i18n foundation + site shell + `localized()` DB helper (header, footer, hero, nav, locale switcher, RTL)
 
 ### Checkpoint: Foundation
@@ -369,69 +499,84 @@ Implementation order is bottom-up: schema (3a) → slot engine + atomic booking 
 - [ ] 3 locales render with correct direction (RTL for Arabic)
 - [ ] Postgres connected, `prisma migrate` works against dev + test DBs
 - [ ] `localized()` helper unit-tested with FR fallback
+- [ ] Staging environment reachable with its own database and synthetic data only
 
 ### Phase 2: Scheduling Engine (high-risk, built first — no UI)
-- [ ] Task 3a: Core schema (User, Patient, Service, Appointment) + migration + minimal seed (just enough to test the engine)
-- [ ] Task 3b: Content schema (Testimonial, FaqItem, GalleryItem, Setting) + full seed from current site
-- [ ] Task 4: Slot engine — pure functions: working hours lookup, slot generation per service, overlap detection, availability query (unit-tested)
+- [ ] Task 3a: Core schema (User, Patient, Service, Appointment) + phone normalization + consent fields + `reminderSentAt` + migration + minimal seed (no default admin password in any shared environment)
+- [ ] Task 3b: Content schema (Testimonial, FaqItem, GalleryItem, Setting, **ScheduleException**) + booking-policy settings + full seed from current site
+- [ ] Task 4: Slot engine — pure functions: clinic-timezone conversion, working hours lookup, **closure subtraction**, **booking-window policy**, slot generation per service, overlap detection, availability query (unit-tested)
 - [ ] Task 5: Atomic booking action + `releaseSlot()` shared function — transactional book with in-transaction availability re-check + conflict error; `releaseSlot()` emits slot-freed event (concurrency-tested)
 
 ### Checkpoint: Engine correct
-- [ ] Slot engine unit tests pass (overlap, boundaries, lunch, buffer)
+- [ ] Slot engine unit tests pass (overlap, boundaries, lunch, buffer, closures, lead time, horizon)
+- [ ] Times behave correctly across the UTC ↔ Africa/Algiers boundary (00:00 and 23:59 local)
 - [ ] Concurrent bookings of the same slot: exactly one succeeds
 - [ ] Booked slot renders as reserved in availability query
 - [ ] `releaseSlot()` event fires on cancellation
 
 ### Phase 3: Public Booking + Communication
-- [ ] Task 6: Booking wizard UI + `POST /api/appointments` + `GET /api/slots` — pick service → date → available/occupied slots → patient info → confirm → summary (integration-tested: happy + conflict paths)
+- [ ] Task 6: Booking wizard UI + `POST /api/appointments` + `GET /api/slots` — pick service → date → available/occupied slots → patient info + **consent** → confirm → summary; rate-limited (integration-tested: happy + conflict paths)
 - [ ] Task 7: Message abstraction + providers (Mock, Twilio-ready, WhatsApp) + `SmsMessage` + `Notification` models — confirmation on booking + staff dashboard notification
 - [ ] Task 8: Self-service link — `SelfServiceToken` (revocable) in confirmation SMS; cancel + reschedule, both routing through `releaseSlot()` (Task 5)
-- [ ] Task 9: Reminders + no-show follow-up cron (Vercel Cron, mock provider) — 24h-before reminders to CONFIRMED; cron marks NO_SHOW + sends follow-up SMS
+- [ ] Task 9: Reminders + no-show follow-up + **PENDING auto-expiry** cron (Vercel Cron, mock provider) — all idempotent; expiry routes through `releaseSlot()`
 - [ ] Task 10: Google Reviews embed widget on public site
-- [ ] Task 11: Public content pages — services list/detail, FAQ, testimonials, gallery, about, contact (uses `localized()` helper, depends on Task 3b content schema)
+- [ ] Task 11: Public content pages — services list/detail, FAQ, testimonials, gallery, about, contact, **privacy notice** (uses `localized()` helper, depends on Task 3b content schema)
 
 ### Checkpoint: Public booking works end-to-end
 - [ ] Patient books an available slot; slot shows as reserved afterwards
-- [ ] Confirmation SMS sent (mock provider); staff in-app notification fires
-- [ ] Self-service cancel/reschedule works; `releaseSlot()` fires + slot reflects change
-- [ ] Reminders + no-show cron run against seeded data (mock SMS logged)
+- [ ] Consent recorded; booking rejected without it
+- [ ] Booking-received SMS sent (mock provider); staff in-app notification fires
+- [ ] Self-service cancel/reschedule works; `releaseSlot()` fires + slot reflects change; page exposes only minimum data
+- [ ] Reminders + no-show + expiry cron run against seeded data (mock SMS logged); **running each twice sends exactly one message**
+- [ ] Rate limits reject a booking flood from one IP/phone
 - [ ] Google Reviews widget renders live rating across all 3 locales
 - [ ] Public content pages render in all 3 locales with FR fallback
 
 ### Phase 4: Admin Core
-- [ ] Task 12: Auth + RBAC + audit helper + dashboard shell — staff login, sessions (tokenVersion revocation), middleware, `/admin` shell, role-gated nav, `logAction()` helper, `AuditLog` model (deps: 3a — **not** Task 7)
+- [ ] Task 12: Auth + RBAC + audit helper + dashboard shell — staff login (throttled, lockout), CSRF + cookie hardening, sessions (tokenVersion revocation), middleware, `/admin` shell, role-gated nav, `logAction(actor, …)` helper, `AuditLog` model, audit viewer, **authorization matrix test** (deps: 3a — **not** Task 7)
 - [ ] Task 13: Patient records + duplicate detection — CRUD, visit history timeline (COMPLETED appointments UNION Visits), notes, phone/name duplicate flagging (deps: Task 12)
-- [ ] Task 14: Appointment management — day view, confirm-after-call, cancel, reschedule (re-checks availability), mark completed/no-show, manual booking creation (deps: Task 13 — manual booking needs patient CRUD)
-- [ ] Task 15: Patient documents — Vercel Blob upload/download, patient-scoped, staff-only (deps: Task 13)
+- [ ] Task 14: Appointment management — day view, **call queue** (PENDING awaiting call), **search by phone/name**, confirm-after-call, cancel, reschedule (re-checks availability), mark completed/no-show, manual booking creation (deps: Task 13 — manual booking needs patient CRUD)
+- [ ] Task 15: Patient documents — **private** Blob storage + authenticated download route, MIME allow-list + size cap, patient-scoped, staff-only, downloads audited (deps: Task 13)
 
 ### Checkpoint: Admin scheduling loop
 - [ ] Receptionist confirms/cancels/reschedules; each action audited + SMS fires
+- [ ] Call queue lists bookings awaiting a confirmation call, oldest first
+- [ ] Appointment findable by phone or name while the patient is on the line
 - [ ] Manual booking appears in slot availability; completed visit saved to history
 - [ ] Duplicate patient flagged on creation; documents scoped + staff-only
+- [ ] Document URL alone (no session) does **not** grant access; download audited
 - [ ] Deactivated staff session revoked immediately (tokenVersion bump)
+- [ ] Authorization matrix test green for every admin route × every role
 
 ### Phase 5: Admin Ops
-- [ ] Task 16: SMS Center — manual single SMS + broadcast with delay template ("delayed by X min"); send history with batchId (deps: Task 14, Task 13)
+- [ ] Task 16: SMS Center — manual single SMS + broadcast with delay template ("delayed by X min"), **recipient preview + idempotency key**, opt-out respected; send history with batchId (deps: Task 14, Task 13)
 - [ ] Task 17: Waitlist — entries per patient/service; subscribes to slot-freed event from `releaseSlot()` so it fires on **both** staff and self-service cancellations (deps: Task 14, Task 8)
 - [ ] Task 18: KPIs overview — today's schedule, utilization rate, no-shows, new patients/month (unit-tested aggregations; deps: Task 14)
-- [ ] Task 19: CSV/Excel export — monthly activity report (deps: Task 18)
-- [ ] Task 20: Team management — admin creates/edits/deactivates receptionist accounts (deps: Task 12)
-- [ ] Task 21: Content management + settings — services (incl. durations), gallery, testimonials, FAQ, working hours/slot config, messaging templates (deps: Task 12, Task 3b)
+- [ ] Task 19: CSV/Excel export — monthly activity report (ADMIN-only, audited) + printable day sheet (deps: Task 18)
+- [ ] Task 20: Team management — admin creates/edits/deactivates receptionist accounts + issues password resets (deps: Task 12)
+- [ ] Task 21: Content management + settings — services (incl. durations), gallery, testimonials, FAQ, working hours/slot config, **closure dates**, booking policy, messaging templates (deps: Task 12, Task 3b)
 
 ### Checkpoint: Admin ops complete
 - [ ] Broadcast + waitlist + no-show flows verified
+- [ ] Broadcast shows a recipient count before sending; a double-click sends once
+- [ ] Opted-out patients excluded from non-transactional messages
 - [ ] Waitlist fires on self-service cancellation (not just staff)
-- [ ] KPIs and exports produce correct numbers (unit-tested)
+- [ ] Closure date blocks new bookings and surfaces affected existing appointments
+- [ ] KPIs and exports produce correct numbers (unit-tested); export is ADMIN-only and audited
 - [ ] Role restrictions enforced (receptionist cannot manage team/settings)
 
 ### Phase 6: Production Readiness
 - [ ] Task 22: Twilio + WhatsApp provider wiring — flip `MESSAGE_PROVIDER` from mock to real; verify against a real DZ number (deps: Task 16)
-- [ ] Task 23: SEO/OG, sitemap, robots.txt, performance pass, Sentry, deploy to Vercel, env config, handoff docs (deps: Task 21, Task 22)
+- [ ] Task 23: SEO (**hreflang, 301 redirects, JSON-LD, canonicals**), sitemap, robots.txt, performance pass (Arabic font subsetting, gallery optimization), security headers/CSP, Sentry with PII scrubbing, uptime monitoring, **backup restore drill**, cutover + rollback, deploy to Vercel, env config, handoff docs (deps: Task 21, Task 22)
 
 ### Checkpoint: Complete
 - [ ] All acceptance criteria met (see tasks/todo.md)
 - [ ] Deployed to Vercel; real SMS/WhatsApp verified against DZ number
-- [ ] Sentry capturing errors; handoff documentation ready for clinic owner
+- [ ] Sentry capturing errors **with PII scrubbed**; uptime + cron alerts live
+- [ ] Database restore tested from backup, not just configured
+- [ ] 301 redirects live from all old URLs; hreflang + JSON-LD validate
+- [ ] Privacy notice published in 3 locales; retention policy written
+- [ ] Handoff documentation ready for clinic owner
 
 ## Risks and Mitigations
 
@@ -450,9 +595,34 @@ Implementation order is bottom-up: schema (3a) → slot engine + atomic booking 
 | Hard-delete breaks historical references (Patient, Service) | Med | Soft-delete only (`active=false`); never destroy rows referenced by appointments |
 | Algeria data-protection law (18-07) — patient-adjacent data | Med | Staff-only access, audit trail, min data collection, no patient self-service data exposure beyond own appointment; confirm with clinic if formal registration needed |
 | Unmonitored prod errors on patient-adjacent system | Med | Sentry wired in Task 23; alerting on auth/messaging failures |
-| Scope creep (many features) | Med | Vertical slices with working checkpoints; features 4 & 6 dropped; remaining locked per confirmed set |
+| Scope creep (many features) | Med | Vertical slices with working checkpoints; features 4 & 6 dropped; explicit Non-Goals list; remaining locked per confirmed set |
+| Booking flood fills the calendar (no login needed to book) | High | Rate limits per IP and per phone, cap on active PENDING per phone, PENDING auto-expiry, optional bot check |
+| Staff password brute-forced | High | Login throttling + temporary lockout, argon2id, 12-char minimum, failures audited |
+| Public blob URL exposes an X-ray permanently | High | Private storage + authenticated download route; MIME allow-list; `attachment` + `nosniff`; downloads audited |
+| Timezone drift between UTC hosting and clinic-local hours | High | Single `clinicTime` module; UTC storage, local computation; boundary tests at 00:00/23:59 |
+| Cron retry double-texts every patient | Med | `reminderSentAt` + unique index on `SmsMessage(appointmentId, type)`; idempotency tested by running each job twice |
+| Patients book on a day the clinic is closed | Med | `ScheduleException` closures subtracted from availability; affected existing appointments surfaced, never dropped silently |
+| Duplicate detection silently fails on phone formats | Med | E.164 normalization on every write; normalized field indexed and used for matching and messaging |
+| Self-service token leaks via referrer or forwarded SMS | Med | `Referrer-Policy: no-referrer`, no third-party scripts on token pages, minimum disclosure, rotation on reschedule, rate limits |
+| Broadcast misfire messages every patient twice | Med | Recipient preview + count, idempotency key, ADMIN-only, logged with batchId |
+| Bulk export leaks patient data | Med | ADMIN-only, audited with row count, clinical notes excluded by default |
+| PII shipped to error monitor / third parties | Med | `sendDefaultPii: false`, `beforeSend` scrubbing, token masking, processors listed in privacy notice |
+| Cross-border transfer under Law 18-07 (hosting/DB/SMS/Sentry outside Algeria) | Med | Processors documented in the privacy notice; confirm declaration/authorization requirements with the clinic before go-live |
+| Erasure request conflicts with never-hard-delete rule | Med | Anonymization path (`anonymizedAt`) keeps statistics intact; ADMIN-only and audited |
+| Data loss with no tested restore | High | Point-in-time recovery enabled, Blob backups, **restore drill before go-live**, printable day sheet as paper fallback |
+| Site unreachable during clinic hours | Med | Uptime + cron alerting; printable day sheet; documented rollback (revert DNS) |
+| Ranking lost when replacing the live domain | Med | 301 redirects from every old URL, hreflang, canonicals, JSON-LD, per-locale sitemaps resubmitted |
+| Slow public site on mobile networks (Arabic fonts, gallery) | Med | Font subsetting, image optimization + lazy loading, caching/ISR for content pages, bundle budget in Task 23 |
+| Clinic actually has more than one chair | High | Single-resource assumption stated and confirmed before Task 4; `resourceId` seam kept in the engine so adding chairs is inputs, not a rewrite |
+| WhatsApp template approval delays go-live | Med | Submit templates early in Phase 3; SMS remains the fallback channel; tracked as an Open Question |
+| Privileged action taken with no trace | Med | Audit covers reads, downloads, exports and logins; append-only; ADMIN-only to read; access-control regression caught by the authorization matrix test |
 
 ## Open Questions
+- **How many patients can the clinic treat at the same time (chairs/practitioners)?** *Blocking Task 4* — v1 assumes exactly one. If the answer is two or more, the availability model changes before the engine is built, not after.
+- **Cross-border data processing under Law 18-07** — hosting, database, messaging and error monitoring all sit outside Algeria. Does the clinic need a declaration or authorization? Paperwork with a lead time; settle before go-live.
+- **Retention windows** — how long to keep message bodies, audit logs and patient documents? Needed to finish the retention policy.
+- **WhatsApp opt-in wording and template approval** — Meta review has external lead time; start in Phase 3 or accept SMS-only at launch.
+- **Arabic numerals** — Eastern (٠١٢٣) or Western (0123) for times and dates in the Arabic locale? Affects the slot picker and every date display.
 - Exact durations per service (est. to be confirmed with the clinic); defaults editable in dashboard
 - Real messaging provider at go-live (Twilio vs local DZ SMS provider vs WhatsApp Business API) — Task 22 decides; interface keeps it swappable
 - Does the clinic want a lunch break in the schedule? (Assumed configurable, default off)
