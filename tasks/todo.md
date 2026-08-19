@@ -20,16 +20,16 @@ Task details + rationale live in `tasks/plan.md`. This is the working checklist.
 ## Task 1: Scaffold project
 **Description:** Initialize Next.js (App Router, TypeScript, Tailwind, ESLint) following the directory layout in `tasks/plan.md` → "Code Structure"; add Prisma + Postgres (dev + test DBs), Vitest, Zod, Vercel Blob env, GitHub Actions CI (build + lint + typecheck + test). Also: provision a **staging environment** (own DB, own Blob store, mock messaging, synthetic data only) and add the Postgres-backed rate-limit counter table used by public endpoints.
 **Acceptance criteria:**
-- [ ] `npm run dev` serves the app
-- [ ] `npm run lint` and `npm run typecheck` pass
-- [ ] Prisma schema migrates against dev + test Postgres
-- [ ] Basic layout renders
+- [x] `npm run dev` serves the app
+- [x] `npm run lint` and `npm run typecheck` pass
+- [x] Prisma schema migrates against dev + test Postgres
+- [x] Basic layout renders
 - [ ] CI passes on PR (GHA workflow exists)
-- [ ] Vercel Blob env vars documented in `.env.example`
-- [ ] Structure matches plan.md "Code Structure" section (src/ layout, middleware.ts, messages/, prisma/, tests/)
+- [x] Vercel Blob env vars documented in `.env.example`
+- [x] Structure matches plan.md "Code Structure" section (src/ layout, proxy.ts, messages/, prisma/, tests/)
 - [ ] Staging environment deploys and is reachable, with its own database
-- [ ] Rate-limit helper (`lib/security/rateLimit.ts`) present with a unit test
-- [ ] No secret is committed; `.env.example` lists every variable with a comment
+- [x] Rate-limit helper (`lib/security/rateLimit.ts`) present with a unit test
+- [x] No secret is committed; `.env.example` lists every variable with a comment
 **Verification:** `npm run build` succeeds; `npx prisma migrate dev` + `prisma migrate deploy` against test DB succeed; CI green; staging URL loads.
 **Dependencies:** None
 **Estimated scope:** Medium (1–2 days)
@@ -38,22 +38,22 @@ Task details + rationale live in `tasks/plan.md`. This is the working checklist.
 ## Task 2: i18n foundation + site shell + `localized()` helper
 **Description:** Add `next-intl` with `fr`, `ar`, `en` locales, RTL support, locale switcher; build header, footer, hero, nav; deliver `localized(field, locale, fallback='fr')` helper for JSON per-locale DB fields, with unit tests.
 **Acceptance criteria:**
-- [ ] All 3 locales render; Arabic uses RTL
-- [ ] Locale switcher works and persists (cookie)
-- [ ] Site shell matches current clinic branding (colors, logo, hero)
-- [ ] `localized()` returns the requested locale or falls back to FR; unit tests cover missing locale + null field
-- [ ] Arabic webfont subsetted; the font payload is measured and recorded (Arabic fonts are heavy by default)
+- [x] All 3 locales render; Arabic uses RTL
+- [x] Locale switcher works and persists (cookie)
+- [ ] Site shell matches current clinic branding (colors, logo, hero) — placeholder palette used; real brand colors/logo not yet confirmed
+- [x] `localized()` returns the requested locale or falls back to FR; unit tests cover missing locale + null field
+- [x] Arabic webfont subsetted; the font payload is measured and recorded (Arabic fonts are heavy by default)
 **Verification:** Manual check across `/fr`, `/ar`, `/en`; `npm test -- localized`; typecheck passes.
 **Dependencies:** Task 1
 **Estimated scope:** Medium (2–3 days)
 **Skill:** An **i18n / next-intl skill** (locale routing, RTL, fallbacks) — genuinely worth having, since RTL mistakes are cheap to prevent and expensive to retrofit. The available **frontend-design** skill helps with the shell and typography.
 
 ## Checkpoint: After Tasks 1-2 (Foundation)
-- [ ] All tests pass, build clean, CI green
-- [ ] 3 locales + RTL working
-- [ ] `localized()` helper unit-tested
+- [ ] All tests pass, build clean, CI green — tests (10/10) + build clean locally; CI green on GitHub not yet confirmed
+- [x] 3 locales + RTL working
+- [x] `localized()` helper unit-tested
 - [ ] Staging environment live with its own database, synthetic data only
-- [ ] Review with human before proceeding
+- [x] Review with human before proceeding
 
 ## Phase 2: Scheduling Engine (no UI — highest risk first)
 

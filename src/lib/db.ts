@@ -2,20 +2,32 @@ import { PrismaClient } from "@/generated/prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 
 // Prisma client singleton.
-// Reads DATABASE_URL at first use so the Vitest test setup can point it at the
-// dedicated test database (TEST_DATABASE_URL) before anything imports this.
-function createClient() {
-  const connectionString =
-    process.env.DATABASE_URL ??
-    "postgresql://abdennour@localhost:5432/orthocare_dev";
-  const adapter = new PrismaPg({ connectionString });
-  return new PrismaClient({ adapter });
-}
+//
+// IMPORTANT: the client is created LAZILY (on first call to `getPrisma()`),
+// NOT at module load. This is required so the Vitest test setup
+// (`tests/setup.ts`) can override `process.env.DATABASE_URL` to the dedicated
+// test database before any connection is opened. Creating the client at import
+// time would read the env var too early (ESM imports are hoisted above the
+// test setup's assignment) and point tests at the dev/shared database.
+//
+// A descriptive error is thrown when DATABASE_URL is missing, rather than
+// silently falling back to a hardcoded local URL that may not exist on another
+// developer's machine.
 
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
 
-export const prisma = globalForPrisma.prisma ?? createClient();
+export function getPrisma(): PrismaClient {
+  if (globalForPrisma.prisma) return globalForPrisma.prisma;
 
-if (process.env.NODE_ENV !== "production") {
-  globalForPrisma.prisma = prisma;
+  const connectionString = process.env.DATABASE_URL;
+  if (!connectionString) {
+    throw new Error(
+      "DATABASE_URL is not set. Configure it in your environment (see .env.example).",
+    );
+  }
+
+  const adapter = new PrismaPg({ connectionString });
+  const client = new PrismaClient({ adapter });
+  globalForPrisma.prisma = client;
+  return client;
 }

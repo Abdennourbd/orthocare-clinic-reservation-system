@@ -1,0 +1,57 @@
+import { useTranslations } from "next-intl";
+import { Link } from "@/i18n/navigation";
+
+export default function Footer() {
+  const t = useTranslations();
+  const nav = useTranslations("Nav");
+  const footer = useTranslations("Footer");
+
+  const links = [
+    { key: "services", href: "/services" },
+    { key: "testimonials", href: "/testimonials" },
+    { key: "faq", href: "/faq" },
+    { key: "contact", href: "/contact" },
+  ] as const;
+
+  return (
+    <footer className="border-t border-zinc-200 bg-zinc-50">
+      <div className="mx-auto grid max-w-6xl gap-8 px-4 py-10 sm:px-6 md:grid-cols-3">
+        <div>
+          <p className="text-lg font-semibold text-zinc-900">
+            {t("Header.clinicName")}
+          </p>
+          <p className="mt-2 text-sm text-zinc-600">{footer("tagline")}</p>
+        </div>
+
+        <nav aria-label={footer("quickLinks")}>
+          <p className="text-sm font-semibold text-zinc-900">
+            {footer("quickLinks")}
+          </p>
+          <ul className="mt-2 space-y-1">
+            {links.map((link) => (
+              <li key={link.key}>
+                <Link
+                  href={link.href}
+                  className="text-sm text-zinc-600 hover:text-teal-700"
+                >
+                  {nav(link.key)}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </nav>
+
+        <div>
+          <p className="text-sm font-semibold text-zinc-900">
+            {footer("contact")}
+          </p>
+          <p className="mt-2 text-sm text-zinc-600">{footer("address")}</p>
+        </div>
+      </div>
+
+      <div className="border-t border-zinc-200 py-4 text-center text-xs text-zinc-500">
+        © {new Date().getFullYear()} {t("Header.clinicName")}. {footer("rights")}
+      </div>
+    </footer>
+  );
+}

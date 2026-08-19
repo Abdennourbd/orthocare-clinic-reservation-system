@@ -1,0 +1,42 @@
+{
+  "Metadata": {
+    "title": "Ortho'Care Clinic — Orthodontics clinic in Algiers",
+    "description": "Book your appointment online. Orthodontics and dental care in Algiers."
+  },
+  "Nav": {
+    "home": "Home",
+    "services": "Services",
+    "testimonials": "Reviews",
+    "faq": "FAQ",
+    "gallery": "Gallery",
+    "about": "About",
+    "contact": "Contact",
+    "book": "Book an appointment"
+  },
+  "LocaleSwitcher": {
+    "label": "Change language",
+    "fr": "Français",
+    "ar": "العربية",
+    "en": "English"
+  },
+  "Hero": {
+    "title": "Your smile, our priority",
+    "subtitle": "Orthodontics clinic in Algiers. Book your consultation online in a few clicks.",
+    "cta": "Book an appointment",
+    "secondaryCta": "Discover our services"
+  },
+  "Header": {
+    "clinicName": "Ortho'Care Clinic"
+  },
+  "Footer": {
+    "tagline": "Modern orthodontics in the heart of Algiers.",
+    "quickLinks": "Quick links",
+    "contact": "Contact",
+    "address": "Algiers, Algeria",
+    "rights": "All rights reserved."
+  },
+  "Common": {
+    "loading": "Loading…",
+    "error": "Something went wrong"
+  }
+}

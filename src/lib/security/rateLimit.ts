@@ -1,4 +1,4 @@
-import { prisma } from "@/lib/db";
+import { getPrisma } from "@/lib/db";
 
 // Postgres-backed fixed-window rate limiter (Task 1).
 // Used by public endpoints (booking, login, slots, self-service token lookups)
@@ -44,7 +44,7 @@ export async function checkRateLimit(
   // `windowStart` is the start of the window the counter is currently counting
   // toward; if `windowStart + windowMs <= now` the window has rolled over and
   // the counter is reset to 1 instead of incremented.
-  const [row] = await prisma.$queryRaw<
+  const [row] = await getPrisma().$queryRaw<
     Array<{ count: number }>
   >`
     INSERT INTO "RateLimitCounter" ("key", "windowStart", "count", "updatedAt")

@@ -1,0 +1,42 @@
+{
+  "Metadata": {
+    "title": "Ortho'Care Clinic — Cabinet d'orthodontie à Alger",
+    "description": "Réservation de rendez-vous en ligne, orthodontie et soins dentaires à Alger."
+  },
+  "Nav": {
+    "home": "Accueil",
+    "services": "Nos services",
+    "testimonials": "Avis",
+    "faq": "FAQ",
+    "gallery": "Galerie",
+    "about": "À propos",
+    "contact": "Contact",
+    "book": "Prendre rendez-vous"
+  },
+  "LocaleSwitcher": {
+    "label": "Changer de langue",
+    "fr": "Français",
+    "ar": "العربية",
+    "en": "English"
+  },
+  "Hero": {
+    "title": "Votre sourire, notre priorité",
+    "subtitle": "Cabinet d'orthodontie à Alger. Réservez votre consultation en ligne en quelques clics.",
+    "cta": "Prendre rendez-vous",
+    "secondaryCta": "Découvrir nos services"
+  },
+  "Header": {
+    "clinicName": "Ortho'Care Clinic"
+  },
+  "Footer": {
+    "tagline": "Orthodontie moderne au cœur d'Alger.",
+    "quickLinks": "Liens rapides",
+    "contact": "Contact",
+    "address": "Alger, Algérie",
+    "rights": "Tous droits réservés."
+  },
+  "Common": {
+    "loading": "Chargement…",
+    "error": "Une erreur est survenue"
+  }
+}
