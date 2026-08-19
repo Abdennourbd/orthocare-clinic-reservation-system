@@ -50,5 +50,8 @@
     "esbuild@0.28.2": true,
     "@parcel/watcher@2.6.0": true,
     "@swc/core@1.15.47": true
+  },
+  "overrides": {
+    "deepmerge-ts": "^8.0.0"
   }
 }

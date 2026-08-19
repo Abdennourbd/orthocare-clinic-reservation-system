@@ -45,7 +45,7 @@ export async function checkRateLimit(
   // toward; if `windowStart + windowMs <= now` the window has rolled over and
   // the counter is reset to 1 instead of incremented.
   const [row] = await getPrisma().$queryRaw<
-    Array<{ count: number }>
+    Array<{ count: number; windowStart: Date }>
   >`
     INSERT INTO "RateLimitCounter" ("key", "windowStart", "count", "updatedAt")
     VALUES (${key}, ${now}, 1, ${now})
@@ -61,11 +61,35 @@ export async function checkRateLimit(
         ELSE "RateLimitCounter"."windowStart"
       END,
       "updatedAt" = ${now}
-    RETURNING "count";
+    RETURNING "count", "windowStart";
   `;
 
   const count = row?.count ?? 1;
   if (count > limit) {
-    throw new RateLimitError(windowMs);
+    // Report the ACTUAL time until the current window resets, so a
+    // `Retry-After` header built from `retryAfterMs` is accurate rather than
+    // the full window length. The upsert always returns a row, so `row` is
+    // defined here.
+    const retryAfterMs = Math.max(
+      0,
+      row!.windowStart.getTime() + windowMs - now.getTime(),
+    );
+    throw new RateLimitError(retryAfterMs);
   }
+}
+
+/**
+ * Delete rate-limit counter rows whose window has long expired, so the table
+ * doesn't grow without bound as unique keys (IPs, phones) accumulate over time.
+ * Intended to be called periodically (e.g. from the Task 9 cron). Rows are
+ * retained for at least `retentionMs` after their last active window start.
+ */
+export async function cleanupRateLimitCounters(
+  retentionMs = 7 * 24 * 60 * 60 * 1000, // 7 days by default
+): Promise<number> {
+  const cutoff = new Date(Date.now() - retentionMs);
+  const result = await getPrisma().rateLimitCounter.deleteMany({
+    where: { windowStart: { lt: cutoff } },
+  });
+  return result.count;
 }

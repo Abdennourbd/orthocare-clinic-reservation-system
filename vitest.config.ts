@@ -7,6 +7,10 @@ export default defineConfig({
   test: {
     environment: "node",
     setupFiles: ["./tests/setup.ts"],
+    // Test files run serially because they share a single test Postgres
+    // database. Parallel execution would let one suite's TRUNCATE in
+    // `beforeEach` wipe another suite's data mid-run (flaky, order-dependent).
+    fileParallelism: false,
     // Unit tests are colocated with source (e.g. engine.test.ts); integration
     // tests live under tests/. Exclude generated Prisma code and build output.
     include: [

@@ -41,6 +41,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Fail the build if any high/critical dependency vulnerability is present.
+      - name: Audit dependencies
+        run: npm audit --audit-level=high
+
       # Create the dedicated test database (dev DB comes from the service).
       - name: Create test database
         run: |
