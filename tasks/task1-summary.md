@@ -33,10 +33,24 @@ src/lib/security/rateLimit.ts   + test        tests/setup.ts
 vitest.config.ts    package.json (+ scripts)   next.config.ts  tsconfig.json
 ```
 
+## Deployment
+
+- **Vercel linked to GitHub; `main` auto-deploys and is live** (build green).
+- Two build fixes were required along the way:
+  1. `package.json` gained `"postinstall": "prisma generate"` — without it the
+     generated client (gitignored) is missing at build time and `next build`
+     fails typechecking on `@/generated/prisma/client`.
+  2. `prisma.config.ts` uses `process.env.DATABASE_URL ?? ""` instead of the
+     `env("DATABASE_URL")` helper, so `prisma generate` (during `npm install`)
+     works even when `DATABASE_URL` is unset in the build environment.
+- The project URL shows Vercel's login screen until a custom domain is set
+  (expected on the free tier without a domain configured).
+
 ## Not done
 
-- **Staging environment — blocked.** Requires a Vercel account + linking the
-  GitHub repo (see question below). Env vars for it are already documented.
+- **Staging environment** — a second, permanent preview env with its own DB /
+  synthetic data / mock messaging. Env vars for it are documented; can be
+  added once a shared cloud DB exists.
 - Known advisory: `deepmerge-ts` (Prisma CLI-only, non-exploitable in app;
   `fix --force` would downgrade Prisma — deferred).
 - Full domain schema + real seed land in Task 3a/3b.
