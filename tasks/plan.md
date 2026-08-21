@@ -510,14 +510,14 @@ Implementation order is bottom-up: schema (3a) → slot engine + atomic booking 
 - [ ] Task 3a: Core schema (User, Patient, Service, Appointment) + phone normalization + consent fields + `reminderSentAt` + migration + minimal seed (no default admin password in any shared environment)
 - [ ] Task 3b: Content schema (Testimonial, FaqItem, GalleryItem, Setting, **ScheduleException**) + booking-policy settings + full seed from current site
 - [ ] Task 4: Slot engine — pure functions: clinic-timezone conversion, working hours lookup, **closure subtraction**, **booking-window policy**, slot generation per service, overlap detection, availability query (unit-tested)
-- [ ] Task 5: Atomic booking action + `releaseSlot()` shared function — transactional book with in-transaction availability re-check + conflict error; `releaseSlot()` emits slot-freed event (concurrency-tested)
+- [x] Task 5: Atomic booking action + `releaseSlot()` shared function — transactional book with in-transaction availability re-check + conflict error; `releaseSlot()` emits slot-freed event (concurrency-tested)
 
 ### Checkpoint: Engine correct
-- [ ] Slot engine unit tests pass (overlap, boundaries, lunch, buffer, closures, lead time, horizon)
-- [ ] Times behave correctly across the UTC ↔ Africa/Algiers boundary (00:00 and 23:59 local)
-- [ ] Concurrent bookings of the same slot: exactly one succeeds
-- [ ] Booked slot renders as reserved in availability query
-- [ ] `releaseSlot()` event fires on cancellation
+- [x] Slot engine unit tests pass (overlap, boundaries, lunch, buffer, closures, lead time, horizon)
+- [x] Times behave correctly across the UTC ↔ Africa/Algiers boundary (00:00 and 23:59 local)
+- [x] Concurrent bookings of the same slot: exactly one succeeds
+- [ ] Booked slot renders as reserved in availability query (Task 6 — needs the route)
+- [x] `releaseSlot()` event fires on cancellation
 
 ### Phase 3: Public Booking + Communication
 - [ ] Task 6: Booking wizard UI + `POST /api/appointments` + `GET /api/slots` — pick service → date → available/occupied slots → patient info + **consent** → confirm → summary; rate-limited (integration-tested: happy + conflict paths)

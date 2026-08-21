@@ -105,13 +105,13 @@ Task details + rationale live in `tasks/plan.md`. This is the working checklist.
 ## Task 5: Atomic booking action + `releaseSlot()`
 **Description:** Transactional `bookSlot()` — re-check availability inside transaction, insert Appointment, conflict → clear error, retry on race. Also deliver `releaseSlot(appointmentId, reason)` shared domain function that cancels/frees an appointment and emits a **slot-freed event** (simple event emitter or in-process pub/sub; no waitlist subscriber yet — that's Task 17). Both exposed as testable server functions.
 **Acceptance criteria:**
-- [ ] Two concurrent bookings of same slot → exactly one succeeds
-- [ ] Conflict returns a clear, typed error (not a crash)
-- [ ] endTime computed from service duration
-- [ ] `releaseSlot()` frees the slot and emits slot-freed event (verifiable in test)
-- [ ] `releaseSlot()` records a `cancelReason` (`STAFF` | `PATIENT_SELF_SERVICE` | `AUTO_EXPIRED` | `CLOSURE`)
-- [ ] Reschedule = releaseSlot + bookSlot atomically
-**Verification:** Concurrency unit test (Promise.all of N bookings on same slot → 1 success, N-1 typed errors); `npm run typecheck`.
+- [x] Two concurrent bookings of same slot → exactly one succeeds
+- [x] Conflict returns a clear, typed error (not a crash)
+- [x] endTime computed from service duration
+- [x] `releaseSlot()` frees the slot and emits slot-freed event (verifiable in test)
+- [x] `releaseSlot()` records a `cancelReason` (`STAFF` | `PATIENT_SELF_SERVICE` | `AUTO_EXPIRED` | `CLOSURE`)
+- [x] Reschedule = releaseSlot + bookSlot atomically
+**Verification:** Concurrency unit test (Promise.all of N bookings on same slot → 1 success, N-1 typed errors); `npm run typecheck`. ✅ passed — see `tasks/task5-summary.md`.
 **Dependencies:** Task 4
 **Estimated scope:** Medium (2–3 days)
 **Skill:** A **database transactions / concurrency** skill (Postgres isolation levels, `SELECT … FOR UPDATE`, `EXCLUDE` constraints, retry-on-conflict). Worth studying before starting — this is the one place where a subtle mistake produces double-booked patients in production.
@@ -119,11 +119,11 @@ Task details + rationale live in `tasks/plan.md`. This is the working checklist.
 ## Checkpoint: After Tasks 3a-5 (Engine correct)
 - [x] Slot engine unit tests pass (overlap, boundaries, lunch, buffer, closures, lead time, horizon) — Task 4 ✅
 - [x] Clinic-local vs UTC handled correctly at day boundaries (00:00 / 23:59 local) — Task 4 ✅
-- [ ] No double-booking under concurrency (automated test) — Task 5
-- [ ] `releaseSlot()` event fires on cancellation, with the correct `cancelReason` — Task 5
+- [x] No double-booking under concurrency (automated test) — Task 5 ✅
+- [x] `releaseSlot()` event fires on cancellation, with the correct `cancelReason` — Task 5 ✅
 - [ ] **Number of chairs confirmed with the clinic** (the single-resource assumption is only safe once it is verified)
 - [ ] Review with human before proceeding
-- See `tasks/task4-summary.md` for the full Task 4 write-up (deliverables, review fixes, security hardening).
+- See `tasks/task4-summary.md` (Task 4) and `tasks/task5-summary.md` (Task 5) for the full write-ups.
 
 ## Early security hardening (delivered ahead of schedule)
 **Description:** Post-review hardening landed now so later tasks inherit the controls instead of building them ad hoc.

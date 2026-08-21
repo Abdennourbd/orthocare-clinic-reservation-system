@@ -77,6 +77,38 @@ export type AvailabilityInput = {
   resourceId?: string | null;
 };
 
+/**
+ * Everything the engine needs to decide whether a single [start, end] window
+ * is bookable — i.e. the booking *policy* (working hours, lunch break, lead
+ * time, horizon, past) combined with raw *availability* (appointment overlap
+ * + ScheduleException closures). This is `SlotEngineInput` minus
+ * `granularityMinutes`, which only matters when generating the whole day.
+ *
+ * Both `generateSlots` and `bookSlot` (Task 5) delegate here so the offered
+ * slot list and the transaction re-check can never disagree.
+ */
+export type SlotBookabilityInput = {
+  localDateString: string;
+  serviceId?: string;
+  serviceDurationMinutes: number;
+  workingHours: WorkingHoursSetting;
+  slotConfig: {
+    bufferMinutes: number;
+    lunchBreak: { start: string; end: string } | null;
+  };
+  bookingPolicy: {
+    /** Rolling horizon in days. */
+    maxHorizonDays: number;
+    minLeadTimeMinutes: number;
+    clinicTimezone: string;
+    pendingExpiryHours: number;
+  };
+  exceptions: ScheduleExceptionInput[];
+  appointments: AppointmentInput[];
+  nowUTC: Date;
+  resourceId?: string | null;
+};
+
 /** Two half-open intervals overlap iff each one's start is before the other's end. */
 function overlaps(aStartMs: number, aEndMs: number, bStartMs: number, bEndMs: number): boolean {
   return aStartMs < bEndMs && bStartMs < aEndMs;
@@ -184,6 +216,72 @@ export function isSlotAvailable(
   return true;
 }
 
+/**
+ * Single source of truth for "is this [start, end] window bookable?".
+ * Combines the booking policy (working-hours window, lunch break, lead time,
+ * horizon, past-date) with raw availability (appointment overlap +
+ * closures). Used by `generateSlots` and by Task 5's `bookSlot` re-check
+ * inside the transaction.
+ */
+export function isSlotBookable(
+  startUTC: Date,
+  endUTC: Date,
+  input: SlotBookabilityInput,
+): boolean {
+  const {
+    localDateString,
+    serviceDurationMinutes,
+    workingHours,
+    slotConfig,
+    bookingPolicy,
+    nowUTC,
+  } = input;
+
+  assertPositiveInteger("serviceDurationMinutes", serviceDurationMinutes);
+  assertNonNegativeInteger("bufferMinutes", slotConfig.bufferMinutes);
+
+  const startMs = startUTC.getTime();
+  const endMs = endUTC.getTime();
+
+  // Working-hours window. A slot must start at/after open and END at/before
+  // close (matches the loop bound in generateSlots).
+  const wh = getWorkingHoursForDay(localDateString, workingHours);
+  if (!wh) return false;
+  const { startUTC: dayStartUTC } = getClinicDayBoundsUTC(localDateString);
+  const openMs = dayStartUTC.getTime() + wh.openMinutes * 60_000;
+  const closeMs = dayStartUTC.getTime() + wh.closeMinutes * 60_000;
+  if (startMs < openMs || endMs > closeMs) return false;
+
+  // Horizon + lead time (also rejects any slot in the past).
+  const horizonMs = bookingPolicy.maxHorizonDays * 24 * 60 * 60 * 1000;
+  const endOfHorizonMs = nowUTC.getTime() + horizonMs;
+  const minAllowedMs = nowUTC.getTime() + bookingPolicy.minLeadTimeMinutes * 60_000;
+  if (startMs < minAllowedMs) return false;
+  if (startMs > endOfHorizonMs) return false;
+
+  // Lunch break: a slot overlaps lunch if its start < lunchEnd AND its end > lunchStart.
+  let lunchStartMin = -1;
+  let lunchEndMin = -1;
+  if (slotConfig.lunchBreak) {
+    lunchStartMin = parseHHmmToMinutes(slotConfig.lunchBreak.start);
+    lunchEndMin = parseHHmmToMinutes(slotConfig.lunchBreak.end);
+  }
+  const slotStartMin = (startMs - dayStartUTC.getTime()) / 60_000;
+  const slotEndMin = slotStartMin + serviceDurationMinutes;
+  if (slotConfig.lunchBreak && slotStartMin < lunchEndMin && slotEndMin > lunchStartMin) {
+    return false;
+  }
+
+  // Raw availability: appointment overlap (with buffer) + closures.
+  return isSlotAvailable(startUTC, endUTC, {
+    appointments: input.appointments,
+    exceptions: input.exceptions,
+    slotConfig: { bufferMinutes: slotConfig.bufferMinutes },
+    serviceId: input.serviceId,
+    resourceId: input.resourceId,
+  });
+}
+
 export function generateSlots(input: SlotEngineInput): Date[] {
   const {
     localDateString,
@@ -192,8 +290,6 @@ export function generateSlots(input: SlotEngineInput): Date[] {
     slotConfig,
     bookingPolicy,
     nowUTC,
-    appointments,
-    exceptions,
   } = input;
 
   // Validate the numeric inputs that drive the generation loop before
@@ -210,30 +306,23 @@ export function generateSlots(input: SlotEngineInput): Date[] {
 
   const slots: Date[] = [];
   const { openMinutes, closeMinutes } = wh;
-  const { granularityMinutes, lunchBreak } = slotConfig;
-  const { minLeadTimeMinutes, maxHorizonDays } = bookingPolicy;
-
-  let lunchStartMin = -1;
-  let lunchEndMin = -1;
-  if (lunchBreak) {
-    lunchStartMin = parseHHmmToMinutes(lunchBreak.start);
-    lunchEndMin = parseHHmmToMinutes(lunchBreak.end);
-  }
+  const { granularityMinutes } = slotConfig;
 
   // Horizon semantics: rolling 24h * maxHorizonDays window from nowUTC.
   // Note: calendar-day horizon (e.g. "up to and including day X") is
   // intentionally NOT used here; if that becomes a product requirement,
   // switch to comparing the slot's clinic-local date against
   // toClinicLocalDateString(nowUTC) + maxHorizonDays.
-  const horizonMs = maxHorizonDays * 24 * 60 * 60 * 1000;
-  const endOfHorizon = new Date(nowUTC.getTime() + horizonMs);
-  const minAllowedMs = nowUTC.getTime() + minLeadTimeMinutes * 60_000;
-
-  const availabilityOpts: AvailabilityInput = {
-    appointments,
-    exceptions,
-    slotConfig: { bufferMinutes: slotConfig.bufferMinutes },
+  const bookabilityInput: SlotBookabilityInput = {
+    localDateString,
     serviceId: input.serviceId,
+    serviceDurationMinutes,
+    workingHours,
+    slotConfig,
+    bookingPolicy,
+    exceptions: input.exceptions,
+    appointments: input.appointments,
+    nowUTC,
     resourceId: input.resourceId,
   };
 
@@ -247,17 +336,9 @@ export function generateSlots(input: SlotEngineInput): Date[] {
       slotTime.getTime() + serviceDurationMinutes * 60_000,
     );
 
-    // Policy: lead time (and implicitly "past dates always rejected")
-    if (slotTime.getTime() < minAllowedMs) continue;
-
-    // Policy: horizon
-    if (slotTime.getTime() > endOfHorizon.getTime()) continue;
-
-    // Lunch break: a slot overlaps lunch if its start < lunchEnd AND its end > lunchStart.
-    const slotEndMin = min + serviceDurationMinutes;
-    if (lunchBreak && min < lunchEndMin && slotEndMin > lunchStartMin) continue;
-
-    if (!isSlotAvailable(slotTime, slotEndTime, availabilityOpts)) continue;
+    // Delegates policy + availability (lead time, horizon, past, lunch,
+    // overlap, closures) to the single source of truth shared with bookSlot.
+    if (!isSlotBookable(slotTime, slotEndTime, bookabilityInput)) continue;
 
     slots.push(slotTime);
   }
