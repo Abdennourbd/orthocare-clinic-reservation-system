@@ -5,6 +5,32 @@ import {
   parseHHmmToMinutes,
 } from "./workingHours";
 
+/**
+ * Thrown when the slot engine receives a config value that would make it
+ * loop forever, produce zero/negative-length slots, or silently disable
+ * the inter-appointment buffer. These values come from admin-editable
+ * Settings/Service rows, so a typo (or a compromised admin account) must
+ * fail loudly rather than hang or corrupt availability.
+ */
+export class SlotConfigError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "SlotConfigError";
+  }
+}
+
+function assertPositiveInteger(name: string, value: number): void {
+  if (!Number.isInteger(value) || value <= 0) {
+    throw new SlotConfigError(`${name} must be a positive integer, got ${value}`);
+  }
+}
+
+function assertNonNegativeInteger(name: string, value: number): void {
+  if (!Number.isInteger(value) || value < 0) {
+    throw new SlotConfigError(`${name} must be a non-negative integer, got ${value}`);
+  }
+}
+
 export type ScheduleExceptionInput = {
   startDate: Date;
   endDate: Date;
@@ -134,6 +160,8 @@ export function isSlotAvailable(
   const startMs = startUTC.getTime();
   const endMs = endUTC.getTime();
 
+  assertNonNegativeInteger("bufferMinutes", opts.slotConfig.bufferMinutes);
+
   for (const appt of opts.appointments) {
     if (
       overlapsAppointment(
@@ -167,6 +195,13 @@ export function generateSlots(input: SlotEngineInput): Date[] {
     appointments,
     exceptions,
   } = input;
+
+  // Validate the numeric inputs that drive the generation loop before
+  // entering it. A zero/negative step or duration would otherwise loop
+  // forever (remote DoS once this is wired to a route).
+  assertPositiveInteger("serviceDurationMinutes", serviceDurationMinutes);
+  assertPositiveInteger("granularityMinutes", slotConfig.granularityMinutes);
+  assertNonNegativeInteger("bufferMinutes", slotConfig.bufferMinutes);
 
   const wh = getWorkingHoursForDay(localDateString, workingHours);
   if (!wh) return [];
