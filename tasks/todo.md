@@ -124,6 +124,15 @@ Task details + rationale live in `tasks/plan.md`. This is the working checklist.
 - [ ] **Number of chairs confirmed with the clinic** (the single-resource assumption is only safe once it is verified)
 - [ ] Review with human before proceeding
 
+## Early security hardening (delivered ahead of schedule)
+**Description:** Post-review hardening landed now so later tasks inherit the controls instead of building them ad hoc.
+- [x] `lib/security/clientIp.ts` — `getClientIp()` reads trusted proxy headers (`x-real-ip` / `x-vercel-forwarded-for`) and never trusts raw `x-forwarded-for` by default; unit-tested against forged-header cases. **Every per-IP rate-limit caller (Tasks 6, 12) MUST use this** or a forged `x-forwarded-for` mints a fresh identity and bypasses the limiter.
+- [x] `lib/security/headers.ts` + `next.config.ts` — `SECURITY_HEADERS` (CSP, HSTS, `frame-ancestors 'none'`, `Referrer-Policy`, `nosniff`, `Permissions-Policy`) applied globally; `NO_REFERRER_HEADERS` on `/[locale]/appointment/[token]`.
+- [x] `src/i18n/request.ts` — locale validated unconditionally against the allow-list before it is interpolated into a filesystem import path.
+- [x] `/api/cron/cleanup` — idempotent prune of expired rate-limit rows; `x-cron-secret` header equals `CRON_SECRET`. Same auth convention applies to Task 9's cron routes.
+- [ ] **Manual (operator):** rotate the Neon `DATABASE_URL` password — the live connection string was echoed in debug output during the session. Also, never paste `DATABASE_URL` into chat/logs.
+- [ ] **Task 10 dependency:** extend the CSP in `headers.ts` with the Google embed domains before mounting Reviews/Maps.
+
 ## Phase 3: Public Booking + Communication
 
 ## Task 6: Booking wizard UI + `POST /api/appointments` + `GET /api/slots`

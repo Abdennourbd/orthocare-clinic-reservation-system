@@ -5,17 +5,16 @@ import { hasLocale } from "next-intl";
 import { routing } from "./routing";
 
 export default getRequestConfig(async ({ locale }) => {
-  if (!locale) {
-    const paramValue = await rootParams.locale();
-    if (hasLocale(routing.locales, paramValue)) {
-      locale = paramValue;
-    } else {
-      notFound();
-    }
+  const effectiveLocale = locale ?? (await rootParams.locale());
+
+  // Validate against the allow-list unconditionally — `locale` is interpolated
+  // into a filesystem import path below, so it must never be attacker-controlled.
+  if (!hasLocale(routing.locales, effectiveLocale)) {
+    notFound();
   }
 
   return {
-    locale,
-    messages: (await import(`../../messages/${locale}.json`)).default,
+    locale: effectiveLocale,
+    messages: (await import(`../../messages/${effectiveLocale}.json`)).default,
   };
 });

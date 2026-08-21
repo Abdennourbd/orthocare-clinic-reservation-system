@@ -97,8 +97,8 @@ The scheduling engine (slot generation, overlap detection, atomic conflict-free 
 - **Closure dates (`ScheduleException`):** weekly hours cannot express Eid, national holidays, vacation, or "closed Thursday afternoon". A closure is a date or date range, full-day or partial, with a reason, and the slot engine subtracts it from availability. Without this, patients book online on days the clinic is shut — worse for trust than having no online booking at all.
   - **Existing appointments are never silently orphaned:** adding a closure that covers booked appointments shows the affected list and offers bulk cancel-and-notify or reschedule. Staff decide; the system never drops them quietly.
 - **Timezone:** the clinic operates in **Africa/Algiers (UTC+1, no daylight saving)**. All timestamps are stored in **UTC**; working hours, slot generation, day boundaries and KPI date ranges are computed **in clinic-local time**; the UI renders local time. Cron schedules are defined in UTC with the intended local hour written next to them. This is stated explicitly because Vercel runs UTC and Postgres stores UTC while the clinic thinks in local time — the classic silent one-hour drift in both slots and reminders.
-- **Abuse controls (public endpoints):** the two unauthenticated write paths are rate-limited — `POST /api/appointments` (per IP and per phone), `/api/auth/login` (per IP and per account, with temporary lockout after repeated failures), plus lighter limits on `GET /api/slots` and self-service token lookups. A cap on simultaneously active PENDING bookings per phone prevents one script from filling the calendar. Counters live in a small Postgres table (no new vendor); an optional bot check (Turnstile/hCaptcha) can be enabled on the booking form. Lockouts are audited.
-- **Security headers:** Content-Security-Policy (allow-listing the Google Reviews embed), HSTS, `frame-ancestors 'none'`, `Referrer-Policy`, `Permissions-Policy`, `X-Content-Type-Options: nosniff` — set centrally in `next.config.ts`/middleware, with a stricter `Referrer-Policy: no-referrer` on token pages.
+- **Abuse controls (public endpoints):** the two unauthenticated write paths are rate-limited — `POST /api/appointments` (per IP and per phone), `/api/auth/login` (per IP and per account, with temporary lockout after repeated failures), plus lighter limits on `GET /api/slots` and self-service token lookups. A cap on simultaneously active PENDING bookings per phone prevents one script from filling the calendar. Counters live in a small Postgres table (no new vendor); an optional bot check (Turnstile/hCaptcha) can be enabled on the booking form. Lockouts are audited. **Client IP comes exclusively from the `getClientIp()` helper** (`lib/security/clientIp.ts`) — it reads the trusted proxy headers (`x-real-ip` / `x-vercel-forwarded-for`) and never trusts a raw client-supplied `x-forwarded-for` by default, so a forged header cannot mint a fresh rate-limit identity and bypass the limiter.
+- **Security headers:** Content-Security-Policy (allow-listing the Google Reviews embed), HSTS, `frame-ancestors 'none'`, `Referrer-Policy`, `Permissions-Policy`, `X-Content-Type-Options: nosniff` — set centrally in `next.config.ts`/middleware, with a stricter `Referrer-Policy: no-referrer` on token pages. **Implemented in `lib/security/headers.ts`** and applied via `next.config.ts` (`SECURITY_HEADERS` globally, `NO_REFERRER_HEADERS` on the self-service token path). ⚠ **Task 10 must extend the CSP** with the Google embed domains before mounting Reviews/Maps, and the `no-referrer` token-page rule is a hard dependency of Task 8 — the token in the URL must never reach a third-party script in the `Referer` header.
 - **Consent & privacy notice:** the booking form captures explicit consent (checkbox) and stores `consentAt` + `consentVersion` on the patient. A privacy notice page in all three locales explains what is collected, why, who processes it (hosting, database, messaging, error monitoring), and how to ask for correction or deletion.
 - **Data retention & erasure:** retention windows are documented for message bodies, audit logs, documents and error-monitoring events. Because rows are never hard-deleted, an erasure request is satisfied by **anonymization**: identifying fields are scrubbed and `anonymizedAt` is set, while the appointment shell remains so historical statistics stay correct. Erasure is ADMIN-only and audited.
 - **Phone numbers are normalized to E.164** (`+213…`) on every write, stored alongside the display form, and indexed. Both duplicate detection and message delivery key off phone, and `0550123456` / `+213 550 12 34 56` / `00213550123456` are the same person — but not to a database index. Without normalization, duplicate detection fails *silently* and messages bounce.
@@ -259,9 +259,10 @@ Next.js App Router route handlers under `/app/api/`. ~50 routes total. Admin rou
 | GET | `/api/admin/notifications` | Staff notification feed |
 | PATCH | `/api/admin/notifications/[id]/read` | Mark read |
 
-### Cron (Vercel Cron → route handlers; `CRON_SECRET` auth)
+### Cron (Vercel Cron → route handlers; `CRON_SECRET` auth via the `x-cron-secret` request header)
 | Method | Path | Purpose |
 |---|---|---|
+| GET | `/api/cron/cleanup` | Prune expired rate-limit counter rows (idempotent) — delivered early so the rate-limit table never grows unbounded |
 | GET | `/api/cron/reminders` | 24h-before reminders to CONFIRMED appointments — idempotent (`reminderSentAt`) |
 | GET | `/api/cron/no-show-followup` | Mark NO_SHOW + send follow-up SMS — idempotent |
 | GET | `/api/cron/expire-pending` | Auto-cancel unconfirmed PENDING bookings via `releaseSlot()` (frees the slot, triggers waitlist) |
@@ -327,7 +328,7 @@ orthocare-clinic/
     │       ├── appointments/route.ts + [token]/{route,reschedule}.ts
     │       ├── auth/{login,logout,me}/route.ts
     │       ├── admin/{appointments,patients,documents,sms,waitlist,kpis,exports,team,services,testimonials,faqs,gallery,settings,audit,notifications}/...
-    │       └── cron/{reminders,no-show-followup,expire-pending}/route.ts
+    │       └── cron/{cleanup,reminders,no-show-followup,expire-pending}/route.ts
     ├── components/
     │   ├── public/                 # Header, Footer, Hero, LocaleSwitcher,
     │   │   │                       # BookingWizard/ (step components), SlotPicker,
@@ -360,7 +361,8 @@ orthocare-clinic/
     │   │   └── password.ts         # hash/verify (argon2id), policy, reset
     │   ├── security/
     │   │   ├── rateLimit.ts        # per-IP / per-phone counters, Postgres-backed (Task 1)
-    │   │   └── headers.ts          # CSP + security header helpers (Task 23)
+    │   │   ├── clientIp.ts         # getClientIp(): trusted proxy header only, anti-spoof (delivered early)
+    │   │   └── headers.ts          # CSP + security header helpers (SECURITY_HEADERS / NO_REFERRER_HEADERS)
     │   ├── messaging/              # (Task 7)
     │   │   ├── provider.ts         # MessageProvider interface
     │   │   ├── mock.ts / twilio.ts / whatsapp.ts
