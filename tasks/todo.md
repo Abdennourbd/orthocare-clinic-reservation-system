@@ -90,13 +90,13 @@ Task details + rationale live in `tasks/plan.md`. This is the working checklist.
 ## Task 4: Slot engine (pure logic)
 **Description:** Clinic-timezone conversion (`lib/time/clinicTime.ts` — the only module that knows Africa/Algiers), working hours lookup (per weekday from Settings), **closure subtraction** (`ScheduleException`), **booking-window policy** (minimum lead time, maximum horizon, no past dates), slot generation per service, overlap detection, availability query. Pure functions, no DB writes — only reads. Takes an optional `resourceId` that defaults to a single implicit resource (v1 = one chair).
 **Acceptance criteria:**
-- [ ] `generateSlots(date, service)` returns candidate start times inside working hours
-- [ ] Overlapping active appointments excluded from results
-- [ ] Handles lunch break, inter-appointment buffer, day boundaries
-- [ ] Respects Service.durationMinutes for slot length
-- [ ] All times stored/compared in UTC but generated against **clinic-local** working hours; tests cover 00:00 and 23:59 local
-- [ ] Closure dates (full-day and partial-day) removed from availability
-- [ ] Slots inside the minimum lead time, beyond the maximum horizon, or in the past are never offered
+- [x] `generateSlots(date, service)` returns candidate start times inside working hours
+- [x] Overlapping active appointments excluded from results
+- [x] Handles lunch break, inter-appointment buffer, day boundaries
+- [x] Respects Service.durationMinutes for slot length
+- [x] All times stored/compared in UTC but generated against **clinic-local** working hours; tests cover 00:00 and 23:59 local
+- [x] Closure dates (full-day and partial-day) removed from availability
+- [x] Slots inside the minimum lead time, beyond the maximum horizon, or in the past are never offered
 **Verification:** Unit tests pass: `npm test -- slot-engine`; edge cases (boundaries, lunch, buffer, buffer-after-lunch, multi-service durations, closures, lead time, horizon, day boundary in local time).
 **Dependencies:** Task 3a (schema), Task 3b (Settings seed for working hours **+ ScheduleException + booking policy**)
 **Estimated scope:** Large (3–4 days) — highest-risk task on the critical path
