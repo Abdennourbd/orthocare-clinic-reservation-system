@@ -2,9 +2,30 @@
  * Clinic Timezone: Africa/Algiers (UTC+1, no DST).
  * All timestamps are stored in UTC, but the working hours, day boundaries,
  * and slot availability are evaluated in the clinic's local time.
+ *
+ * Per plan.md §Timezone and §Code Structure #11, this module is the ONLY
+ * place that knows the clinic timezone and does date maths on local time.
  */
 
 const CLINIC_TIMEZONE = "Africa/Algiers";
+
+/**
+ * The clinic's fixed offset from UTC, in minutes. Africa/Algiers has no DST,
+ * so this is constant. Centralised here so it is defined exactly once.
+ */
+export const CLINIC_UTC_OFFSET_MINUTES = 60;
+
+/**
+ * Formats an offset-in-minutes into the +/-HH:MM string suffix used by
+ * the ISO parser, e.g. 60 -> "+01:00".
+ */
+function formatOffsetHHmm(offsetMinutes: number): string {
+  const sign = offsetMinutes < 0 ? "-" : "+";
+  const abs = Math.abs(offsetMinutes);
+  const hh = String(Math.floor(abs / 60)).padStart(2, "0");
+  const mm = String(abs % 60).padStart(2, "0");
+  return `${sign}${hh}:${mm}`;
+}
 
 /**
  * Returns the UTC instants for the start (00:00:00.000) and end (23:59:59.999)
@@ -14,10 +35,9 @@ export function getClinicDayBoundsUTC(localDateString: string): {
   startUTC: Date;
   endUTC: Date;
 } {
-  // Construct a Date object from the ISO string with the clinic's fixed offset (+01:00)
-  // Africa/Algiers does not observe DST, so the offset is always +01:00.
-  const startUTC = new Date(`${localDateString}T00:00:00.000+01:00`);
-  const endUTC = new Date(`${localDateString}T23:59:59.999+01:00`);
+  const offset = formatOffsetHHmm(CLINIC_UTC_OFFSET_MINUTES);
+  const startUTC = new Date(`${localDateString}T00:00:00.000${offset}`);
+  const endUTC = new Date(`${localDateString}T23:59:59.999${offset}`);
   return { startUTC, endUTC };
 }
 
@@ -26,14 +46,13 @@ export function getClinicDayBoundsUTC(localDateString: string): {
  */
 export function toClinicLocalDateString(utcDate: Date): string {
   // Use Intl.DateTimeFormat to reliably format in the clinic timezone.
-  // We request numeric parts to build YYYY-MM-DD.
+  // en-CA formats as YYYY-MM-DD.
   const formatter = new Intl.DateTimeFormat("en-CA", {
     timeZone: CLINIC_TIMEZONE,
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
   });
-  // en-CA format is YYYY-MM-DD
   return formatter.format(utcDate);
 }
 
@@ -43,10 +62,9 @@ const WEEKDAYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
  * Returns the 3-letter weekday for a local date string.
  */
 export function getClinicDayOfWeek(localDateString: string): string {
-  // Since localDateString is YYYY-MM-DD, parsing it as YYYY-MM-DD or
-  // constructing a Date in the clinic's offset gives us the correct Date object
-  // whose local (UTC) getUTCDay() matches the local day of week.
-  // It's safest to construct the mid-day instant in clinic time:
-  const midDayUTC = new Date(`${localDateString}T12:00:00.000+01:00`);
+  // Noon local is safely within the same local day for any sane timezone.
+  // Africa/Algiers has no DST so the offset is always CLINIC_UTC_OFFSET_MINUTES.
+  const offset = formatOffsetHHmm(CLINIC_UTC_OFFSET_MINUTES);
+  const midDayUTC = new Date(`${localDateString}T12:00:00.000${offset}`);
   return WEEKDAYS[midDayUTC.getUTCDay()];
 }

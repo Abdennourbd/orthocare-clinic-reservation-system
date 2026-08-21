@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { getClinicDayBoundsUTC, toClinicLocalDateString, getClinicDayOfWeek } from "./clinicTime";
+import {
+  getClinicDayBoundsUTC,
+  toClinicLocalDateString,
+  getClinicDayOfWeek,
+  CLINIC_UTC_OFFSET_MINUTES,
+} from "./clinicTime";
 
 describe("clinicTime", () => {
   it("getClinicDayBoundsUTC returns correct UTC bounds for a local date", () => {
@@ -26,4 +31,9 @@ describe("clinicTime", () => {
     // 2026-08-28 is a Friday.
     expect(getClinicDayOfWeek("2026-08-28")).toBe("fri");
   });
+
+  it("CLINIC_UTC_OFFSET_MINUTES is +60 (Africa/Algiers, no DST)", () => {
+    expect(CLINIC_UTC_OFFSET_MINUTES).toBe(60);
+  });
 });
+

@@ -1,5 +1,14 @@
 import { describe, it, expect } from "vitest";
-import { generateSlots, SlotEngineInput } from "./engine";
+import { generateSlots, isSlotAvailable, SlotEngineInput } from "./engine";
+
+/** Convert a UTC Date to "HH:mm" in the clinic's local time (Africa/Algiers, UTC+1). */
+function toLocalHHmm(d: Date): string {
+  const hours = d.getUTCHours() + 1;
+  const mins = d.getUTCMinutes();
+  return `${hours.toString().padStart(2, "0")}:${mins
+    .toString()
+    .padStart(2, "0")}`;
+}
 
 describe("generateSlots", () => {
   const baseInput: SlotEngineInput = {
@@ -124,14 +133,7 @@ describe("generateSlots", () => {
     // - 11:30 slot ends at 12:00. Overlaps 10:55-11:35? Yes, 11:30 < 11:35 -> EXCLUDED.
     // - 11:45 slot starts at 11:45. > 11:35 -> NOT EXCLUDED.
 
-    const localTimes = slots.map((s) => {
-      // Return HH:mm local for easy assertion
-      const hours = s.getUTCHours() + 1; // Africa/Algiers is UTC+1
-      const mins = s.getUTCMinutes();
-      return `${hours.toString().padStart(2, "0")}:${mins
-        .toString()
-        .padStart(2, "0")}`;
-    });
+    const localTimes = slots.map(toLocalHHmm);
 
     expect(localTimes).toContain("10:15");
     expect(localTimes).not.toContain("10:30");
@@ -173,14 +175,7 @@ describe("generateSlots", () => {
     };
 
     const slots = generateSlots(input);
-    
-    const localTimes = slots.map((s) => {
-      const hours = s.getUTCHours() + 1;
-      const mins = s.getUTCMinutes();
-      return `${hours.toString().padStart(2, "0")}:${mins
-        .toString()
-        .padStart(2, "0")}`;
-    });
+    const localTimes = slots.map(toLocalHHmm);
 
     // 10:30 local start: overlaps 10:30-11:30 -> excluded
     // 10:45 local start: overlaps 10:30-11:30 -> excluded
@@ -189,12 +184,153 @@ describe("generateSlots", () => {
     // 11:30 local start: ends 12:00, starts at 11:30. Exception ends 11:30 -> NOT excluded
 
     expect(localTimes).toContain("10:00"); // 10:00 - 10:30 (ends exactly when exception starts -> NOT excluded)
-    // expect(localTimes).toContain("10:15"); // 10:15 - 10:45 (overlaps exception -> EXCLUDED!)
     expect(localTimes).not.toContain("10:15");
     expect(localTimes).not.toContain("10:30");
     expect(localTimes).not.toContain("10:45");
     expect(localTimes).not.toContain("11:00");
     expect(localTimes).not.toContain("11:15");
     expect(localTimes).toContain("11:30");
+  });
+
+  it("returns zero slots on a closed day (Friday)", () => {
+    const input: SlotEngineInput = {
+      ...baseInput,
+      localDateString: "2026-08-28", // Friday
+      workingHours: {
+        tue: { open: "10:00", close: "17:00" },
+        fri: { closed: true },
+      },
+    };
+
+    const slots = generateSlots(input);
+    expect(slots.length).toBe(0);
+  });
+
+  it("respects service duration with different services (multi-duration)", () => {
+    const input: SlotEngineInput = {
+      ...baseInput,
+      serviceDurationMinutes: 60, // 1-hour service
+    };
+
+    const slots = generateSlots(input);
+
+    // Last slot must end at or before 17:00 local. Start no later than 16:00 local (15:00 UTC).
+    expect(slots[0].toISOString()).toBe("2026-08-25T09:00:00.000Z");
+    expect(slots[slots.length - 1].toISOString()).toBe(
+      "2026-08-25T15:00:00.000Z"
+    );
+
+    // Every slot 15 min apart.
+    const diff = slots[1].getTime() - slots[0].getTime();
+    expect(diff).toBe(15 * 60 * 1000);
+  });
+
+  it("applies a full-day closure stored with the clinic-local boundary shape", () => {
+    const input: SlotEngineInput = {
+      ...baseInput,
+      exceptions: [
+        {
+          // Clinic-local full day: 2026-08-25 00:00 to 23:59:59.999 in Africa/Algiers
+          // = 2026-08-24T23:00:00.000Z to 2026-08-25T22:59:59.999Z in UTC.
+          startDate: new Date("2026-08-24T23:00:00.000Z"),
+          endDate: new Date("2026-08-25T22:59:59.999Z"),
+          allDay: true,
+        },
+      ],
+    };
+
+    const slots = generateSlots(input);
+    expect(slots.length).toBe(0);
+  });
+
+  it("applies a service-scoped exception only to its service", () => {
+    const consultationInput: SlotEngineInput = {
+      ...baseInput,
+      serviceId: "consultation",
+      exceptions: [
+        {
+          startDate: new Date("2026-08-25T00:00:00Z"),
+          endDate: new Date("2026-08-25T23:59:59Z"),
+          allDay: true,
+          serviceId: "detartrage", // scoped to a different service
+        },
+      ],
+    };
+
+    // Consultation slots should be UNAFFECTED.
+    expect(generateSlots(consultationInput).length).toBeGreaterThan(0);
+
+    const detartrageInput: SlotEngineInput = {
+      ...baseInput,
+      serviceId: "detartrage",
+      exceptions: [
+        {
+          startDate: new Date("2026-08-25T00:00:00Z"),
+          endDate: new Date("2026-08-25T23:59:59Z"),
+          allDay: true,
+          serviceId: "detartrage",
+        },
+      ],
+    };
+
+    expect(generateSlots(detartrageInput).length).toBe(0);
+  });
+});
+
+describe("isSlotAvailable", () => {
+  // A single-slot availability predicate used by Task 5's atomic booking
+  // re-check inside the transaction.
+
+  const baseOpts = {
+    appointments: [] as { startTime: Date; endTime: Date; resourceId?: string | null }[],
+    exceptions: [] as { startDate: Date; endDate: Date; allDay: boolean; serviceId?: string | null }[],
+    slotConfig: { bufferMinutes: 5 },
+  };
+
+  it("returns true when there is no overlap", () => {
+    expect(
+      isSlotAvailable(
+        new Date("2026-08-25T10:00:00Z"),
+        new Date("2026-08-25T10:30:00Z"),
+        baseOpts,
+      ),
+    ).toBe(true);
+  });
+
+  it("returns false when an appointment overlaps (with buffer)", () => {
+    expect(
+      isSlotAvailable(
+        new Date("2026-08-25T10:00:00Z"),
+        new Date("2026-08-25T10:30:00Z"),
+        {
+          ...baseOpts,
+          appointments: [
+            {
+              startTime: new Date("2026-08-25T10:10:00Z"),
+              endTime: new Date("2026-08-25T10:25:00Z"),
+            },
+          ],
+        },
+      ),
+    ).toBe(false);
+  });
+
+  it("returns false when an exception overlaps the slot", () => {
+    expect(
+      isSlotAvailable(
+        new Date("2026-08-25T10:00:00Z"),
+        new Date("2026-08-25T10:30:00Z"),
+        {
+          ...baseOpts,
+          exceptions: [
+            {
+              startDate: new Date("2026-08-24T23:00:00.000Z"),
+              endDate: new Date("2026-08-25T22:59:59.999Z"),
+              allDay: true,
+            },
+          ],
+        },
+      ),
+    ).toBe(false);
   });
 });
