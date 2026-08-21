@@ -117,12 +117,13 @@ Task details + rationale live in `tasks/plan.md`. This is the working checklist.
 **Skill:** A **database transactions / concurrency** skill (Postgres isolation levels, `SELECT … FOR UPDATE`, `EXCLUDE` constraints, retry-on-conflict). Worth studying before starting — this is the one place where a subtle mistake produces double-booked patients in production.
 
 ## Checkpoint: After Tasks 3a-5 (Engine correct)
-- [ ] Slot engine unit tests pass (overlap, boundaries, lunch, buffer, closures, lead time, horizon)
-- [ ] Clinic-local vs UTC handled correctly at day boundaries (00:00 / 23:59 local)
-- [ ] No double-booking under concurrency (automated test)
-- [ ] `releaseSlot()` event fires on cancellation, with the correct `cancelReason`
+- [x] Slot engine unit tests pass (overlap, boundaries, lunch, buffer, closures, lead time, horizon) — Task 4 ✅
+- [x] Clinic-local vs UTC handled correctly at day boundaries (00:00 / 23:59 local) — Task 4 ✅
+- [ ] No double-booking under concurrency (automated test) — Task 5
+- [ ] `releaseSlot()` event fires on cancellation, with the correct `cancelReason` — Task 5
 - [ ] **Number of chairs confirmed with the clinic** (the single-resource assumption is only safe once it is verified)
 - [ ] Review with human before proceeding
+- See `tasks/task4-summary.md` for the full Task 4 write-up (deliverables, review fixes, security hardening).
 
 ## Early security hardening (delivered ahead of schedule)
 **Description:** Post-review hardening landed now so later tasks inherit the controls instead of building them ad hoc.
