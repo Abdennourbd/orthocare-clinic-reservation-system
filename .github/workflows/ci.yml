@@ -57,8 +57,6 @@ jobs:
 
       - name: Apply migrations to dev database (for build)
         run: npx prisma migrate deploy
-        env:
-          DATABASE_URL: ${{ env.DATABASE_URL }}
 
       - name: Apply migrations to test database
         run: npx prisma migrate deploy

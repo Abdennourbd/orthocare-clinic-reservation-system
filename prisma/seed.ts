@@ -167,7 +167,10 @@ async function main() {
       key: "slotConfig",
       value: {
         granularityMinutes: 15,
-        bufferMinutes: 5
+        bufferMinutes: 5,
+        // null = no lunch closure. Shape when set: { start: "13:00", end: "14:00" }
+        // (clinic-local HH:mm). Task 4's slot engine reads this key.
+        lunchBreak: null
       }
     },
     {
@@ -329,9 +332,13 @@ async function main() {
   // 7. ScheduleException (Holiday example)
   if (adminUserId) {
     const nextYear = new Date().getFullYear() + 1;
-    const startDate = new Date(`${nextYear}-01-01T00:00:00Z`);
-    const endDate = new Date(`${nextYear}-01-01T23:59:59Z`);
-    
+    // Clinic-local day boundaries (Africa/Algiers = UTC+1, no DST). A full-day
+    // closure runs from local 00:00 to local 23:59:59; these are stored as UTC.
+    // Constructing the local range explicitly avoids the classic silent
+    // one-hour drift between UTC and clinic time (see plan.md "Timezone").
+    const startDate = new Date(`${nextYear}-01-01T00:00:00+01:00`);
+    const endDate = new Date(`${nextYear}-01-01T23:59:59+01:00`);
+
     // Check if it exists by dates to prevent duplicates (since we don't have a unique key)
     const existingHoliday = await prisma.scheduleException.findFirst({
       where: { startDate, endDate }
@@ -349,6 +356,8 @@ async function main() {
       });
       console.log(`Seeded example ScheduleException for New Year ${nextYear}.`);
     }
+  } else {
+    console.warn("No admin user created — skipping ScheduleException seed.");
   }
 
   console.log("Seed completed successfully.");
