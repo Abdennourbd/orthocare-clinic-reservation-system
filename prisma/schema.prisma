@@ -1,7 +1,5 @@
 // Ortho'Care Clinic — Prisma schema
-// Task 1: minimal schema with the Postgres-backed rate-limit store.
-// The full domain model (User, Patient, Service, Appointment, content,
-// messaging, audit, etc.) is added incrementally in Tasks 3a/3b/3c.
+// Tasks 1 & 3a: rate-limit store, auth, patients, services, appointments.
 
 generator client {
   provider = "prisma-client"
@@ -13,13 +11,6 @@ datasource db {
 }
 
 // Rate-limit counters for public endpoints (Task 1).
-// One row per (key) — the key encodes the scope, e.g.:
-//   "ip:203.0.113.7:appointments"      per-IP limit on POST /api/appointments
-//   "phone:+213550123456:appointments" per-phone limit
-//   "ip:203.0.113.7:login"             per-IP login throttle
-//   "user:1:login"                     per-account login throttle
-// `windowStart` marks the start of the current fixed window; `count` is the
-// number of requests observed within it. Atomic upsert keeps this race-free.
 model RateLimitCounter {
   key         String   @id
   windowStart DateTime
@@ -27,4 +18,206 @@ model RateLimitCounter {
   updatedAt   DateTime @updatedAt
 
   @@index([windowStart])
+}
+
+enum Role {
+  ADMIN
+  RECEPTIONIST
+}
+
+model User {
+  id                 String   @id @default(cuid())
+  name               String
+  email              String   @unique
+  passwordHash       String
+  role               Role     @default(RECEPTIONIST)
+  active             Boolean  @default(true)
+  
+  // Auth control
+  tokenVersion       Int      @default(0)
+  mustChangePassword Boolean  @default(false)
+  lastLoginAt        DateTime?
+  failedLoginCount   Int      @default(0)
+  lockedUntil        DateTime?
+  
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  patientsCreated    Patient[] @relation("PatientCreatedBy")
+  patientsUpdated    Patient[] @relation("PatientUpdatedBy")
+  scheduleExceptions ScheduleException[]
+}
+
+model Patient {
+  id                 String    @id @default(cuid())
+  firstName          String
+  lastName           String
+  phone              String    // as typed
+  phoneE164          String    // normalized
+  email              String?
+  birthDate          DateTime?
+  notes              String?
+  
+  // Consent & opt-out
+  consentAt          DateTime?
+  consentVersion     String?
+  messagingOptOut    Boolean   @default(false)
+  
+  // Erasure request
+  anonymizedAt       DateTime?
+  
+  // Soft-delete
+  active             Boolean   @default(true)
+  
+  // Audit
+  createdById        String?
+  createdBy          User?     @relation("PatientCreatedBy", fields: [createdById], references: [id])
+  updatedById        String?
+  updatedBy          User?     @relation("PatientUpdatedBy", fields: [updatedById], references: [id])
+  
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  appointments       Appointment[]
+
+  @@index([phoneE164])
+}
+
+model Service {
+  id                 String    @id @default(cuid())
+  slug               String    @unique
+  name               Json      // {fr, ar, en}
+  description        Json      // {fr, ar, en}
+  durationMinutes    Int
+  price              Int?
+  currency           String    @default("DZD")
+  
+  active             Boolean   @default(true)
+  
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  appointments       Appointment[]
+  scheduleExceptions ScheduleException[]
+}
+
+enum AppointmentStatus {
+  PENDING
+  CONFIRMED
+  COMPLETED
+  NO_SHOW
+  CANCELLED
+  RESCHEDULED
+}
+
+enum AppointmentSource {
+  ONLINE
+  MANUAL
+}
+
+enum CancelReason {
+  STAFF
+  PATIENT_SELF_SERVICE
+  AUTO_EXPIRED
+  CLOSURE
+}
+
+model Appointment {
+  id                 String            @id @default(cuid())
+  patientId          String
+  patient            Patient           @relation(fields: [patientId], references: [id])
+  
+  serviceId          String
+  service            Service           @relation(fields: [serviceId], references: [id])
+  
+  startTime          DateTime          // UTC
+  endTime            DateTime          // UTC (= start + service.duration)
+  
+  status             AppointmentStatus @default(PENDING)
+  source             AppointmentSource @default(ONLINE)
+  
+  // Actor info
+  createdByUserId    String?
+  confirmedByUserId  String?
+  
+  // Status timestamps
+  confirmedAt        DateTime?
+  cancelledAt        DateTime?
+  cancelReason       CancelReason?
+  completedAt        DateTime?
+  noShowAt           DateTime?
+  
+  // Delivery idempotency
+  reminderSentAt     DateTime?
+  
+  // Reserved for v2 (second chair)
+  resourceId         String?
+  
+  visitNotes         String?
+  
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+}
+
+// -----------------------------------------------------------------------------
+// Task 3b: Content Schema (Settings, Closures, Public Content)
+// -----------------------------------------------------------------------------
+
+model Setting {
+  key       String   @id
+  value     Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ScheduleException {
+  id          String   @id @default(cuid())
+  startDate   DateTime
+  endDate     DateTime
+  allDay      Boolean  @default(true)
+  startTime   String?  // HH:mm if not allDay
+  endTime     String?  // HH:mm if not allDay
+  reason      Json     // {fr, ar, en}
+  
+  serviceId   String?
+  service     Service? @relation(fields: [serviceId], references: [id])
+  
+  createdById String
+  createdBy   User     @relation(fields: [createdById], references: [id])
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([startDate])
+}
+
+model Testimonial {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  author    Json     // {fr, ar, en} (could be simple string but localized allows translation)
+  content   Json     // {fr, ar, en}
+  rating    Int      @default(5)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model FaqItem {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  question  Json     // {fr, ar, en}
+  answer    Json     // {fr, ar, en}
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model GalleryItem {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  imageUrl  String
+  caption   Json     // {fr, ar, en}
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

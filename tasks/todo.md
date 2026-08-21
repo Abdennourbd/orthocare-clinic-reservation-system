@@ -60,14 +60,14 @@ Task details + rationale live in `tasks/plan.md`. This is the working checklist.
 ## Task 3a: Core schema (auth + patients + services + appointments)
 **Description:** Define `User` (tokenVersion, mustChangePassword, lastLoginAt, failedLoginCount, lockedUntil), `Patient` (soft-delete, createdById/updatedById, **phoneE164 indexed**, consentAt/consentVersion, messagingOptOut, anonymizedAt), `Service` (durationMinutes, currency, JSON per-locale, soft-delete), `Appointment` (status enum, nullable creator/confirmedBy, per-status timestamps, **reminderSentAt**, cancelReason, nullable resourceId); add `lib/phone/normalize.ts`; migrate; minimal seed (1 admin user, 2-3 services with durations, 1 patient) — just enough to test the engine.
 **Acceptance criteria:**
-- [ ] All 4 models defined and migrated
-- [ ] `Appointment.status` covers PENDING/CONFIRMED/COMPLETED/NO_SHOW/CANCELLED/RESCHEDULED
-- [ ] `createdByUserId` / `confirmedByUserId` are nullable
-- [ ] `cancelledAt` / `completedAt` / `noShowAt` / `reminderSentAt` present
-- [ ] `Patient.phoneE164` indexed (non-unique); normalization helper unit-tested against DZ formats (`0550…`, `+213…`, `00213…`, with spaces)
-- [ ] Consent fields and `messagingOptOut` present
-- [ ] `resourceId` present but unused (reserved for a second chair — see plan.md single-resource assumption)
-- [ ] Minimal seed loads; **the admin password comes from an env var, never a hardcoded default** (a seeded default password in a shared environment is a breach waiting to happen)
+- [x] All 4 models defined and migrated
+- [x] `Appointment.status` covers PENDING/CONFIRMED/COMPLETED/NO_SHOW/CANCELLED/RESCHEDULED
+- [x] `createdByUserId` / `confirmedByUserId` are nullable
+- [x] `cancelledAt` / `completedAt` / `noShowAt` / `reminderSentAt` present
+- [x] `Patient.phoneE164` indexed (non-unique); normalization helper unit-tested against DZ formats (`0550…`, `+213…`, `00213…`, with spaces)
+- [x] Consent fields and `messagingOptOut` present
+- [x] `resourceId` present but unused (reserved for a second chair — see plan.md single-resource assumption)
+- [x] Minimal seed loads; **the admin password comes from an env var, never a hardcoded default** (a seeded default password in a shared environment is a breach waiting to happen)
 **Verification:** `prisma migrate dev` + `prisma db seed` succeed; `npm test` (schema smoke test + phone normalization).
 **Dependencies:** Task 1
 **Estimated scope:** Medium (1–2 days)
@@ -76,12 +76,12 @@ Task details + rationale live in `tasks/plan.md`. This is the working checklist.
 ## Task 3b: Content schema + full seed
 **Description:** Define `Testimonial`, `FaqItem`, `GalleryItem` (JSON per-locale, `active`), `Setting` (key, JSON value; working-hours schema documented), **`ScheduleException`** (closure dates: range, full/partial day, reason, optional per-service); migrate; full seed from current clinicorthocare.com (services, testimonials, FAQ, default working hours Sat–Thu 10h–17h Fri closed, slot granularity, buffer) plus booking-policy settings (`pendingExpiryHours` 24, `minLeadTimeMinutes` 120, `maxHorizonDays` 90, `clinicTimezone` Africa/Algiers, `consentVersion`).
 **Acceptance criteria:**
-- [ ] Content models + Setting defined and migrated
-- [ ] Seed data matches current clinic content; services have durations
-- [ ] Working-hours Setting seeded with documented JSON schema, times noted as clinic-local
-- [ ] `ScheduleException` model migrated; at least one holiday seeded as an example
-- [ ] Booking-policy settings seeded with documented defaults
-- [ ] All per-locale fields populated in FR + AR + EN
+- [x] Content models + Setting defined and migrated
+- [x] Seed data matches current clinic content; services have durations
+- [x] Working-hours Setting seeded with documented JSON schema, times noted as clinic-local
+- [x] `ScheduleException` model migrated; at least one holiday seeded as an example
+- [x] Booking-policy settings seeded with documented defaults
+- [x] All per-locale fields populated in FR + AR + EN
 **Verification:** `prisma migrate dev` + `prisma db seed` succeed; query seeded data in 3 locales.
 **Dependencies:** Task 3a
 **Estimated scope:** Medium (2–3 days)

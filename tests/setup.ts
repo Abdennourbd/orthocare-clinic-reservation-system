@@ -30,6 +30,6 @@ beforeEach(async () => {
   // Truncate all tables, restarting identity sequences. Safe because the test
   // DB contains only synthetic data and each suite starts clean.
   await getPrisma().$executeRawUnsafe(`
-    TRUNCATE TABLE "RateLimitCounter" RESTART IDENTITY CASCADE;
+    TRUNCATE TABLE "RateLimitCounter", "User", "Patient", "Service", "Appointment", "Setting", "ScheduleException", "Testimonial", "FaqItem", "GalleryItem" RESTART IDENTITY CASCADE;
   `);
 });
