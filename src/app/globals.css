@@ -29,3 +29,25 @@ body {
 
 /* RTL: the Arabic font is applied for Arabic text; Tailwind's logical
    properties (start/end) already flip with dir=rtl. */
+
+/* Booking wizard: subtle entrance when moving between steps. */
+@keyframes step-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.step-enter {
+  animation: step-enter 180ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .step-enter {
+    animation: none;
+  }
+}

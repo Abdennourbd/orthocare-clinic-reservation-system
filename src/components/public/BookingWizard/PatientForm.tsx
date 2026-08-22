@@ -29,8 +29,10 @@ type PatientFormProps = {
 };
 
 const inputClass = (invalid: boolean) =>
-  `w-full rounded-md border px-3 py-2 text-sm ${
-    invalid ? "border-red-500" : "border-zinc-300"
+  `w-full rounded-lg border px-3 py-2.5 text-sm shadow-sm transition focus-visible:outline-2 focus-visible:outline-offset-1 ${
+    invalid
+      ? "border-red-500 focus-visible:outline-red-500"
+      : "border-zinc-300 focus-visible:outline-teal-600"
   }`;
 
 /**
@@ -99,7 +101,7 @@ export default function PatientForm({
             checked={consent}
             onChange={(e) => onConsentChange(e.target.checked)}
             aria-invalid={Boolean(errors.consent)}
-            className="mt-0.5"
+            className="mt-0.5 h-4 w-4 accent-teal-600"
           />
           <span className="text-sm text-zinc-700">
             {t("consent")}{" "}

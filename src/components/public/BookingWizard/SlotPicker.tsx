@@ -30,9 +30,34 @@ export default function SlotPicker({
 
   if (available.length === 0 && occupied.length === 0) {
     return (
-      <p role="status" className="text-sm text-zinc-600">
-        {t("noSlots")}
-      </p>
+      <div
+        role="status"
+        className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-zinc-300 bg-zinc-50 px-6 py-8 text-center"
+      >
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          aria-hidden="true"
+          className="h-6 w-6 text-zinc-400"
+        >
+          <rect
+            x="3"
+            y="5"
+            width="18"
+            height="16"
+            rx="2"
+            stroke="currentColor"
+            strokeWidth="1.5"
+          />
+          <path
+            d="M3 10h18M8 3v4M16 3v4"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+          />
+        </svg>
+        <p className="text-sm text-zinc-600">{t("noSlots")}</p>
+      </div>
     );
   }
 
@@ -58,10 +83,10 @@ export default function SlotPicker({
                     time: slot.localTime,
                   })}
                   onClick={() => onSelect(slot)}
-                  className={`rounded-md border px-3 py-2 text-sm font-semibold transition-colors ${
+                  className={`rounded-lg border px-3 py-2.5 text-sm font-semibold tabular-nums transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-600 ${
                     selected
-                      ? "border-teal-600 bg-teal-600 text-white"
-                      : "border-teal-200 bg-teal-50 text-teal-800 hover:bg-teal-100"
+                      ? "border-teal-600 bg-teal-600 text-white shadow-sm"
+                      : "border-teal-200 bg-teal-50 text-teal-800 hover:border-teal-400 hover:bg-teal-100 hover:shadow-sm"
                   }`}
                 >
                   {slot.localTime}
@@ -74,7 +99,7 @@ export default function SlotPicker({
 
       {occupied.length > 0 && (
         <fieldset>
-          <legend className="text-sm font-medium text-zinc-500">
+          <legend className="text-sm font-medium text-zinc-400">
             {t("reservedSlots")}
           </legend>
           <div className={grid}>
@@ -87,7 +112,7 @@ export default function SlotPicker({
                   date: dateLabel,
                   time: slot.localTime,
                 })}
-                className="cursor-not-allowed rounded-md bg-zinc-100 px-3 py-2 text-sm text-zinc-400 line-through"
+                className="cursor-not-allowed rounded-lg border border-zinc-200 px-3 py-2.5 text-sm font-medium tabular-nums text-zinc-300 line-through"
               >
                 {slot.localTime}
               </button>

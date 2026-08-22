@@ -49,6 +49,9 @@ export default function DatePicker({
         {strip.map((d) => {
           const disabled = d < today || d > maxDate;
           const selected = d === selectedDate;
+          const parts = dayFmt.formatToParts(clinicNoon(d));
+          const part = (type: string) =>
+            parts.find((p) => p.type === type)?.value ?? "";
           return (
             <button
               key={d}
@@ -57,15 +60,31 @@ export default function DatePicker({
               aria-pressed={selected}
               aria-label={dayFmt.format(clinicNoon(d))}
               onClick={() => onSelect(d)}
-              className={`shrink-0 rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
+              className={`flex w-16 shrink-0 flex-col items-center rounded-xl border px-1 py-2.5 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-600 ${
                 disabled
-                  ? "cursor-not-allowed border-zinc-200 text-zinc-300"
+                  ? "cursor-not-allowed border-zinc-200 bg-zinc-50 text-zinc-300"
                   : selected
-                    ? "border-teal-600 bg-teal-600 text-white"
-                    : "border-zinc-300 text-zinc-700 hover:border-teal-400 hover:text-teal-700"
+                    ? "border-teal-600 bg-teal-600 text-white shadow-sm"
+                    : "border-zinc-300 bg-white text-zinc-800 hover:border-teal-400 hover:text-teal-700 hover:shadow-sm"
               }`}
             >
-              {dayFmt.format(clinicNoon(d))}
+              <span className="text-xs opacity-75">{part("weekday")}</span>
+              <span className="mt-0.5 text-lg font-semibold leading-6">
+                {part("day")}
+              </span>
+              <span className="text-xs opacity-75">{part("month")}</span>
+              {/* Today marker: always rendered (invisible when not today) so
+                  every chip keeps the same height. */}
+              <span
+                aria-hidden="true"
+                className={`mt-1 h-1 w-1 rounded-full ${
+                  d === today
+                    ? selected
+                      ? "bg-white"
+                      : "bg-teal-500"
+                    : "invisible"
+                }`}
+              />
             </button>
           );
         })}
@@ -84,7 +103,7 @@ export default function DatePicker({
           onChange={(e) => {
             if (e.target.value) onSelect(e.target.value);
           }}
-          className="rounded-md border border-zinc-300 px-3 py-2 text-sm"
+          className="rounded-lg border border-zinc-300 px-3 py-2 text-sm shadow-sm focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-teal-600"
         />
       </div>
     </div>

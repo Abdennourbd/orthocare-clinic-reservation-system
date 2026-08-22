@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { bookingInputSchema } from "@/schemas/booking";
 import { addClinicDays, clinicNoon } from "@/lib/time/clinicTime";
@@ -11,6 +11,7 @@ import PatientForm, {
   type PatientFormValue,
 } from "./PatientForm";
 import SlotPicker, { type SlotDto } from "./SlotPicker";
+import StepIndicator from "./StepIndicator";
 
 export type BookingWizardInitialData = {
   services: PublicService[];
@@ -23,6 +24,72 @@ export type BookingWizardInitialData = {
 type SlotResponse = { available: SlotDto[]; occupied: SlotDto[] };
 
 type Step = 1 | 2 | 3 | 4 | 5 | "success";
+
+const stepCardClass =
+  "step-enter mt-6 rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm sm:p-7";
+
+/** Quiet chip recapping a choice made in an earlier step (display-only). */
+function RecapChip({ children }: { children: ReactNode }) {
+  return (
+    <span className="inline-flex items-center rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1 text-xs font-medium text-zinc-700">
+      {children}
+    </span>
+  );
+}
+
+const primaryButtonClass =
+  "inline-flex items-center justify-center gap-2 rounded-full bg-teal-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-teal-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-600 disabled:cursor-not-allowed disabled:opacity-60";
+
+const secondaryButtonClass =
+  "inline-flex items-center justify-center gap-1.5 rounded-full border border-zinc-300 bg-white px-5 py-2.5 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-600";
+
+function CheckIcon({ className = "h-3.5 w-3.5" }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      fill="none"
+      aria-hidden="true"
+      className={className}
+    >
+      <path
+        d="M3 8.5l3.5 3.5L13 4.5"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+/** Step-back navigation with a direction-aware chevron (flips in RTL). */
+function BackButton({
+  onClick,
+  label,
+}: {
+  onClick: () => void;
+  label: string;
+}) {
+  return (
+    <button type="button" onClick={onClick} className={secondaryButtonClass}>
+      <svg
+        viewBox="0 0 16 16"
+        fill="none"
+        aria-hidden="true"
+        className="h-4 w-4 rtl:-scale-x-100"
+      >
+        <path
+          d="M10 3.5L5.5 8l4.5 4.5"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+      {label}
+    </button>
+  );
+}
 
 export default function BookingWizard({
   initialData,
@@ -275,20 +342,26 @@ export default function BookingWizard({
   // ── Success ───────────────────────────────────────────────────────────────
   if (step === "success") {
     return (
-      <div className="mx-auto max-w-xl rounded-2xl border border-teal-200 bg-teal-50 p-8 text-center">
-        <h2 className="text-xl font-semibold text-teal-800">
+      <div className="step-enter mx-auto max-w-xl rounded-2xl border border-zinc-200 bg-white p-8 text-center shadow-sm sm:p-10">
+        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-teal-50 text-teal-600">
+          <CheckIcon className="h-7 w-7" />
+        </div>
+        <h2 className="mt-4 text-xl font-semibold text-zinc-900">
           {t("successTitle")}
         </h2>
         {appointmentRef && (
-          <p className="mt-2 text-sm text-zinc-600">
-            {t("successRef")}: <span className="font-mono">{appointmentRef}</span>
+          <p className="mt-3 text-sm text-zinc-600">
+            {t("successRef")}:{" "}
+            <span className="inline-block rounded-md bg-zinc-100 px-2 py-0.5 font-mono text-xs font-medium text-zinc-800">
+              {appointmentRef}
+            </span>
           </p>
         )}
-        <p className="mt-4 text-sm text-zinc-700">{t("successNote")}</p>
+        <p className="mt-4 text-sm text-zinc-600">{t("successNote")}</p>
         <button
           type="button"
           onClick={reset}
-          className="mt-6 rounded-full bg-teal-600 px-6 py-2 text-sm font-semibold text-white transition-colors hover:bg-teal-700"
+          className={`${primaryButtonClass} mt-6`}
         >
           {t("bookAnother")}
         </button>
@@ -298,15 +371,21 @@ export default function BookingWizard({
 
   return (
     <div className="mx-auto max-w-2xl">
-      <p className="text-sm text-zinc-500">
-        {t("stepService")} → {t("stepDate")} → {t("stepSlot")} →{" "}
-        {t("stepInfo")} → {t("stepSummary")}
-      </p>
+      <StepIndicator
+        steps={[
+          t("stepService"),
+          t("stepDate"),
+          t("stepSlot"),
+          t("stepInfo"),
+          t("stepSummary"),
+        ]}
+        current={step}
+      />
 
       {formError && (
         <p
           role="alert"
-          className="mt-4 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+          className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
         >
           {formError}
         </p>
@@ -314,7 +393,10 @@ export default function BookingWizard({
 
       {/* Step 1 — service */}
       {step === 1 && (
-        <section className="mt-6 space-y-3" aria-label={t("stepService")}>
+        <section
+          className={`${stepCardClass} space-y-3`}
+          aria-label={t("stepService")}
+        >
           <h2 className="text-lg font-semibold text-zinc-900">{t("stepService")}</h2>
           {services.map((s) => {
             const selected = s.id === serviceId;
@@ -324,19 +406,29 @@ export default function BookingWizard({
                 type="button"
                 aria-pressed={selected}
                 onClick={() => selectService(s.id)}
-                className={`flex w-full items-center justify-between gap-4 rounded-xl border p-4 text-left transition-colors ${
+                className={`flex w-full items-center gap-4 rounded-xl border p-4 text-start transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-600 ${
                   selected
-                    ? "border-teal-600 bg-teal-50"
-                    : "border-zinc-300 hover:border-teal-400"
+                    ? "border-teal-600 bg-teal-50 shadow-sm"
+                    : "border-zinc-300 bg-white hover:border-teal-400 hover:shadow-sm"
                 }`}
               >
-                <span>
+                <span
+                  aria-hidden="true"
+                  className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${
+                    selected
+                      ? "bg-teal-600 text-white"
+                      : "border border-zinc-300 text-transparent"
+                  }`}
+                >
+                  <CheckIcon className="h-3 w-3" />
+                </span>
+                <span className="flex-1">
                   <span className="block font-semibold text-zinc-900">{s.name}</span>
                   <span className="mt-0.5 block text-sm text-zinc-500">
                     {s.description}
                   </span>
                 </span>
-                <span className="shrink-0 text-right text-sm">
+                <span className="shrink-0 text-end text-sm">
                   <span className="block text-zinc-500">
                     {t("durationMinutes", { minutes: s.durationMinutes })}
                   </span>
@@ -352,7 +444,7 @@ export default function BookingWizard({
 
       {/* Step 2 — date */}
       {step === 2 && (
-        <section className="mt-6" aria-label={t("stepDate")}>
+        <section className={stepCardClass} aria-label={t("stepDate")}>
           <h2 className="text-lg font-semibold text-zinc-900">{t("stepDate")}</h2>
           <p className="mt-1 text-sm text-zinc-600">{t("chooseDateHint")}</p>
           <div className="mt-4">
@@ -363,26 +455,34 @@ export default function BookingWizard({
               onSelect={selectDate}
             />
           </div>
-          <button
-            type="button"
-            onClick={() => setStep(1)}
-            className="mt-6 text-sm font-medium text-zinc-600 underline-offset-2 hover:underline"
-          >
-            {t("back")}
-          </button>
+          <div className="mt-6">
+            <BackButton onClick={() => setStep(1)} label={t("back")} />
+          </div>
         </section>
       )}
 
       {/* Step 3 — slot */}
       {step === 3 && (
-        <section className="mt-6" aria-label={t("stepSlot")}>
+        <section className={stepCardClass} aria-label={t("stepSlot")}>
           <h2 className="text-lg font-semibold text-zinc-900">{t("stepSlot")}</h2>
-          <p className="mt-1 text-sm text-zinc-600">
-            {selectedService?.name} — {date ? dayFmt.format(clinicNoon(date)) : ""}
-          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {selectedService && <RecapChip>{selectedService.name}</RecapChip>}
+            {date && <RecapChip>{dayFmt.format(clinicNoon(date))}</RecapChip>}
+          </div>
           <div className="mt-4">
             {slotsLoading ? (
-              <p className="text-sm text-zinc-500">{tCommon("loading")}</p>
+              <div
+                role="status"
+                aria-label={tCommon("loading")}
+                className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-5"
+              >
+                {Array.from({ length: 10 }, (_, i) => (
+                  <div
+                    key={i}
+                    className="h-10 animate-pulse rounded-lg bg-zinc-100"
+                  />
+                ))}
+              </div>
             ) : slotsError ? (
               <p role="alert" className="text-sm text-red-600">
                 {t("errorGeneric")}
@@ -400,20 +500,21 @@ export default function BookingWizard({
               />
             ) : null}
           </div>
-          <button
-            type="button"
-            onClick={() => setStep(2)}
-            className="mt-6 text-sm font-medium text-zinc-600 underline-offset-2 hover:underline"
-          >
-            {t("back")}
-          </button>
+          <div className="mt-6">
+            <BackButton onClick={() => setStep(2)} label={t("back")} />
+          </div>
         </section>
       )}
 
       {/* Step 4 — patient info */}
       {step === 4 && (
-        <section className="mt-6" aria-label={t("stepInfo")}>
+        <section className={stepCardClass} aria-label={t("stepInfo")}>
           <h2 className="text-lg font-semibold text-zinc-900">{t("stepInfo")}</h2>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {selectedService && <RecapChip>{selectedService.name}</RecapChip>}
+            {date && <RecapChip>{dayFmt.format(clinicNoon(date))}</RecapChip>}
+            {slot && <RecapChip>{slot.localTime}</RecapChip>}
+          </div>
           <div className="mt-4">
             <PatientForm
               value={patient}
@@ -424,19 +525,13 @@ export default function BookingWizard({
             />
           </div>
           <div className="mt-6 flex gap-3">
-            <button
-              type="button"
-              onClick={() => setStep(3)}
-              className="rounded-full border border-zinc-300 px-5 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
-            >
-              {t("back")}
-            </button>
+            <BackButton onClick={() => setStep(3)} label={t("back")} />
             <button
               type="button"
               onClick={() => {
                 if (patientStepValid()) setStep(5);
               }}
-              className="rounded-full bg-teal-600 px-5 py-2 text-sm font-semibold text-white hover:bg-teal-700"
+              className={primaryButtonClass}
             >
               {t("next")}
             </button>
@@ -446,31 +541,31 @@ export default function BookingWizard({
 
       {/* Step 5 — summary + cancellation watch + submit */}
       {step === 5 && selectedService && slot && date && (
-        <section className="mt-6" aria-label={t("stepSummary")}>
+        <section className={stepCardClass} aria-label={t("stepSummary")}>
           <h2 className="text-lg font-semibold text-zinc-900">
             {t("stepSummary")}
           </h2>
 
-          <dl className="mt-4 space-y-2 rounded-xl border border-zinc-200 p-4 text-sm">
-            <div className="flex justify-between gap-4">
+          <dl className="mt-4 divide-y divide-zinc-100 rounded-xl border border-zinc-200 bg-zinc-50/60 px-4 text-sm">
+            <div className="flex justify-between gap-4 py-2.5">
               <dt className="text-zinc-500">{t("service")}</dt>
               <dd className="text-right font-medium text-zinc-900">
                 {selectedService.name}
               </dd>
             </div>
-            <div className="flex justify-between gap-4">
+            <div className="flex justify-between gap-4 py-2.5">
               <dt className="text-zinc-500">{t("date")}</dt>
               <dd className="text-right font-medium text-zinc-900">
                 {dayFmt.format(clinicNoon(date))}
               </dd>
             </div>
-            <div className="flex justify-between gap-4">
+            <div className="flex justify-between gap-4 py-2.5">
               <dt className="text-zinc-500">{t("time")}</dt>
               <dd className="text-right font-medium text-zinc-900">
                 {slot.localTime}
               </dd>
             </div>
-            <div className="flex justify-between gap-4">
+            <div className="flex justify-between gap-4 py-2.5">
               <dt className="text-zinc-500">{t("patient")}</dt>
               <dd className="text-right font-medium text-zinc-900">
                 {patient.firstName} {patient.lastName}
@@ -478,11 +573,11 @@ export default function BookingWizard({
             </div>
           </dl>
 
-          <p className="mt-4 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
             {t("summaryConfirmNote")}
           </p>
 
-          <fieldset className="mt-6 rounded-xl border border-zinc-200 p-4">
+          <fieldset className="mt-6 rounded-xl border border-zinc-200 bg-zinc-50/60 p-4">
             <legend className="px-1 text-sm font-semibold text-zinc-900">
               {t("watchTitle")}
             </legend>
@@ -501,6 +596,7 @@ export default function BookingWizard({
                           type="checkbox"
                           checked={watchDates.includes(d)}
                           onChange={() => toggleWatch(d)}
+                          className="h-4 w-4 accent-teal-600"
                         />
                         {dayFmt.format(clinicNoon(d))}
                       </label>
@@ -525,13 +621,13 @@ export default function BookingWizard({
                   max={maxDate}
                   value={watchAddValue}
                   onChange={(e) => setWatchAddValue(e.target.value)}
-                  className="rounded-md border border-zinc-300 px-3 py-2 text-sm"
+                  className="rounded-lg border border-zinc-300 px-3 py-2 text-sm shadow-sm focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-teal-600"
                 />
               </div>
               <button
                 type="button"
                 onClick={addWatchDate}
-                className="rounded-md border border-teal-600 px-4 py-2 text-sm font-semibold text-teal-700 hover:bg-teal-50"
+                className="rounded-lg border border-teal-600 px-4 py-2 text-sm font-semibold text-teal-700 transition hover:bg-teal-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-600"
               >
                 {t("watchAdd")}
               </button>
@@ -541,18 +637,12 @@ export default function BookingWizard({
           </fieldset>
 
           <div className="mt-6 flex gap-3">
-            <button
-              type="button"
-              onClick={() => setStep(4)}
-              className="rounded-full border border-zinc-300 px-5 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
-            >
-              {t("back")}
-            </button>
+            <BackButton onClick={() => setStep(4)} label={t("back")} />
             <button
               type="button"
               onClick={() => void submit()}
               disabled={submitting}
-              className="rounded-full bg-teal-600 px-6 py-2 text-sm font-semibold text-white transition-colors hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-60"
+              className={primaryButtonClass}
             >
               {submitting ? t("submitting") : t("submit")}
             </button>
