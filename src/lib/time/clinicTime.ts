@@ -56,6 +56,21 @@ export function toClinicLocalDateString(utcDate: Date): string {
   return formatter.format(utcDate);
 }
 
+/**
+ * Formats a UTC instant as clinic-local "HH:mm" (e.g. "10:00"). Used when a
+ * slot's start time must be shown in the clinic's time regardless of the
+ * viewer's browser timezone (the slots API returns both UTC and this string).
+ */
+export function formatClinicLocalTime(utcDate: Date): string {
+  const formatter = new Intl.DateTimeFormat("fr-FR", {
+    timeZone: CLINIC_TIMEZONE,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+  return formatter.format(utcDate);
+}
+
 const WEEKDAYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
 
 /**

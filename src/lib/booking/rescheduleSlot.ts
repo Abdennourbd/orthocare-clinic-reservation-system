@@ -54,6 +54,7 @@ export async function rescheduleSlot(
   // a slot-freed event for a reschedule that rolled back.
   emitSlotFreed({
     appointmentId: oldAppointment.id,
+    serviceId: oldAppointment.serviceId,
     resourceId: oldAppointment.resourceId,
     startTime: oldAppointment.startTime,
     endTime: oldAppointment.endTime,

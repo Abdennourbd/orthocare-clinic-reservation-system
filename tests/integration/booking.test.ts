@@ -183,10 +183,12 @@ describe("releaseSlot", () => {
     expect(released.cancelReason).toBe(CancelReason.STAFF);
     expect(released.cancelledAt).toBeInstanceOf(Date);
 
-    // Event fired with the original window.
+    // Event fired with the original window and the service (the waitlist
+    // subscriber matches on serviceId).
     expect(freed).toHaveLength(1);
     expect(freed[0]).toMatchObject({
       appointmentId: appt.id,
+      serviceId,
       startTime: startUTC,
       endTime: new Date(startUTC.getTime() + 30 * 60_000),
     });

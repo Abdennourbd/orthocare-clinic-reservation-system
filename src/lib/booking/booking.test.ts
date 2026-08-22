@@ -33,6 +33,7 @@ describe("slot-freed event emitter", () => {
 
     const event = {
       appointmentId: "appt_1",
+      serviceId: "svc_1",
       resourceId: null,
       startTime: new Date("2026-08-25T10:00:00Z"),
       endTime: new Date("2026-08-25T10:30:00Z"),
@@ -51,11 +52,28 @@ describe("slot-freed event emitter", () => {
 
     emitSlotFreed({
       appointmentId: "appt_1",
+      serviceId: "svc_1",
       resourceId: null,
       startTime: new Date("2026-08-25T10:00:00Z"),
       endTime: new Date("2026-08-25T10:30:00Z"),
     });
 
     expect(handler).not.toHaveBeenCalled();
+  });
+
+  it("carries serviceId so waitlist subscribers can match by service", () => {
+    const seen: string[] = [];
+    const off = onSlotFreed((event) => seen.push(event.serviceId));
+
+    emitSlotFreed({
+      appointmentId: "appt_2",
+      serviceId: "svc_orthodontics",
+      resourceId: null,
+      startTime: new Date("2026-08-25T10:00:00Z"),
+      endTime: new Date("2026-08-25T11:00:00Z"),
+    });
+
+    expect(seen).toEqual(["svc_orthodontics"]);
+    off();
   });
 });

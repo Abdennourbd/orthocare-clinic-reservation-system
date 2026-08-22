@@ -79,6 +79,7 @@ model Patient {
   updatedAt          DateTime  @updatedAt
 
   appointments       Appointment[]
+  waitlistEntries    WaitlistEntry[]
 
   @@index([phoneE164])
 }
@@ -99,6 +100,7 @@ model Service {
 
   appointments       Appointment[]
   scheduleExceptions ScheduleException[]
+  waitlistEntries    WaitlistEntry[]
 }
 
 enum AppointmentStatus {
@@ -220,4 +222,41 @@ model GalleryItem {
   active    Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// -----------------------------------------------------------------------------
+// Cancellation watch (patient-initiated waitlist, created at booking time)
+// and staff-added waitlist entries (Task 17). Both are notified by the
+// slot-freed event subscriber on matching cancellations.
+// ----------------------------------------------------------------------------
+
+enum WaitlistSource {
+  PATIENT // self-service, offered at the end of the public booking wizard
+  STAFF   // added from the admin dashboard
+}
+
+model WaitlistEntry {
+  id         String         @id @default(cuid())
+  patientId  String
+  patient    Patient        @relation(fields: [patientId], references: [id])
+  serviceId  String
+  service    Service        @relation(fields: [serviceId], references: [id])
+
+  // Watched clinic-local dates, each stored as that date's UTC midnight
+  // (Africa/Algiers has no DST, so the mapping is stable). All date maths
+  // on these values goes through lib/time/clinicTime.ts.
+  preferredDates DateTime[]
+
+  source     WaitlistSource
+
+  active     Boolean        @default(true)
+  // Set when the patient has been notified; entries are deactivated on
+  // notification (one notification per entry in v1 — the patient can
+  // re-watch if they miss it).
+  notifiedAt DateTime?
+
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+
+  @@index([serviceId, active])
 }

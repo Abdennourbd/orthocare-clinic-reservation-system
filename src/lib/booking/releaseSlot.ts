@@ -39,6 +39,7 @@ export async function releaseSlot(
   // slot-freed event for a release that failed.
   emitSlotFreed({
     appointmentId: released.id,
+    serviceId: released.serviceId,
     resourceId: released.resourceId,
     startTime: released.startTime,
     endTime: released.endTime,

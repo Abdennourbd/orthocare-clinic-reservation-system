@@ -134,20 +134,29 @@ Task details + rationale live in `tasks/plan.md`. This is the working checklist.
 - [ ] **Manual (operator):** rotate the Neon `DATABASE_URL` password — the live connection string was echoed in debug output during the session. Also, never paste `DATABASE_URL` into chat/logs.
 - [ ] **Task 10 dependency:** extend the CSP in `headers.ts` with the Google embed domains before mounting Reviews/Maps.
 
+## Cancellation-watch foundations (delivered ahead of schedule)
+**Description:** Patient-initiated waitlist ("notify me if someone cancels on a day I watch") decided after the original plan; foundations landed now because Task 6 writes them and retrofitting later means reworking the booking transaction.
+- [x] `WaitlistEntry` model + `WaitlistSource` enum (`PATIENT`|`STAFF`) migrated — `preferredDates` stored as clinic-local dates at UTC midnight; index on `(serviceId, active)`.
+- [x] `SlotFreedEvent` now carries `serviceId` (emitted by `releaseSlot` and `rescheduleSlot`) — the Task 17 subscriber matches on service; unit + integration tests assert it.
+- [x] `plan.md` + this file updated (Task 6 opt-in step, Task 17 subscriber + matching rules, endpoint table, data model).
+
 ## Phase 3: Public Booking + Communication
 
 ## Task 6: Booking wizard UI + `POST /api/appointments` + `GET /api/slots`
-**Description:** Vertical slice — public flow: pick service → pick date → see available/occupied slots (occupied shown as reserved) → patient info **+ consent checkbox** → confirm → summary screen. Backend routes: `GET /api/services`, `GET /api/services/[slug]`, `GET /api/slots`, `POST /api/appointments` (calls Task 5 `bookSlot`). Phone normalized to E.164 on submit. `POST /api/appointments` is rate-limited per IP and per phone, with a cap on simultaneously active PENDING bookings per phone.
+**Description:** Vertical slice — public flow: pick service → pick date → see available/occupied slots (occupied shown as reserved) → patient info **+ consent checkbox** → confirm → summary screen. Backend routes: `GET /api/services`, `GET /api/services/[slug]`, `GET /api/slots`, `POST /api/appointments` (calls Task 5 `bookSlot`). Phone normalized to E.164 on submit. `POST /api/appointments` is rate-limited per IP and per phone, with a cap on simultaneously active PENDING bookings per phone. **Cancellation-watch opt-in:** on the summary screen the patient may pick one or more days to watch for freed slots (aimed at those who wanted a fully-booked day); days they browsed with zero availability are pre-suggested. Accepted `watchDates` create a **PATIENT-source `WaitlistEntry` in the same transaction as the booking** (model already migrated; schema + slot-freed `serviceId` delivered early for this). Validation: dates within the booking horizon, none in the past (Zod, shared client/server). Notification itself is Task 17 — this task only captures the opt-in.
 **Acceptance criteria:**
 - [ ] Slots render as available/reserved correctly
 - [ ] Booking creates a PENDING appointment via `bookSlot`
 - [ ] Conflict shows a user-facing error (slot just taken)
 - [ ] Summary screen shows appointment details, and states clearly that **the clinic will call to confirm** (the appointment is not yet confirmed)
+- [ ] Cancellation-watch step on the summary screen: skippable, multi-select dates, copy explains the patient is agreeing to an SMS if a slot frees (non-transactional); fully-booked browsed days pre-suggested; rendered in all 3 locales (RTL checked)
+- [ ] `watchDates` validated (horizon + no past dates, Zod shared with the form); accepted dates create one PATIENT-source `WaitlistEntry` **in the booking transaction** (booking fails → no orphan entry)
+- [ ] Booking without the opt-in creates no `WaitlistEntry`
 - [ ] Consent checkbox required; `consentAt` + `consentVersion` stored; privacy notice linked
 - [ ] Phone stored normalized (E.164) and as typed
 - [ ] Rate limits and the PENDING cap reject a flood from one IP/phone with a clear message
 - [ ] Booking wizard is keyboard-navigable; slot buttons have accessible labels (date + time, not just a number)
-- [ ] Route-level integration test: happy path + conflict path + rate-limit path
+- [ ] Route-level integration test: happy path + conflict path + rate-limit path + happy path with `watchDates` (entry created) + invalid `watchDates` rejected
 **Verification:** Manual end-to-end booking; `npm test -- booking`; keyboard-only pass through the wizard.
 **Dependencies:** Task 5, Task 2 (i18n/shell)
 **Estimated scope:** Large (4–5 days)
@@ -335,17 +344,19 @@ Task details + rationale live in `tasks/plan.md`. This is the working checklist.
 **Skill:** Same **messaging-provider** skill as Task 7, plus a **bulk-send safety** mindset (preview, idempotency, cost per message). One misclick here messages every patient of the day — the guardrails are the feature.
 
 ## Task 17: Waitlist
-**Description:** `WaitlistEntry` model (3c schema). Staff adds patient to waitlist per service/preferred dates. Subscribes to the **slot-freed event** from `releaseSlot()` (Task 5) — so it fires on BOTH staff cancellations (Task 14) AND self-service cancellations (Task 8). Notifies eligible entries via SMS; sets `notifiedAt` to prevent re-notification. Routes: `GET/POST /api/admin/waitlist`, `DELETE /api/admin/waitlist/[id]`.
+**Description:** The `WaitlistEntry` model is already migrated (delivered early with a `source` field — Task 6 writes PATIENT-source entries from the booking wizard's cancellation-watch opt-in). This task delivers the **slot-freed subscriber** and the **staff side**: staff add patients to the waitlist per service/preferred dates (STAFF-source). The subscriber listens to the **slot-freed event** from `releaseSlot()` (Task 5) — so it fires on staff cancellations (Task 14), self-service cancellations (Task 8), auto-expiry (Task 9) and reschedules. It notifies active entries whose `serviceId` matches the event's `serviceId` and whose `preferredDates` contain the freed slot's **clinic-local date** (date maths via `lib/time/clinicTime.ts`; dates stored as clinic-local at UTC midnight). SMS is non-transactional (opt-out respected); on notification `notifiedAt` is set and the entry deactivated — **one notification per entry in v1**. Routes: `GET/POST /api/admin/waitlist`, `DELETE /api/admin/waitlist/[id]`.
 **Acceptance criteria:**
-- [ ] Staff adds patient to waitlist
+- [ ] Staff adds patient to waitlist (STAFF source)
 - [ ] Cancellation (staff OR self-service) triggers notification to eligible waitlist entries
-- [ ] `notifiedAt` set on notification; same entry not re-notified
+- [ ] Matching is by service **and** watched date: an entry watching Friday is not notified for a Tuesday cancellation; freed-slot dates computed in clinic-local time
+- [ ] PATIENT-source entries (from Task 6's booking opt-in) are notified identically — no extra code path
+- [ ] `notifiedAt` set on notification **and entry deactivated** — same entry not re-notified
 - [ ] Claimed slot removes/ deactivates waitlist entry
 - [ ] Auto-expired PENDING bookings (Task 9) also trigger waitlist notification — same `releaseSlot()` path, no extra code
 - [ ] Waitlist offers are non-transactional: opted-out patients are not messaged
-- [ ] Integration test: cancel via self-service link → waitlist SMS fires for matching entries
+- [ ] Integration test: cancel via self-service link → waitlist SMS fires for matching entries (service + date), not for non-matching ones
 **Verification:** Manual: cancel both ways → waitlist SMS fired; `npm test -- waitlist`.
-**Dependencies:** Task 14, Task 8 (to verify self-service path triggers it)
+**Dependencies:** Task 14, Task 8 (to verify self-service path triggers it), Task 6 (PATIENT-source entries exist)
 **Estimated scope:** Medium (2 days)
 **Skill:** No specialized skill needed — an event subscriber over the existing `releaseSlot()` emitter. On the cut list if time runs short; nothing else depends on it.
 

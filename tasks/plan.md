@@ -6,6 +6,8 @@ A from-scratch replacement for clinicorthocare.com: a trilingual (FR / AR / EN, 
 
 Patients book online: they pick a consultation type (cleaning, checkup, orthodontics, etc. — each with an estimated duration), see the day's **available time slots** (already-booked slots render as reserved), and pick one to reserve. A **phone call by the receptionist is required to confirm** an online booking. Confirmation SMS includes a **self-service link** to cancel or reschedule into an available slot.
 
+When finishing a booking, the patient may opt in to **cancellation alerts**: they pick one or more days to watch (typically the day they originally wanted but found fully booked), and if a slot frees on a watched day because someone cancelled, they receive an SMS. This is the patient-facing half of the waitlist; staff can add waitlist entries too.
+
 The dashboard has two roles — **admin** and **receptionist** (created by admin). Staff manage reservations (confirm/cancel/reschedule after phone calls), add manual bookings, manage patient records (profile, visit history, uploaded documents), and send SMS: single messages or **broadcasts** (e.g., "today's appointments delayed by 30 min"). Every completed patient visit is saved as history. Patients do **not** log in — their record is admin-managed only.
 
 The scheduling engine (slot generation, overlap detection, atomic conflict-free booking) is the heavy part of the backend and is built and tested first.
@@ -51,7 +53,7 @@ The scheduling engine (slot generation, overlap detection, atomic conflict-free 
 | 2 | **Google Reviews** embed widget on public site (+ show only 4★+ reviews if the clinic opts for the Places API route) | In |
 | 3 | **Self-service link** in confirmation SMS: cancel + reschedule | In |
 | 5 | **KPIs** dashboard (schedule, utilization, no-shows, new patients) | In |
-| 7 | **Waitlist** — notify patients when a slot frees | In |
+| 7 | **Waitlist / cancellation alerts** — patients pick watched days at the end of booking; staff can add entries too; both notified when a slot frees | In |
 | 8 | **No-show follow-up** SMS (automatic, cron) | In |
 | 9 | **CSV/Excel export** of monthly activity | In |
 | 10 | **Duplicate patient detection** (same phone/name) | In |
@@ -90,7 +92,7 @@ The scheduling engine (slot generation, overlap detection, atomic conflict-free 
 - **Google Reviews:** official embed widget on the public site (no API key, live rating/reviews). It is a third-party script, so: it is allow-listed explicitly in the Content-Security-Policy, disclosed in the privacy notice as a data flow to Google, and **excluded from the self-service token pages**.
   - **4★-and-up filter (clinic request):** the no-API-key embed widget shows *all* reviews and cannot filter by star rating. Showing only 4★+ reviews requires either the **Google Places API** (server-side fetch + filter; needs an API key and is usage-billed) or a third-party review widget. **Decision needed:** (a) keep the free embed showing all reviews, or (b) use the Places API to show only 4★+ reviews (adds an API key, cost, and server-side caching). Until decided, Task 10 defaults to the free embed; the 4★ filter is tracked as an Open Question.
 - **Google Maps / location:** the clinic location is shown on the contact page (and optionally home/footer) as an embedded Google Maps iframe with the clinic's address, plus a **one-click "Open in Google Maps" directions button** (a plain `google.com/maps/dir/?api=1&destination=<lat>,<lng>` link — no API key, works on mobile and desktop). The map is a Google iframe, so like the reviews widget it is allow-listed in the CSP and disclosed in the privacy notice as a data flow to Google. It is **not** loaded on self-service token pages.
-- **Waitlist:** `WaitlistEntry` per patient/service. When a slot frees (cancellation), eligible waitlist entries are notified via SMS.
+- **Waitlist (cancellation alerts):** `WaitlistEntry` per patient/service with `preferredDates` and a **`source` (`PATIENT`|`STAFF`)**. Two doors into it: (1) at the end of the public booking wizard the patient may opt in and pick one or more days to watch — aimed at those who wanted a specific day but found it fully booked; days the patient browsed with zero availability are pre-suggested. The entry is created in the same transaction as the booking, covered by the route's existing rate limits, and `watchDates` is validated by the same Zod schema (within booking horizon, no past dates). (2) Staff add entries from the dashboard (Task 17). When a slot frees (any `releaseSlot()` path — staff cancel, self-service cancel, auto-expiry, reschedule), the subscriber notifies active entries whose `serviceId` matches and whose `preferredDates` contain the freed slot's clinic-local date. Notification is via SMS (non-transactional → opt-out rules apply), sets `notifiedAt` and deactivates the entry — **one notification per entry in v1** (if the patient misses it they can re-watch); lifting this to one notification per watched date is a small follow-up if the clinic wants it. Dates are stored as clinic-local dates at UTC midnight (stable: Africa/Algiers has no DST) and all date maths goes through `lib/time/clinicTime.ts`. The `slot-freed` event carries `serviceId` for the match.
 - **KPIs & exports:** computed on demand from appointments (no extra tables). CSV and XLSX generation in `lib/export`. An export is a **bulk extract of patient data**, therefore: ADMIN-only, audited as `EXPORT_GENERATED` with the row count and date range, and clinical notes excluded unless explicitly requested.
 - **Duplicate detection:** on patient creation/edit, flag existing patients sharing phone or name; requires staff acknowledgment to proceed.
 - **Working hours / Settings:** store open hours per weekday (Sat–Thu, 10h–17h; Fri closed), slot granularity, inter-appointment buffer — editable in dashboard.
@@ -143,7 +145,7 @@ Per-locale fields are JSON columns (`{fr, ar, en}`); see `localized()` helper in
 - `Appointment` — id, patientId, serviceId, startTime, endTime (= start + service.duration), **all times stored UTC**, status (`PENDING`|`CONFIRMED`|`COMPLETED`|`NO_SHOW`|`CANCELLED`|`RESCHEDULED`), source (`ONLINE`|`MANUAL`), **createdByUserId** (nullable — null for ONLINE bookings), **confirmedAt**/**confirmedByUserId** (nullable — null if never confirmed), **cancelledAt**, **cancelReason** (`STAFF`|`PATIENT_SELF_SERVICE`|`AUTO_EXPIRED`|`CLOSURE`), **completedAt**, **noShowAt**, **reminderSentAt** (nullable — without it a cron retry texts every patient twice), **resourceId** (nullable; unused in v1, reserved for a second chair/practitioner), visitNotes, timestamps. Timestamps per status make KPI queries cheap (no AuditLog walk).
 - `Visit` — manual history records: id, patientId, date, serviceId?, type, notes, treatment. **History = `COMPLETED` appointments UNION `Visit` rows.** Visits are for pre-system records or walk-in treatments that never had an appointment. Documented in schema.
 - `PatientDocument` — id, patientId, name, **mimeType** (validated against an allow-list), **sizeBytes**, blobKey (private — never a public URL), uploadedById, uploadedAt, **deletedAt**/**deletedById** (soft-delete)
-- `WaitlistEntry` — id, patientId, serviceId, preferredDates (**DateTime[]**), active, **notifiedAt** (nullable — prevents re-notifying on every cancellation), createdAt
+- `WaitlistEntry` — id, patientId, serviceId, preferredDates (**DateTime[]** — clinic-local dates stored as UTC midnight), **source (`PATIENT`|`STAFF`)** — `PATIENT` entries are created by the public booking flow's cancellation-watch opt-in, `STAFF` entries by the dashboard, active, **notifiedAt** (nullable — set and entry deactivated on notification), createdAt. **Delivered early** (with the schema, ahead of Tasks 6/17) so the booking flow can write it.
 - `SmsMessage` — id, to (E.164), body, **patientId** (nullable — enables "messages for this patient" queries without phone matching), type (`CONFIRMATION`|`REMINDER`|`NO_SHOW`|`MANUAL`|`RESCHEDULE`|`DELAY`|`WAITLIST`|`EXPIRED` — note: no `BROADCAST`; grouping is encoded by `batchId`), **templateId** (nullable — lineage to the template version), batchId, provider, status, appointmentId?, sentById, sentAt. **Unique index on (appointmentId, type)** for automated types, so a retried cron cannot double-send.
 - `AuditLog` — id, **actorType** (`STAFF`|`SYSTEM`|`PATIENT`), **userId** (nullable — null for SYSTEM and PATIENT actors), **action** (enum), entityType, entityId, detail (JSON), **ipAddress** (nullable), createdAt. **Append-only** — the application never updates or deletes rows.
   - Change actions: `APPOINTMENT_CONFIRMED`, `APPOINTMENT_CANCELLED`, `APPOINTMENT_RESCHEDULED`, `APPOINTMENT_COMPLETED`, `APPOINTMENT_NO_SHOW`, `APPOINTMENT_AUTO_CANCELLED`, `PATIENT_CREATED`, `PATIENT_UPDATED`, `PATIENT_ANONYMIZED`, `SMS_SENT`, `PATIENT_DOCUMENT_UPLOADED`, `PATIENT_DOCUMENT_DELETED`, `TEAM_MEMBER_CREATED`, `TEAM_MEMBER_DEACTIVATED`, `TEAM_MEMBER_ROLE_CHANGED`, `SETTINGS_UPDATED`, `CLOSURE_CREATED`, `CLOSURE_DELETED`, `WAITLIST_ENTRY_ADDED`
@@ -165,7 +167,7 @@ Next.js App Router route handlers under `/app/api/`. ~50 routes total. Admin rou
 | GET | `/api/services` | List active services |
 | GET | `/api/services/[slug]` | Service detail |
 | GET | `/api/slots?serviceId=&date=` | Available slots for service on date |
-| POST | `/api/appointments` | Create PENDING appointment (public booking) — rate-limited, consent required |
+| POST | `/api/appointments` | Create PENDING appointment (public booking) — rate-limited, consent required; optional `watchDates: string[]` creates a PATIENT-source `WaitlistEntry` in the same transaction (cancellation-watch opt-in) |
 | GET | `/api/appointments/[token]` | Self-service lookup — **minimum disclosure only** (service, date/time, clinic info, first name) |
 | POST | `/api/appointments/[token]/cancel` | Self-service cancel (audited, actor `PATIENT`) |
 | POST | `/api/appointments/[token]/reschedule` | Self-service reschedule into available slot; rotates the token |
@@ -416,8 +418,11 @@ Prisma schema (split across 3a/3b/3c — see Task List)
    3b: Testimonial, FaqItem, GalleryItem, Setting,
        ScheduleException                           → public content + admin content mgmt + closures
    3c: SmsMessage, AuditLog, Notification,
-       WaitlistEntry, Visit, PatientDocument,
+       Visit, PatientDocument,
        SelfServiceToken                            → added lazily as features land
+       (WaitlistEntry delivered early, alongside the slot-freed event's
+        serviceId field — the public booking flow (Task 6) writes
+        PATIENT-source entries at booking time)
         │
         ├── Slot engine (pure logic: working hours, closures, booking policy,
         │                 clinic-timezone conversion, slot gen, overlap)

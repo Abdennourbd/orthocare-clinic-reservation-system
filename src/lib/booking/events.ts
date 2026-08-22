@@ -13,6 +13,8 @@
 
 export type SlotFreedEvent = {
   appointmentId: string;
+  /** The freed appointment's service — the waitlist matches on this. */
+  serviceId: string;
   resourceId: string | null;
   startTime: Date;
   endTime: Date;

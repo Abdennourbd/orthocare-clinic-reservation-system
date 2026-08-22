@@ -282,6 +282,86 @@ export function isSlotBookable(
   });
 }
 
+export type DaySlotOverview = {
+  date: string;
+  /** Slots offered for booking (fully bookable under policy + availability). */
+  available: Date[];
+  /**
+   * Slots already taken: candidates inside working hours that overlap an
+   * active appointment (with buffer) or a closure, shown as "reserved" in the
+   * booking UI. Slots blocked only by the booking policy (lead time, horizon,
+   * past, lunch break) are in NEITHER list — they are neither offered nor
+   * reserved.
+   */
+  occupied: Date[];
+};
+
+/**
+ * Day overview for the booking wizard: within working hours, split candidate
+ * start times into `available` (offerable) and `occupied` (taken / reserved).
+ * Uses the same single source of truth as `generateSlots`/`bookSlot`
+ * (`isSlotBookable`) so the rendered grid and the transactional re-check can
+ * never disagree about what is bookable.
+ */
+export function getDaySlotOverview(input: SlotEngineInput): DaySlotOverview {
+  const { localDateString } = input;
+
+  assertPositiveInteger("serviceDurationMinutes", input.serviceDurationMinutes);
+  assertPositiveInteger("granularityMinutes", input.slotConfig.granularityMinutes);
+  assertNonNegativeInteger("bufferMinutes", input.slotConfig.bufferMinutes);
+
+  const wh = getWorkingHoursForDay(localDateString, input.workingHours);
+  if (!wh) return { date: localDateString, available: [], occupied: [] };
+
+  const { startUTC } = getClinicDayBoundsUTC(localDateString);
+  const { openMinutes, closeMinutes } = wh;
+  const { granularityMinutes } = input.slotConfig;
+
+  const bookabilityInput: SlotBookabilityInput = {
+    localDateString,
+    serviceId: input.serviceId,
+    serviceDurationMinutes: input.serviceDurationMinutes,
+    workingHours: input.workingHours,
+    slotConfig: input.slotConfig,
+    bookingPolicy: input.bookingPolicy,
+    exceptions: input.exceptions,
+    appointments: input.appointments,
+    nowUTC: input.nowUTC,
+    resourceId: input.resourceId,
+  };
+
+  const available: Date[] = [];
+  const occupied: Date[] = [];
+
+  for (
+    let min = openMinutes;
+    min + input.serviceDurationMinutes <= closeMinutes;
+    min += granularityMinutes
+  ) {
+    const slotTime = new Date(startUTC.getTime() + min * 60_000);
+    const slotEndTime = new Date(
+      slotTime.getTime() + input.serviceDurationMinutes * 60_000,
+    );
+
+    if (isSlotBookable(slotTime, slotEndTime, bookabilityInput)) {
+      available.push(slotTime);
+    } else if (
+      !isSlotAvailable(slotTime, slotEndTime, {
+        appointments: input.appointments,
+        exceptions: input.exceptions,
+        slotConfig: { bufferMinutes: input.slotConfig.bufferMinutes },
+        serviceId: input.serviceId,
+        resourceId: input.resourceId,
+      })
+    ) {
+      occupied.push(slotTime);
+    }
+    // else: policy-blocked (lead time / horizon / past / lunch) — hide it.
+  }
+
+  return { date: localDateString, available, occupied };
+}
+
 export function generateSlots(input: SlotEngineInput): Date[] {
   const {
     localDateString,
