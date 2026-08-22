@@ -9,7 +9,9 @@ const patientInputSchema = z.object({
   lastName: z.string().trim().min(1).max(100),
   phone: z.string().trim().min(6).max(30),
   email: z.union([z.string().trim().email().max(200), z.literal("")]).optional(),
-  birthDate: z.string().datetime().nullable().optional(),
+  // The native <input type="date"> yields "YYYY-MM-DD" (not a full ISO
+  // datetime), so the shared schema accepts a calendar date.
+  birthDate: z.string().date().nullable().optional(),
 });
 
 /** Clinic-local calendar date "YYYY-MM-DD". */

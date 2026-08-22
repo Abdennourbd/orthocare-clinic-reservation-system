@@ -10,7 +10,7 @@ import { isSlotBookable } from "@/lib/slots/engine";
 import { loadSlotContext } from "./loadSlotContext";
 import { SlotConflictError } from "./errors";
 
-export { SlotConflictError } from "./errors";
+export { SlotConflictError, PendingLimitError } from "./errors";
 
 export type BookSlotInput = {
   patientId: string;

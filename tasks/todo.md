@@ -145,18 +145,18 @@ Task details + rationale live in `tasks/plan.md`. This is the working checklist.
 ## Task 6: Booking wizard UI + `POST /api/appointments` + `GET /api/slots`
 **Description:** Vertical slice — public flow: pick service → pick date → see available/occupied slots (occupied shown as reserved) → patient info **+ consent checkbox** → confirm → summary screen. Backend routes: `GET /api/services`, `GET /api/services/[slug]`, `GET /api/slots`, `POST /api/appointments` (calls Task 5 `bookSlot`). Phone normalized to E.164 on submit. `POST /api/appointments` is rate-limited per IP and per phone, with a cap on simultaneously active PENDING bookings per phone. **Cancellation-watch opt-in:** on the summary screen the patient may pick one or more days to watch for freed slots (aimed at those who wanted a fully-booked day); days they browsed with zero availability are pre-suggested. Accepted `watchDates` create a **PATIENT-source `WaitlistEntry` in the same transaction as the booking** (model already migrated; schema + slot-freed `serviceId` delivered early for this). Validation: dates within the booking horizon, none in the past (Zod, shared client/server). Notification itself is Task 17 — this task only captures the opt-in.
 **Acceptance criteria:**
-- [ ] Slots render as available/reserved correctly
-- [ ] Booking creates a PENDING appointment via `bookSlot`
-- [ ] Conflict shows a user-facing error (slot just taken)
-- [ ] Summary screen shows appointment details, and states clearly that **the clinic will call to confirm** (the appointment is not yet confirmed)
-- [ ] Cancellation-watch step on the summary screen: skippable, multi-select dates, copy explains the patient is agreeing to an SMS if a slot frees (non-transactional); fully-booked browsed days pre-suggested; rendered in all 3 locales (RTL checked)
-- [ ] `watchDates` validated (horizon + no past dates, Zod shared with the form); accepted dates create one PATIENT-source `WaitlistEntry` **in the booking transaction** (booking fails → no orphan entry)
-- [ ] Booking without the opt-in creates no `WaitlistEntry`
-- [ ] Consent checkbox required; `consentAt` + `consentVersion` stored; privacy notice linked
-- [ ] Phone stored normalized (E.164) and as typed
-- [ ] Rate limits and the PENDING cap reject a flood from one IP/phone with a clear message
-- [ ] Booking wizard is keyboard-navigable; slot buttons have accessible labels (date + time, not just a number)
-- [ ] Route-level integration test: happy path + conflict path + rate-limit path + happy path with `watchDates` (entry created) + invalid `watchDates` rejected
+- [x] Slots render as available/reserved correctly
+- [x] Booking creates a PENDING appointment via `bookSlot`
+- [x] Conflict shows a user-facing error (slot just taken)
+- [x] Summary screen shows appointment details, and states clearly that **the clinic will call to confirm** (the appointment is not yet confirmed)
+- [x] Cancellation-watch step on the summary screen: skippable, multi-select dates, copy explains the patient is agreeing to an SMS if a slot frees (non-transactional); fully-booked browsed days pre-suggested; rendered in all 3 locales (RTL checked)
+- [x] `watchDates` validated (horizon + no past dates, Zod shared with the form); accepted dates create one PATIENT-source `WaitlistEntry` **in the booking transaction** (booking fails → no orphan entry)
+- [x] Booking without the opt-in creates no `WaitlistEntry`
+- [x] Consent checkbox required; `consentAt` + `consentVersion` stored; privacy notice linked
+- [x] Phone stored normalized (E.164) and as typed
+- [x] Rate limits and the PENDING cap reject a flood from one IP/phone with a clear message
+- [x] Booking wizard is keyboard-navigable; slot buttons have accessible labels (date + time, not just a number)
+- [x] Route-level integration test: happy path + conflict path + rate-limit path + happy path with `watchDates` (entry created) + invalid `watchDates` rejected
 **Verification:** Manual end-to-end booking; `npm test -- booking`; keyboard-only pass through the wizard.
 **Dependencies:** Task 5, Task 2 (i18n/shell)
 **Estimated scope:** Large (4–5 days)
@@ -243,11 +243,11 @@ Task details + rationale live in `tasks/plan.md`. This is the working checklist.
 **Skill:** The available **frontend-design** skill, plus a **web-performance** reference for image handling (a dental gallery is image-dense and this is a mobile-first audience). The privacy-notice text needs review by the clinic, not a skill.
 
 ## Checkpoint: After Tasks 6-11 (Public booking + comms work end-to-end)
-- [ ] Public booking flow works end-to-end, consent recorded
+- [x] Public booking flow works end-to-end, consent recorded
 - [ ] Booking-received message + self-service verified; `releaseSlot()` fires on self-service cancel
 - [ ] Token page exposes minimum data only and loads no third-party scripts
 - [ ] Reminders + no-show + expiry cron run against seeded data (mock SMS); **each run twice sends once**
-- [ ] Rate limits reject a booking flood from one IP/phone
+- [x] Rate limits reject a booking flood from one IP/phone
 - [ ] Google Reviews widget live in 3 locales; map embed + one-click directions working
 - [ ] Public content pages + privacy notice render in 3 locales
 - [ ] Review with human before proceeding

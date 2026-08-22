@@ -29,3 +29,21 @@ export class AppointmentAlreadyReleasedError extends Error {
     this.name = "AppointmentAlreadyReleasedError";
   }
 }
+
+/** The phone already holds the maximum number of active PENDING bookings.
+ * Maps to HTTP 429. Thrown inside the booking transaction, after a per-phone
+ * advisory lock, so concurrent requests cannot all pass the cap. */
+export class PendingLimitError extends Error {
+  constructor(limit: number) {
+    super(`Maximum ${limit} active pending bookings per phone.`);
+    this.name = "PendingLimitError";
+  }
+}
+
+/** The requested service does not exist. Maps to HTTP 404. */
+export class ServiceNotFoundError extends Error {
+  constructor(serviceId: string) {
+    super(`Service not found: ${serviceId}`);
+    this.name = "ServiceNotFoundError";
+  }
+}

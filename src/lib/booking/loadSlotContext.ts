@@ -15,6 +15,7 @@ import type {
   SlotBookabilityInput,
   SlotEngineInput,
 } from "@/lib/slots/engine";
+import { ServiceNotFoundError } from "./errors";
 
 // The pure slot engine deliberately takes its inputs as plain values. These
 // helpers load those inputs from the DB (the engine's caller's job) so both
@@ -238,7 +239,7 @@ async function loadDayContext(
 
   const service = await tx.service.findUnique({ where: { id: opts.serviceId } });
   if (!service) {
-    throw new Error(`Service not found: ${opts.serviceId}`);
+    throw new ServiceNotFoundError(opts.serviceId);
   }
 
   return { service, day };

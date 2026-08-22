@@ -13,3 +13,15 @@ export const rtlLocales: ReadonlySet<string> = new Set(["ar"]);
 export function isRtl(locale: string): boolean {
   return rtlLocales.has(locale);
 }
+
+/**
+ * Parses a locale query parameter against the allow-list, defaulting to FR.
+ * Used by public API routes (outside [locale]) which receive the locale from
+ * `?locale=` rather than the URL prefix.
+ */
+export function parseLocale(value: string | null | undefined): Locale {
+  if (value && (locales as readonly string[]).includes(value)) {
+    return value as Locale;
+  }
+  return defaultLocale;
+}

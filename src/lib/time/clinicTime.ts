@@ -74,6 +74,28 @@ export function formatClinicLocalTime(utcDate: Date): string {
 const WEEKDAYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
 
 /**
+ * Returns the clinic-local date string `days` days after the given
+ * clinic-local date string (negative for earlier). Used for date-strip and
+ * booking-window arithmetic in the booking wizard.
+ */
+export function addClinicDays(localDateString: string, days: number): string {
+  const { startUTC } = getClinicDayBoundsUTC(localDateString);
+  return toClinicLocalDateString(
+    new Date(startUTC.getTime() + days * 86400_000),
+  );
+}
+
+/**
+ * Returns the clinic-local noon instant for a clinic-local date string — a
+ * time-of-day safely inside the same local day, useful for formatting a date
+ * label without hitting a midnight boundary.
+ */
+export function clinicNoon(localDateString: string): Date {
+  const { startUTC } = getClinicDayBoundsUTC(localDateString);
+  return new Date(startUTC.getTime() + 12 * 3600_000);
+}
+
+/**
  * Returns the 3-letter weekday for a local date string.
  */
 export function getClinicDayOfWeek(localDateString: string): string {

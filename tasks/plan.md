@@ -521,7 +521,7 @@ Implementation order is bottom-up: schema (3a) → slot engine + atomic booking 
 - [x] Slot engine unit tests pass (overlap, boundaries, lunch, buffer, closures, lead time, horizon)
 - [x] Times behave correctly across the UTC ↔ Africa/Algiers boundary (00:00 and 23:59 local)
 - [x] Concurrent bookings of the same slot: exactly one succeeds
-- [ ] Booked slot renders as reserved in availability query (Task 6 — needs the route)
+- [x] Booked slot renders as reserved in availability query (Task 6 — needs the route)
 - [x] `releaseSlot()` event fires on cancellation
 
 ### Phase 3: Public Booking + Communication
