@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { addClinicDays, clinicNoon } from "@/lib/time/clinicTime";
 
-type DatePickerProps = {
+type DayPickerProps = {
   today: string;
   maxDate: string;
   selectedDate: string | null;
@@ -12,16 +12,17 @@ type DatePickerProps = {
 };
 
 /**
- * Day selection for the booking wizard: a horizontal strip of the next 14
- * days (buttons — keyboard accessible) plus a native date input for dates
- * further out, both bounded to the booking window.
+ * Day selection for the booking wizard: a non-scrolling strip of the next 7
+ * days (keyboard-accessible buttons) plus a native date input for any other
+ * day inside the booking window. Selecting a day loads that day's slot grid
+ * in the combined "Date & time" step.
  */
-export default function DatePicker({
+export default function DayPicker({
   today,
   maxDate,
   selectedDate,
   onSelect,
-}: DatePickerProps) {
+}: DayPickerProps) {
   const t = useTranslations("Booking");
   const locale = useLocale();
   const dayFmt = useMemo(
@@ -35,7 +36,7 @@ export default function DatePicker({
   );
 
   const strip = useMemo(
-    () => Array.from({ length: 14 }, (_, i) => addClinicDays(today, i)),
+    () => Array.from({ length: 7 }, (_, i) => addClinicDays(today, i)),
     [today],
   );
 
@@ -44,7 +45,7 @@ export default function DatePicker({
       <div
         role="group"
         aria-label={t("chooseDate")}
-        className="flex gap-2 overflow-x-auto pb-2"
+        className="grid grid-cols-7 gap-1 sm:gap-2"
       >
         {strip.map((d) => {
           const disabled = d < today || d > maxDate;
@@ -60,7 +61,7 @@ export default function DatePicker({
               aria-pressed={selected}
               aria-label={dayFmt.format(clinicNoon(d))}
               onClick={() => onSelect(d)}
-              className={`flex w-16 shrink-0 flex-col items-center rounded-xl border px-1 py-2.5 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-600 ${
+              className={`flex flex-col items-center rounded-xl border px-1 py-2.5 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-600 ${
                 disabled
                   ? "cursor-not-allowed border-zinc-200 bg-zinc-50 text-zinc-300"
                   : selected
@@ -68,11 +69,15 @@ export default function DatePicker({
                     : "border-zinc-300 bg-white text-zinc-800 hover:border-teal-400 hover:text-teal-700 hover:shadow-sm"
               }`}
             >
-              <span className="text-xs opacity-75">{part("weekday")}</span>
-              <span className="mt-0.5 text-lg font-semibold leading-6">
+              <span className="text-[0.625rem] opacity-75 sm:text-xs">
+                {part("weekday")}
+              </span>
+              <span className="mt-0.5 text-base font-semibold leading-6 sm:text-lg">
                 {part("day")}
               </span>
-              <span className="text-xs opacity-75">{part("month")}</span>
+              <span className="text-[0.625rem] opacity-75 sm:text-xs">
+                {part("month")}
+              </span>
               {/* Today marker: always rendered (invisible when not today) so
                   every chip keeps the same height. */}
               <span

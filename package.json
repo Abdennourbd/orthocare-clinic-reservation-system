@@ -14,7 +14,8 @@
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:seed": "prisma db seed",
-    "db:generate": "prisma generate"
+    "db:generate": "prisma generate",
+    "dev:reset": "tsx scripts/dev-reset-bookings.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.9.1",

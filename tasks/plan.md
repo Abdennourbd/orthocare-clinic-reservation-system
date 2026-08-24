@@ -640,3 +640,67 @@ Implementation order is bottom-up: schema (3a) → slot engine + atomic booking 
 - Broadcast + no-show SMS permissions: admin-only, or also receptionist? (Assumed admin-only for broadcasts; receptionist can send single SMS)
 - **Google Reviews 4★ filter** — the free embed can't filter by rating. To show only 4★+ reviews requires the Google Places API (API key + usage billing + server-side caching). Default for Task 10 is the free embed; decide whether the 4★ filter is worth the key/cost.
 - ~~Admin dashboard language: FR only, or also AR/EN?~~ **Resolved: FR-only dashboard, trilingual public site.**
+
+---
+
+# Refinement: Task 6 — Booking UI/UX
+
+## Overview
+
+A focused redesign of the public booking wizard's date/time selection, driven by three concrete clinic feedback items:
+
+1. **Lighter background** — the booking page currently falls back to a near-black background (`#0a0a0a`) when the visitor's OS is in dark mode, because `src/app/globals.css` has a `@media (prefers-color-scheme: dark)` override. Every component in the wizard already uses hardcoded light Tailwind classes (`bg-white`, `text-zinc-900`, `border-zinc-200`, teal accents), so dark mode was never actually supported — it only flips the page shell to black, leaving light cards floating on it. Pin the background to a light surface, always.
+2. **Combined day + time selection** — today the wizard is 5 steps: **service → date → slot → info → summary**. Day and time live in two separate steps. Merge them into one: a swipeable day carousel where moving to a day shows that day's times directly beneath, in the same step. The wizard becomes 4 steps: **service → date & time → info → summary**.
+3. **Taken times inline and red** — today `SlotPicker` splits `available` and `occupied` into two separate fieldsets (available first, reserved second). Merge them into one list ordered by time, with already-taken slots rendered **red, disabled, and not clickable**, interleaved in their natural chronological position.
+
+No backend changes. The `GET /api/slots` route already returns `{ available: SlotDto[], occupied: SlotDto[] }` (both with `startUTC` + `localTime`), so the merged time grid is a pure frontend restructure.
+
+## Architecture Decisions
+
+- **Light background, pinned.** Remove the `prefers-color-scheme: dark` block in `src/app/globals.css` and set `--background` to a light neutral (`#f8fafc` / zinc-50) so the white wizard cards separate from the page shell without a harsh pure-white edge. This is a **site-wide** change, which is correct: Header, Footer, Hero, Nav and every public page already use the same hardcoded light palette, so the dark override was broken everywhere, not just on the booking page. No new dependency; no theme system introduced (out of scope for this refinement).
+- **No carousel library.** Build the swipeable day strip with native CSS scroll-snap (`scroll-snap-type: x mandatory` + per-day `snap-start`). This gives touch swipe, trackpad drag, native momentum, and — combined with a focusable container + arrow-key handler — keyboard navigation. The `dir` attribute from `[locale]/layout.tsx` (`dir="rtl"` for Arabic) automatically reverses scroll direction and chevron semantics; the existing `rtl:-scale-x-100` pattern already used in `BackButton` is reused for arrows. Adding `embla-carousel` or similar was considered and rejected: it would be a new dependency (the security audit recorded "no new deps" as a positive) for behavior the platform already provides.
+- **Composition, not configuration.** Per the frontend-ui-engineering skill: two focused presentational components, composed in the wizard.
+  - `TimeGrid.tsx` — pure: merges `available` + `occupied`, sorts by `startUTC`, renders one chronological grid. Occupied slots are red + `disabled` + carry a visible text label (reusing the existing `slotReserved` message) — **never color alone** (WCAG: color is not the sole indicator of state).
+  - `DayCarousel.tsx` — pure: scroll-snap day strip, keyboard arrows, RTL-aware, emits the active day; takes a `renderDay(date)` slot so it does not depend on `TimeGrid`.
+  - The wizard's new combined step composes both, owns the slot-loading state, and advances to the patient-info step on time selection.
+- **Merge + sort as a pure, unit-tested helper.** `mergeSlots(available, occupied)` returns one array `{ startUTC, localTime, status: "available" | "occupied" }` sorted by `startUTC`. It is a pure function in `lib/booking/` (zero React imports) and gets a unit test — the project's established pattern for logic that matters (engine, normalize). The component is a thin render over its output.
+- **Lazy per-day slot loading.** Only the active (snapped) day fetches `GET /api/slots`; fetched days are cached in component state so swiping back does not refetch. Reuses the wizard's existing `loadSlots(serviceId, date)`. The cancellation-watch pre-suggest (days browsed with zero availability are remembered for the summary step) is preserved — it already lives in `loadSlots` and stays there.
+- **Step merge, not a new flow.** Steps 2 (date) and 3 (slot) collapse into one "Date & time" step. `StepIndicator` goes from 5 to 4 steps. Recap chips (service / date / time), the conflict redirect (409 → return to the date/time step), and the success screen are unchanged. The existing `booking-flow` and `create-booking` integration tests hit the **API** (`POST /api/appointments`, `GET /api/slots`), not the React wizard, so they are unaffected — the API contract is unchanged.
+- **i18n.** Add a small set of keys to `messages/{fr,ar,en}.json` under `Booking`: `stepDateTime` (combined step label), `dayCarouselLabel` (aria-label for the strip), `prevDay` / `nextDay` (arrow button labels + `aria-label`), `jumpToDate` (the existing `otherDate` native input is kept as the far-out-date escape hatch). Reuse existing `chooseDateHint`, `noSlots`, `slotAvailable`, `slotReserved`, `reservedSlots`. RTL verified for Arabic.
+- **Verification level.** Per the project's Definition of Done (todo.md): **unit tests for pure logic** (`mergeSlots` sort + de-dup) and **manual verification for UI/i18n/RTL** (no DOM/component test framework is configured). Each task's verification includes a keyboard-only pass and an RTL pass.
+
+## Task List (Refinement)
+
+Sliced so each task leaves a working system. 6R-1 is independent; 6R-2 and 6R-3 are independent presentational components; 6R-4 composes them and merges the wizard steps.
+
+- [x] Task 6R-1: Pin a light page background (remove the dark-mode override)
+- [x] Task 6R-2: `TimeGrid` — merged, time-sorted grid; occupied slots red + disabled + labeled
+- [x] Task 6R-3: `DayCarousel` — scroll-snap day strip with swipe + keyboard + RTL
+- [x] Task 6R-4: Combined "Date & time" wizard step (merge steps 2+3) + i18n + StepIndicator
+
+### Checkpoint: After Task 6R-1 → 6R-4 (Booking UI/UX refinement)
+- [ ] Booking page is light in both light and dark OS mode (no near-black shell)
+- [ ] Day and time selection happen in one step; swiping/moving the day strip shows that day's times beneath
+- [ ] Taken times appear inline in chronological order, red, disabled, not clickable, with a text label
+- [ ] Wizard is 4 steps; StepIndicator reflects the merge
+- [ ] Works in FR / AR (RTL) / EN; keyboard-only can select service → day → time → continue
+- [ ] `npm test`, `npm run typecheck`, `npm run lint`, `npm run build` all green
+- [ ] Existing booking-flow + create-booking integration tests still pass (API contract unchanged)
+- [ ] Review with human before proceeding
+
+## Risks and Mitigations
+
+| Risk | Impact | Mitigation |
+|---|---|---|
+| Color-only signaling for taken slots (red only) fails WCAG | Med | Pair red with a text label (`slotReserved`), `disabled` + `aria-disabled`, and a line-through; state conveyed by text + interaction, not color alone |
+| Scroll-snap carousel keyboard-inaccessible | Med | Container is `tabIndex=0` with `aria-label`; Left/Right arrows move the active day; active day announced via `aria-pressed`/`aria-current`; visible focus ring |
+| RTL swipe direction feels wrong in Arabic | Med | `dir="rtl"` reverses scroll direction natively; chevrons use `rtl:-scale-x-100`; verify manually in `/ar/book` |
+| Per-day fetches hit the 120/min slots rate limit | Low | Only the active day fetches; results cached; 90 days of swiping is well under 120/min in normal use |
+| Breaking the 5-step flow breaks existing behavior users expect | Low | The merge is additive to UX (fewer steps, same data); conflict/watch/conflict-redirect paths preserved; integration tests unchanged |
+| Removing dark mode site-wide is unexpected | Low | Dark mode was already broken (hardcoded light classes on a black shell); this refinement makes reality match design; documented as a decision |
+
+## Open Questions
+
+- **Day carousel scope.** Recommended: the carousel covers the full bookable window (today → `maxHorizonDays`, default 90), rendered as scroll-snap day cards, with slots lazy-loaded for the active day and cached. Alternative (less work, matches today): a 14-day swipeable strip + a "jump to date" native input for far-out dates. The 14-day version is the safe default; the full-window version is a follow-up if the clinic wants pure swipe-through-90. **Decision needed before 6R-3.**
+- **Background tint.** Recommended: light neutral `#f8fafc` (zinc-50) for the page shell so white cards lift. Alternative: pure white `#ffffff`. Minor; confirm with the clinic.
+- **Carousel layout.** Recommended: a full-width day card (date header + that day's time grid) that snaps into view — the most literal reading of "swipe through the days and see the times for each day." Alternative: a compact day-chip strip above a time grid that updates on selection. The full-width card is the recommendation; the chip-strip is the fallback if the clinic finds full-width too tall.

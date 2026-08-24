@@ -487,3 +487,78 @@ The skills worth having *before* you start, roughly in order of how much they ch
 10. **xlsx** *(already available)* — Task 19. **docx** *(already available)* — Task 23 handoff guide, if the clinic owner wants Word.
 
 Also available and already used to shape this plan: **write-spec** (goals, non-goals, acceptance criteria) and **sprint-planning** (estimates, critical path, capacity, definition of done). **skill-creator** is worth a look later — once your conventions settle, a small house skill capturing this project's patterns (audit calls, Zod placement, authorization guard, clinic-time handling) will make every future task more consistent.
+
+---
+
+## Refinement: Task 6 — Booking UI/UX
+
+Driven by clinic feedback: lighter background (not black), combined day+time selection with a swipeable day carousel, and taken times shown inline in chronological order (red, disabled, not clickable). Full rationale, architecture decisions and open questions in `tasks/plan.md` → "Refinement: Task 6 — Booking UI/UX". No backend changes — the `GET /api/slots` contract (`available` + `occupied`) is unchanged.
+
+## Task 6R-1: Pin a light page background
+**Description:** Remove the `@media (prefers-color-scheme: dark)` override in `src/app/globals.css` (it sets `--background: #0a0a0a`, producing a near-black page shell under dark OS mode while every component uses hardcoded light classes — dark mode was never actually supported). Set `--background` to a light neutral (`#f8fafc` / zinc-50) so the white wizard cards separate from the page shell without a harsh pure-white edge. Verify the booking page (and other public pages) read light in both light and dark OS mode.
+**Acceptance criteria:**
+- [ ] `globals.css` has no `prefers-color-scheme: dark` background override
+- [ ] `--background` is a light value (`#f8fafc`), applied to `body`
+- [ ] Booking page renders on a light shell in both OS light and dark mode
+- [ ] No existing public page regresses (Header/Footer/Hero already use light classes)
+**Verification:** Toggle OS dark mode; reload `/fr/book`, `/ar/book`, `/en/book`; confirm light background. `npm run build` + `npm run lint` clean.
+**Dependencies:** None
+**Estimated scope:** Small (≤0.5 day)
+**Skill:** **frontend-ui-engineering** (design-system adherence — don't introduce a theme system; use the existing zinc palette). **Files likely touched:** `src/app/globals.css`.
+
+## Task 6R-2: `TimeGrid` — merged, time-sorted grid; occupied red + disabled + labeled
+**Description:** New `src/components/public/BookingWizard/TimeGrid.tsx` (replaces the role of `SlotPicker.tsx`). Extract a pure `mergeSlots(available, occupied)` helper into `src/lib/booking/mergeSlots.ts` that returns one array `{ startUTC, localTime, status: "available" | "occupied" }` sorted by `startUTC` (stable; de-duped by `startUTC`). `TimeGrid` renders that array as one grid in chronological order: available slots are teal buttons (existing brand), occupied slots are **red, `disabled`, `aria-disabled`, with a visible text label** (reuse the `slotReserved` message) and line-through — state conveyed by text + disabled interaction, not color alone (WCAG). Empty state (no slots that day) reuses the existing `noSlots` panel. Selected slot gets `aria-pressed`.
+**Acceptance criteria:**
+- [ ] `mergeSlots()` is a pure function (no React imports) with a unit test: sort by `startUTC`, de-dup, correct `status` for each
+- [ ] `TimeGrid` renders one merged, time-ordered grid (not two fieldsets)
+- [ ] Occupied slots render red, `disabled`, with a text label + line-through; color is not the sole indicator
+- [ ] Available slots are teal, clickable, keyboard-focusable, with the existing `slotAvailable` aria-label
+- [ ] Empty state (zero available + zero occupied) shows the `noSlots` panel
+- [ ] No new dependencies added
+**Verification:** `npm test -- mergeSlots`; keyboard-tab through the grid (available reachable, occupied not focusable-as-clickable but announced); manual render in FR/AR/EN.
+**Dependencies:** None (presentational; can be built + tested in isolation)
+**Estimated scope:** Small–Medium (0.5–1 day)
+**Skill:** **frontend-ui-engineering** (composition; accessibility — color-not-sole-indicator, keyboard nav, aria-labels). **Files likely touched:** `src/lib/booking/mergeSlots.ts`, `src/lib/booking/mergeSlots.test.ts`, `src/components/public/BookingWizard/TimeGrid.tsx`.
+
+## Task 6R-3: `DayCarousel` — scroll-snap day strip with swipe + keyboard + RTL
+**Description:** New `src/components/public/BookingWizard/DayCarousel.tsx`. A horizontally scrollable, scroll-snap (`scroll-snap-type: x mandatory`, per-day `snap-start`) strip of the bookable days. Touch swipe and trackpad drag are native; the container is `tabIndex={0}` with an `aria-label` (new `dayCarouselLabel` key) and handles Left/Right arrow keys to move the active day. The active (snapped) day is tracked via a scroll/IntersectionObserver handler and reported through `onActiveDayChange(date)`. Prev/Next chevron buttons (reuse `BackButton`'s `rtl:-scale-x-100` pattern) are visible on desktop and hidden on touch. Each day chip shows weekday / day / month (reuse `DatePicker`'s `formatToParts` approach) and `aria-pressed`/`aria-current` for the active day. `dir` from the layout reverses scroll + chevron direction natively for Arabic. `DayCarousel` takes a `renderDay(date)` render-prop so it does not depend on `TimeGrid`. Covers the bookable window `today → maxDate`; the "jump to date" native input (existing `otherDate`) is kept as an escape hatch for far-out dates.
+**Acceptance criteria:**
+- [ ] Strip is swipeable (touch), draggable (trackpad), and snaps to each day
+- [ ] Arrow Left/Right on a focused strip move the active day (keyboard accessible)
+- [ ] Active day is announced (`aria-current="date"`) and visibly highlighted
+- [ ] RTL: in `/ar/book`, swipe + arrow direction and chevrons reverse correctly
+- [ ] `onActiveDayChange` fires for the snapped day; the parent uses it to load that day's slots
+- [ ] `renderDay` prop renders the day's content (the parent supplies `TimeGrid`)
+- [ ] No new dependencies (CSS scroll-snap + a small pointer/scroll handler)
+**Verification:** Manual: swipe (mobile/touch device or devtools), trackpad drag, keyboard arrows, RTL pass in `/ar/book`; `npm run typecheck`.
+**Dependencies:** None (presentational; consumes `renderDay` from the parent)
+**Estimated scope:** Medium (1–1.5 days — a11y + RTL are the work)
+**Skill:** **frontend-ui-engineering** (accessibility — keyboard nav, focus management, aria; responsive — touch vs desktop). **Files likely touched:** `src/components/public/BookingWizard/DayCarousel.tsx`, `messages/{fr,ar,en}.json` (new keys).
+
+## Task 6R-4: Combined "Date & time" wizard step + StepIndicator + i18n
+**Description:** Merge wizard steps 2 (date) and 3 (slot) into one "Date & time" step in `BookingWizard.tsx`. The step composes `DayCarousel` + `TimeGrid`: the active day's slots are fetched via the existing `loadSlots(serviceId, date)` and cached in component state; `TimeGrid` renders the merged grid for the active day. Selecting an available time sets `slot` and advances to the patient-info step (old step 4 → new step 3). The `StepIndicator` goes from 5 to 4 steps (`stepService` → `stepDateTime` → `stepInfo` → `stepSummary`); add the `stepDateTime` key to all three locales. Preserve: recap chips, the cancellation-watch pre-suggest (days with zero availability are still remembered in `loadSlots`), the 409-conflict redirect (returns to the new date/time step), and the success screen. The old `DatePicker.tsx` and `SlotPicker.tsx` are removed (their responsibilities move into `DayCarousel` + `TimeGrid`). Add i18n keys `stepDateTime`, `dayCarouselLabel`, `prevDay`, `nextDay` to `messages/{fr,ar,en}.json`.
+**Acceptance criteria:**
+- [ ] Wizard is 4 steps; `StepIndicator` shows the merged "Date & time" step
+- [ ] Selecting/swiping a day in `DayCarousel` loads and shows that day's `TimeGrid` in the same step
+- [ ] Selecting an available time advances to the patient-info step
+- [ ] 409 conflict returns the user to the date/time step with the conflict message
+- [ ] Cancellation-watch pre-suggest still records zero-availability browsed days
+- [ ] `DatePicker.tsx` and `SlotPicker.tsx` removed; no dangling imports
+- [ ] New i18n keys present in FR/AR/EN; RTL verified for `/ar/book`
+- [ ] Keyboard-only path works: service → day (arrows) → time (tab/enter) → continue
+- [ ] `npm test`, `npm run typecheck`, `npm run lint`, `npm run build` all green
+- [ ] Existing `booking-flow` + `create-booking` integration tests still pass (API contract unchanged)
+**Verification:** Manual end-to-end booking in FR + AR (RTL) + EN; keyboard-only pass; `npm test`; `npm run build`.
+**Dependencies:** Task 6R-2 (`TimeGrid`), Task 6R-3 (`DayCarousel`)
+**Estimated scope:** Medium (1–1.5 days)
+**Skill:** **frontend-ui-engineering** (state management — lifted state for active-day + cached slots; composition; i18n/RTL). **Files likely touched:** `src/components/public/BookingWizard/BookingWizard.tsx`, `src/components/public/BookingWizard/StepIndicator.tsx`, `messages/{fr,ar,en}.json`; remove `DatePicker.tsx`, `SlotPicker.tsx`.
+
+## Checkpoint: After Task 6R-1 → 6R-4 (Booking UI/UX refinement)
+- [ ] Booking page is light in both light and dark OS mode (no near-black shell)
+- [ ] Day and time selection happen in one step; swiping/moving the day strip shows that day's times beneath
+- [ ] Taken times appear inline in chronological order, red, disabled, not clickable, with a text label
+- [ ] Wizard is 4 steps; `StepIndicator` reflects the merge
+- [ ] Works in FR / AR (RTL) / EN; keyboard-only can select service → day → time → continue
+- [ ] `npm test`, `npm run typecheck`, `npm run lint`, `npm run build` all green
+- [ ] Existing booking-flow + create-booking integration tests still pass (API contract unchanged)
+- [ ] Review with human before proceeding

@@ -1,17 +1,24 @@
 "use client";
 
-import { useCallback, useMemo, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { bookingInputSchema } from "@/schemas/booking";
 import { addClinicDays, clinicNoon } from "@/lib/time/clinicTime";
 import type { PublicService } from "@/lib/public/services";
-import DatePicker from "./DatePicker";
+import DayPicker from "./DayPicker";
 import PatientForm, {
   type PatientFormErrors,
   type PatientFormValue,
 } from "./PatientForm";
-import SlotPicker, { type SlotDto } from "./SlotPicker";
 import StepIndicator from "./StepIndicator";
+import TimeGrid, { type SlotDto } from "./TimeGrid";
 
 export type BookingWizardInitialData = {
   services: PublicService[];
@@ -23,7 +30,7 @@ export type BookingWizardInitialData = {
 
 type SlotResponse = { available: SlotDto[]; occupied: SlotDto[] };
 
-type Step = 1 | 2 | 3 | 4 | 5 | "success";
+type Step = 1 | 2 | 3 | 4 | "success";
 
 const stepCardClass =
   "step-enter mt-6 rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm sm:p-7";
@@ -115,6 +122,8 @@ export default function BookingWizard({
 
   const [step, setStep] = useState<Step>(1);
   const [serviceId, setServiceId] = useState<string | null>(null);
+  const [activeDate, setActiveDate] = useState<string>(today);
+  /** Clinic-local day of the selected slot (recap / summary). */
   const [date, setDate] = useState<string | null>(null);
   const [slots, setSlots] = useState<SlotResponse | null>(null);
   const [slot, setSlot] = useState<SlotDto | null>(null);
@@ -136,58 +145,144 @@ export default function BookingWizard({
   const [submitting, setSubmitting] = useState(false);
   const [appointmentRef, setAppointmentRef] = useState<string | null>(null);
 
+  /** Per-day slot cache: a browsed day never refetches. */
+  const slotsCache = useRef<Map<string, SlotResponse>>(new Map());
+  /** Mirrors `activeDate` so async slot fetches know which day to render. */
+  const activeDateRef = useRef(activeDate);
+  useEffect(() => {
+    activeDateRef.current = activeDate;
+  }, [activeDate]);
+
   const selectedService = useMemo(
     () => services.find((s) => s.id === serviceId) ?? null,
     [services, serviceId],
   );
 
-  const loadSlots = useCallback(
-    async (svcId: string, d: string) => {
-      setSlotsLoading(true);
-      setSlotsError(false);
-      setSlot(null);
+  /** Fetch one day's slots, cache them, and record zero-availability for the
+   *  cancellation-watch suggestions. Returns null on failure (caller decides
+   *  whether to surface an error). */
+  const fetchAndCache = useCallback(
+    async (svcId: string, d: string): Promise<SlotResponse | null> => {
       try {
         const res = await fetch(
           `/api/slots?serviceId=${encodeURIComponent(svcId)}&date=${d}&locale=${locale}`,
         );
         if (!res.ok) throw new Error(`slots: ${res.status}`);
-        const body: SlotResponse & { available: SlotDto[]; occupied: SlotDto[] } =
-          await res.json();
-        setSlots({ available: body.available, occupied: body.occupied });
-        // Remember browsed days with zero availability so the cancellation-
-        // watch step can pre-suggest them.
+        const body: SlotResponse = await res.json();
+        slotsCache.current.set(d, body);
         if (body.available.length === 0) {
           setSuggestedWatchDates((prev) =>
             prev.includes(d) ? prev : [...prev, d],
           );
         }
+        return body;
       } catch {
-        setSlotsError(true);
-        setSlots(null);
-      } finally {
-        setSlotsLoading(false);
+        return null;
       }
     },
     [locale],
   );
 
+  /** Render the slots for the active day (cache hit → instant). */
+  const loadSlots = useCallback(
+    async (svcId: string, d: string) => {
+      const cached = slotsCache.current.get(d);
+      if (cached) {
+        setSlotsError(false);
+        setSlot(null);
+        setSlots(cached);
+        setSlotsLoading(false);
+        return;
+      }
+      setSlotsLoading(true);
+      setSlotsError(false);
+      setSlot(null);
+      const body = await fetchAndCache(svcId, d);
+      if (d !== activeDateRef.current) return; // user moved on — don't stomp
+      if (body) {
+        setSlots(body);
+        setSlotsError(false);
+      } else {
+        setSlotsError(true);
+        setSlots(null);
+      }
+      setSlotsLoading(false);
+    },
+    [fetchAndCache],
+  );
+
+  /** Prefetch the next 7 days' slots in parallel the moment the user enters
+   *  the date & time step, so switching days is instant (cache hit) instead of
+   *  a per-click wait. Only the active day's result is rendered mid-flight;
+   *  the rest just populate the cache. */
+  const prefetchWeek = useCallback(
+    async (svcId: string, firstDay: string) => {
+      const days = Array.from({ length: 7 }, (_, i) =>
+        addClinicDays(firstDay, i),
+      );
+      await Promise.all(
+        days.map(async (d) => {
+          const cached = slotsCache.current.get(d);
+          if (cached) {
+            if (d === activeDateRef.current) {
+              setSlots(cached);
+              setSlotsLoading(false);
+            }
+            return;
+          }
+          const body = await fetchAndCache(svcId, d);
+          if (body && d === activeDateRef.current) {
+            setSlots(body);
+            setSlotsError(false);
+            setSlotsLoading(false);
+          }
+        }),
+      );
+      // If the active day's slots never loaded (all failed), stop the spinner.
+      if (!slotsCache.current.has(activeDateRef.current)) {
+        setSlotsError(true);
+        setSlots(null);
+        setSlotsLoading(false);
+      }
+    },
+    [fetchAndCache],
+  );
+
   const selectService = (id: string) => {
     setServiceId(id);
+    slotsCache.current = new Map();
+    const firstDay = today;
+    activeDateRef.current = firstDay;
+    setActiveDate(firstDay);
     setDate(null);
     setSlot(null);
     setSlots(null);
+    setSlotsError(false);
+    setSuggestedWatchDates([]);
     setWatchDates([]);
     setFormError(null);
+    setSlotsLoading(true);
+    void prefetchWeek(id, firstDay);
     setStep(2);
   };
 
-  const selectDate = (d: string) => {
-    setDate(d);
-    setSlot(null);
-    setFormError(null);
-    if (serviceId) void loadSlots(serviceId, d);
-    setStep(3);
-  };
+  const onActiveDateChange = useCallback(
+    (d: string) => {
+      setActiveDate(d);
+      if (serviceId) void loadSlots(serviceId, d);
+    },
+    [serviceId, loadSlots],
+  );
+
+  const selectSlot = useCallback(
+    (s: SlotDto) => {
+      setDate(activeDate);
+      setSlot(s);
+      setFormError(null);
+      setStep(3);
+    },
+    [activeDate],
+  );
 
   const toggleWatch = (d: string) => {
     setWatchDates((prev) =>
@@ -278,7 +373,7 @@ export default function BookingWizard({
     const parsed = bookingInputSchema.safeParse(payload);
     if (!parsed.success) {
       setFieldErrorsFromZod(parsed);
-      setStep(4);
+      setStep(3);
       return;
     }
 
@@ -300,16 +395,24 @@ export default function BookingWizard({
       }
       if (res.status === 409) {
         setFormError(t("errorConflict"));
-        setStep(3);
+        setStep(2);
         return;
       }
       if (res.status === 429) {
-        setFormError(t("errorRateLimited"));
+        // The API returns 429 for two distinct conditions: a real flood
+        // (RATE_LIMITED) and hitting the active-PENDING cap (PENDING_LIMIT).
+        // They need different messages — "too many requests" is meaningless
+        // when the real cause is "you already have 3 pending bookings".
+        setFormError(
+          body.error?.code === "PENDING_LIMIT"
+            ? t("errorPendingLimit")
+            : t("errorRateLimited"),
+        );
         return;
       }
       if (res.status === 422) {
         setFormError(t("errorPhone"));
-        setStep(4);
+        setStep(3);
         return;
       }
       if (res.status === 400 && body.error?.code === "STALE_CONSENT") {
@@ -327,9 +430,11 @@ export default function BookingWizard({
   const reset = () => {
     setStep(1);
     setServiceId(null);
+    setActiveDate(today);
     setDate(null);
     setSlot(null);
     setSlots(null);
+    slotsCache.current = new Map();
     setPatient({ firstName: "", lastName: "", phone: "", email: "", birthDate: "" });
     setConsent(false);
     setFormErrors({});
@@ -374,8 +479,7 @@ export default function BookingWizard({
       <StepIndicator
         steps={[
           t("stepService"),
-          t("stepDate"),
-          t("stepSlot"),
+          t("stepDateTime"),
           t("stepInfo"),
           t("stepSummary"),
         ]}
@@ -442,34 +546,24 @@ export default function BookingWizard({
         </section>
       )}
 
-      {/* Step 2 — date */}
+      {/* Step 2 — date & time (combined) */}
       {step === 2 && (
-        <section className={stepCardClass} aria-label={t("stepDate")}>
-          <h2 className="text-lg font-semibold text-zinc-900">{t("stepDate")}</h2>
+        <section className={stepCardClass} aria-label={t("stepDateTime")}>
+          <h2 className="text-lg font-semibold text-zinc-900">
+            {t("stepDateTime")}
+          </h2>
           <p className="mt-1 text-sm text-zinc-600">{t("chooseDateHint")}</p>
           <div className="mt-4">
-            <DatePicker
-              today={today}
-              maxDate={maxDate}
-              selectedDate={date}
-              onSelect={selectDate}
-            />
+            {selectedService && (
+              <DayPicker
+                today={today}
+                maxDate={maxDate}
+                selectedDate={activeDate}
+                onSelect={onActiveDateChange}
+              />
+            )}
           </div>
-          <div className="mt-6">
-            <BackButton onClick={() => setStep(1)} label={t("back")} />
-          </div>
-        </section>
-      )}
-
-      {/* Step 3 — slot */}
-      {step === 3 && (
-        <section className={stepCardClass} aria-label={t("stepSlot")}>
-          <h2 className="text-lg font-semibold text-zinc-900">{t("stepSlot")}</h2>
-          <div className="mt-3 flex flex-wrap gap-2">
-            {selectedService && <RecapChip>{selectedService.name}</RecapChip>}
-            {date && <RecapChip>{dayFmt.format(clinicNoon(date))}</RecapChip>}
-          </div>
-          <div className="mt-4">
+          <div className="mt-5">
             {slotsLoading ? (
               <div
                 role="status"
@@ -484,30 +578,27 @@ export default function BookingWizard({
                 ))}
               </div>
             ) : slotsError ? (
-              <p role="alert" className="text-sm text-red-600">
+              <p role="alert" className="py-2 text-sm text-red-600">
                 {t("errorGeneric")}
               </p>
             ) : slots ? (
-              <SlotPicker
-                dateLabel={date ? dayFmt.format(clinicNoon(date)) : date ?? ""}
+              <TimeGrid
+                dateLabel={dayFmt.format(clinicNoon(activeDate))}
                 available={slots.available}
                 occupied={slots.occupied}
                 selectedStartUTC={slot?.startUTC ?? null}
-                onSelect={(s) => {
-                  setSlot(s);
-                  setStep(4);
-                }}
+                onSelect={selectSlot}
               />
             ) : null}
           </div>
           <div className="mt-6">
-            <BackButton onClick={() => setStep(2)} label={t("back")} />
+            <BackButton onClick={() => setStep(1)} label={t("back")} />
           </div>
         </section>
       )}
 
-      {/* Step 4 — patient info */}
-      {step === 4 && (
+      {/* Step 3 — patient info */}
+      {step === 3 && (
         <section className={stepCardClass} aria-label={t("stepInfo")}>
           <h2 className="text-lg font-semibold text-zinc-900">{t("stepInfo")}</h2>
           <div className="mt-3 flex flex-wrap gap-2">
@@ -525,11 +616,18 @@ export default function BookingWizard({
             />
           </div>
           <div className="mt-6 flex gap-3">
-            <BackButton onClick={() => setStep(3)} label={t("back")} />
+            <BackButton
+              onClick={() => {
+                setActiveDate(date ?? today);
+                if (serviceId && date) void loadSlots(serviceId, date);
+                setStep(2);
+              }}
+              label={t("back")}
+            />
             <button
               type="button"
               onClick={() => {
-                if (patientStepValid()) setStep(5);
+                if (patientStepValid()) setStep(4);
               }}
               className={primaryButtonClass}
             >
@@ -539,8 +637,8 @@ export default function BookingWizard({
         </section>
       )}
 
-      {/* Step 5 — summary + cancellation watch + submit */}
-      {step === 5 && selectedService && slot && date && (
+      {/* Step 4 — summary + cancellation watch + submit */}
+      {step === 4 && selectedService && slot && date && (
         <section className={stepCardClass} aria-label={t("stepSummary")}>
           <h2 className="text-lg font-semibold text-zinc-900">
             {t("stepSummary")}
@@ -583,18 +681,18 @@ export default function BookingWizard({
             </legend>
             <p className="text-sm text-zinc-600">{t("watchIntro")}</p>
 
-            {suggestedWatchDates.length > 0 && (
+            {watchDates.length > 0 && (
               <div className="mt-3">
                 <p className="text-sm font-medium text-zinc-700">
-                  {t("watchSuggest")}
+                  {t("watchYourDays")}
                 </p>
                 <ul className="mt-2 space-y-2">
-                  {suggestedWatchDates.map((d) => (
+                  {watchDates.slice().sort().map((d) => (
                     <li key={d}>
                       <label className="flex items-center gap-3 text-sm">
                         <input
                           type="checkbox"
-                          checked={watchDates.includes(d)}
+                          checked
                           onChange={() => toggleWatch(d)}
                           className="h-4 w-4 accent-teal-600"
                         />
@@ -602,6 +700,31 @@ export default function BookingWizard({
                       </label>
                     </li>
                   ))}
+                </ul>
+              </div>
+            )}
+
+            {suggestedWatchDates.filter((d) => !watchDates.includes(d))
+              .length > 0 && (
+              <div className="mt-3">
+                <p className="text-sm font-medium text-zinc-700">
+                  {t("watchSuggest")}
+                </p>
+                <ul className="mt-2 space-y-2">
+                  {suggestedWatchDates
+                    .filter((d) => !watchDates.includes(d))
+                    .map((d) => (
+                      <li key={d}>
+                        <label className="flex items-center gap-3 text-sm">
+                          <input
+                            type="checkbox"
+                            onChange={() => toggleWatch(d)}
+                            className="h-4 w-4 accent-teal-600"
+                          />
+                          {dayFmt.format(clinicNoon(d))}
+                        </label>
+                      </li>
+                    ))}
                 </ul>
               </div>
             )}
@@ -637,7 +760,7 @@ export default function BookingWizard({
           </fieldset>
 
           <div className="mt-6 flex gap-3">
-            <BackButton onClick={() => setStep(4)} label={t("back")} />
+            <BackButton onClick={() => setStep(3)} label={t("back")} />
             <button
               type="button"
               onClick={() => void submit()}
