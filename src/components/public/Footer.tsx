@@ -1,5 +1,7 @@
 import { useTranslations } from "next-intl";
 import { Link } from "@/i18n/navigation";
+import { CLINIC_LOCATION } from "@/lib/settings/clinicLocation";
+import DirectionsButton from "./DirectionsButton";
 
 export default function Footer() {
   const t = useTranslations();
@@ -45,7 +47,12 @@ export default function Footer() {
           <p className="text-sm font-semibold text-zinc-900">
             {footer("contact")}
           </p>
-          <p className="mt-2 text-sm text-zinc-600">{footer("address")}</p>
+          <p className="mt-2 text-sm text-zinc-600">{CLINIC_LOCATION.address}</p>
+          <p className="mt-1 text-sm text-zinc-600" dir="ltr">
+            {CLINIC_LOCATION.phone}
+          </p>
+          <p className="mt-1 text-sm text-zinc-600">{footer("hours")}</p>
+          <DirectionsButton className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-zinc-300 px-3 py-1.5 text-xs font-semibold text-zinc-700 transition-colors hover:bg-zinc-100 hover:text-teal-700" />
         </div>
       </div>
 

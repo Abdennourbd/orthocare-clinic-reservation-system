@@ -32,8 +32,24 @@
     "tagline": "Orthodontie moderne au cœur d'Alger.",
     "quickLinks": "Liens rapides",
     "contact": "Contact",
-    "address": "Alger, Algérie",
+    "hours": "Sam – Jeu : 10h00 – 17h00",
     "rights": "Tous droits réservés."
+  },
+  "Reviews": {
+    "title": "Ce que disent nos patients",
+    "subtitle": "Les avis réels de nos patients, directement depuis Google.",
+    "seeAll": "Voir tous les avis sur Google",
+    "widgetTitle": "Avis Google de l'Ortho'Care Clinic"
+  },
+  "Location": {
+    "title": "Nous trouver",
+    "subtitle": "À Rouiba, Alger — facilement accessible.",
+    "addressLabel": "Adresse",
+    "phoneLabel": "Téléphone",
+    "hoursLabel": "Horaires d'ouverture",
+    "hours": "Samedi – Jeudi : 10h00 – 17h00",
+    "directions": "Itinéraire",
+    "mapTitle": "Plan — Ortho'Care Clinic, Rouiba"
   },
   "Common": {
     "loading": "Chargement…",

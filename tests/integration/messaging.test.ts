@@ -281,6 +281,64 @@ describe("sendMessage dispatcher", () => {
     expect(msg!.sentAt).toBeNull();
   });
 
+  it("does not retry a FAILED non-transactional message after the patient opts out", async () => {
+    const patient = await makePatient({ messagingOptOut: false });
+    const appointment = await makeAppointment(patient.id);
+    const throwingProvider: MessageProvider = {
+      name: "mock",
+      async send() {
+        throw new Error("network down");
+      },
+    };
+
+    // First attempt fails and records FAILED.
+    const first = await sendMessage(
+      {
+        type: SmsMessageType.NO_SHOW,
+        patientId: patient.id,
+        to: patient.phoneE164,
+        appointmentId: appointment.id,
+        templateKey: "noShow",
+        vars,
+      },
+      throwingProvider,
+    );
+    expect(first!.status).toBe(SmsStatus.FAILED);
+
+    // The patient opts out before the retry.
+    await getPrisma().patient.update({
+      where: { id: patient.id },
+      data: { messagingOptOut: true },
+    });
+
+    // The retry must NOT deliver (opt-out re-checked on the retry path).
+    const second = await sendMessage(
+      {
+        type: SmsMessageType.NO_SHOW,
+        patientId: patient.id,
+        to: patient.phoneE164,
+        appointmentId: appointment.id,
+        templateKey: "noShow",
+        vars,
+      },
+      {
+        name: "mock",
+        async send() {
+          return { ok: true, status: SmsStatus.SENT };
+        },
+      },
+    );
+
+    expect(second).toBeNull();
+    // The row is still FAILED (never delivered), and still exactly one row.
+    const rows = await getPrisma().smsMessage.findMany({
+      where: { appointmentId: appointment.id, type: SmsMessageType.NO_SHOW },
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].status).toBe(SmsStatus.FAILED);
+    expect(rows[0].sentAt).toBeNull();
+  });
+
   it("retries a FAILED send on the next call instead of silently skipping it", async () => {
     const patient = await makePatient();
     const appointment = await makeAppointment(patient.id);

@@ -126,7 +126,18 @@ export async function sendMessage(
         orderBy: { createdAt: "asc" },
       });
       if (existing && existing.status === SmsStatus.FAILED) {
-        // The patient never got the message — deliver it now.
+        // The patient never got the message — deliver it now. Re-check the
+        // opt-out gate first: the patient may have opted out since the failed
+        // attempt, and a non-transactional message must never be delivered
+        // after opt-out (the dispatcher owns the opt-out split, including on
+        // the retry path).
+        if (!isTransactional(input.type)) {
+          const patient = await prisma.patient.findUnique({
+            where: { id: input.patientId },
+            select: { messagingOptOut: true },
+          });
+          if (patient?.messagingOptOut) return null;
+        }
         const retryResult = await deliver(provider, existing.to, existing.body);
         return prisma.smsMessage.update({
           where: { id: existing.id },

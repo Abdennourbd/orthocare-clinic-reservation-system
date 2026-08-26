@@ -146,6 +146,12 @@ function cronRequest(path: string, secret?: string): NextRequest {
   });
 }
 
+function cronRequestBearer(path: string, secret?: string): NextRequest {
+  return new NextRequest(`http://localhost${path}`, {
+    headers: secret ? { authorization: `Bearer ${secret}` } : {},
+  });
+}
+
 describe("cron route auth (CRON_SECRET)", () => {
   it("rejects every cron route without the CRON_SECRET header", async () => {
     vi.stubEnv("CRON_SECRET", SECRET);
@@ -171,6 +177,23 @@ describe("cron route auth (CRON_SECRET)", () => {
       const res = await call();
       expect(res.status).toBe(401);
     }
+  });
+
+  it("rejects a malformed Authorization header (missing Bearer prefix)", async () => {
+    vi.stubEnv("CRON_SECRET", SECRET);
+    const req = new NextRequest("http://localhost/api/cron/reminders", {
+      headers: { authorization: SECRET }, // no "Bearer " prefix
+    });
+    const res = await remindersRoute(req);
+    expect(res.status).toBe(401);
+  });
+
+  it("accepts the Vercel-native Authorization: Bearer header", async () => {
+    vi.stubEnv("CRON_SECRET", SECRET);
+    const res = await remindersRoute(
+      cronRequestBearer("/api/cron/reminders", SECRET),
+    );
+    expect(res.status).toBe(200);
   });
 
   it("rejects cron routes when CRON_SECRET is not configured at all", async () => {

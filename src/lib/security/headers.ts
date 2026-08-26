@@ -29,11 +29,13 @@ export const SECURITY_HEADERS: Header[] = [
   {
     source: "/(.*)",
     headers: [
-      // Content-Security-Policy: strict-by-default. Task 10 must extend
-      // `script-src` / `frame-src` / `img-src` with the Google embed domains
-      // (e.g. *.googleapis.com, *.gstatic.com, *.google.com) when the Reviews
-      // widget and Maps iframe are added. Self-service token pages get the
-      // stricter no-referrer set below and load no third-party scripts.
+      // Content-Security-Policy: strict-by-default. Task 10 added `frame-src`
+      // for the Google Reviews widget + Maps iframe (`google.com/maps/embed`
+      // and `maps.google.com`). Only `frame-src` is extended: the iframe's own
+      // scripts/images are governed by Google's CSP, not the parent's, so
+      // adding `script-src`/`img-src`/`connect-src` here would widen the
+      // policy without enabling anything. The self-service token pages get the
+      // stricter no-referrer set below and must NEVER gain these domains.
       {
         key: "Content-Security-Policy",
         value: [
@@ -43,6 +45,7 @@ export const SECURITY_HEADERS: Header[] = [
           "img-src 'self' data:",
           "font-src 'self'",
           "connect-src 'self'",
+          "frame-src https://www.google.com https://maps.google.com",
           "frame-ancestors 'none'",
           "base-uri 'self'",
           "form-action 'self'",

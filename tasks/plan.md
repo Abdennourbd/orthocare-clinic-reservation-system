@@ -92,8 +92,8 @@ The scheduling engine (slot generation, overlap detection, atomic conflict-free 
   - **Minimum disclosure — the token page shows only:** service name, date and time, clinic address/phone, and the patient's **first name**. It must never expose phone, email, birth date, clinical notes, visit history, documents, or any other appointment.
   - **No referrer leakage:** the token sits in the URL, so the token page sends `Referrer-Policy: no-referrer` and loads **no third-party scripts** (no Google Reviews widget, no analytics). Without this, an embedded script receives the token in the `Referer` header.
   - **Rotation and rate limits:** rescheduling issues a fresh token and revokes the old one; token lookups are rate-limited to prevent guessing; every self-service action is audited with actor `PATIENT`.
-- **Google Reviews:** official embed widget on the public site (no API key, live rating/reviews). It is a third-party script, so: it is allow-listed explicitly in the Content-Security-Policy, disclosed in the privacy notice as a data flow to Google, and **excluded from the self-service token pages**.
-  - **4★-and-up filter (clinic request):** the no-API-key embed widget shows *all* reviews and cannot filter by star rating. Showing only 4★+ reviews requires either the **Google Places API** (server-side fetch + filter; needs an API key and is usage-billed) or a third-party review widget. **Decision needed:** (a) keep the free embed showing all reviews, or (b) use the Places API to show only 4★+ reviews (adds an API key, cost, and server-side caching). Until decided, Task 10 defaults to the free embed; the 4★ filter is tracked as an Open Question.
+- **Google Reviews:** official embed widget on the public site (no API key, live rating). It is a third-party iframe, so: it is allow-listed explicitly in the Content-Security-Policy (`frame-src` for the embed hosts only), disclosed in the privacy notice as a data flow to Google, and **excluded from the self-service token pages**.
+  - **4★-and-up filter (clinic request):** **Resolved in Task 10 — free embed chosen.** The no-key embed renders the live rating card (place name + rating + review count) with a link to the full reviews; it does **not** render the individual review list, so there is nothing to filter to 4★+. Showing a filtered 4★+ review list requires the **Google Places API** (server-side fetch + filter; needs an API key and is usage-billed) or a third-party review widget — both tracked in Open Questions; Task 10 keeps the free embed. **Decision recorded: (a).**
 - **Google Maps / location:** the clinic location is shown on the contact page (and optionally home/footer) as an embedded Google Maps iframe with the clinic's address, plus a **one-click "Open in Google Maps" directions button** (a plain `google.com/maps/dir/?api=1&destination=<lat>,<lng>` link — no API key, works on mobile and desktop). The map is a Google iframe, so like the reviews widget it is allow-listed in the CSP and disclosed in the privacy notice as a data flow to Google. It is **not** loaded on self-service token pages.
 - **Waitlist (cancellation alerts):** `WaitlistEntry` per patient/service with `preferredDates` and a **`source` (`PATIENT`|`STAFF`)**. Two doors into it: (1) at the end of the public booking wizard the patient may opt in and pick one or more days to watch — aimed at those who wanted a specific day but found it fully booked; days the patient browsed with zero availability are pre-suggested. The entry is created in the same transaction as the booking, covered by the route's existing rate limits, and `watchDates` is validated by the same Zod schema (within booking horizon, no past dates). (2) Staff add entries from the dashboard (Task 17). When a slot frees (any `releaseSlot()` path — staff cancel, self-service cancel, auto-expiry, reschedule), the subscriber notifies active entries whose `serviceId` matches and whose `preferredDates` contain the freed slot's clinic-local date. Notification is via SMS (non-transactional → opt-out rules apply), sets `notifiedAt` and deactivates the entry — **one notification per entry in v1** (if the patient misses it they can re-watch); lifting this to one notification per watched date is a small follow-up if the clinic wants it. Dates are stored as clinic-local dates at UTC midnight (stable: Africa/Algiers has no DST) and all date maths goes through `lib/time/clinicTime.ts`. The `slot-freed` event carries `serviceId` for the match.
 - **KPIs & exports:** computed on demand from appointments (no extra tables). CSV and XLSX generation in `lib/export`. An export is a **bulk extract of patient data**, therefore: ADMIN-only, audited as `EXPORT_GENERATED` with the row count and date range, and clinical notes excluded unless explicitly requested.
@@ -264,7 +264,7 @@ Next.js App Router route handlers under `/app/api/`. ~50 routes total. Admin rou
 | GET | `/api/admin/notifications` | Staff notification feed |
 | PATCH | `/api/admin/notifications/[id]/read` | Mark read |
 
-### Cron (Vercel Cron → route handlers; `CRON_SECRET` auth via the `x-cron-secret` request header)
+### Cron (Vercel Cron → route handlers; `CRON_SECRET` auth — Vercel sends it as `Authorization: Bearer <CRON_SECRET>`; manual/third-party triggers may send the same secret via `x-cron-secret`)
 | Method | Path | Purpose |
 |---|---|---|
 | GET | `/api/cron/cleanup` | Prune expired rate-limit counter rows (idempotent) — delivered early so the rate-limit table never grows unbounded |
@@ -283,7 +283,6 @@ Next.js App Router route handlers under `/app/api/`. ~50 routes total. Admin rou
 | `/api/cron/cleanup` | daily `0 3 * * *` | 04:00 | Off-hours prune of rate-limit counters |
 
 All four jobs are idempotent (safe to re-run, safe to trigger manually with `x-cron-secret`), so a missed or retried schedule cannot double-message patients.
-
 ## Code Structure
 
 Target directory layout. Created incrementally per task (empty dirs aren't tracked by git — the structure materializes as files land). Task 1 creates the skeleton; every later task fills its slice.
@@ -543,7 +542,7 @@ Implementation order is bottom-up: schema (3a) → slot engine + atomic booking 
 - [ ] Task 7: Message abstraction + providers (Mock, Twilio-ready, WhatsApp) + `SmsMessage` + `Notification` models — confirmation on booking + staff dashboard notification
 - [ ] Task 8: Self-service link — `SelfServiceToken` (revocable) in confirmation SMS; cancel + reschedule, both routing through `releaseSlot()` (Task 5)
 - [ ] Task 9: Reminders + no-show follow-up + **PENDING auto-expiry** cron (Vercel Cron, mock provider) — all idempotent; expiry routes through `releaseSlot()`
-- [ ] Task 10: Google Reviews embed widget (+ 4★ filter if confirmed) + Google Maps location (embed + one-click directions)
+- [x] Task 10: Google Reviews embed widget (+ 4★ filter if confirmed) + Google Maps location (embed + one-click directions)
 - [ ] Task 11: Public content pages — services list/detail, FAQ, testimonials, gallery, about, contact, **privacy notice** (uses `localized()` helper, depends on Task 3b content schema)
 
 ### Checkpoint: Public booking works end-to-end
@@ -652,7 +651,7 @@ Implementation order is bottom-up: schema (3a) → slot engine + atomic booking 
 - Real messaging provider at go-live (Twilio vs local DZ SMS provider vs WhatsApp Business API) — Task 22 decides; interface keeps it swappable
 - Does the clinic want a lunch break in the schedule? (Assumed configurable, default off)
 - Broadcast + no-show SMS permissions: admin-only, or also receptionist? (Assumed admin-only for broadcasts; receptionist can send single SMS)
-- **Google Reviews 4★ filter** — the free embed can't filter by rating. To show only 4★+ reviews requires the Google Places API (API key + usage billing + server-side caching). Default for Task 10 is the free embed; decide whether the 4★ filter is worth the key/cost.
+- ~~**Google Reviews 4★ filter** — the free embed can't filter by rating. To show only 4★+ reviews requires the Google Places API (API key + usage billing + server-side caching).~~ **Resolved in Task 10: free embed chosen (shows live rating card, not the review list). Places API remains a future option if the clinic wants a filtered 4★+ list.**
 - ~~Admin dashboard language: FR only, or also AR/EN?~~ **Resolved: FR-only dashboard, trilingual public site.**
 
 ---

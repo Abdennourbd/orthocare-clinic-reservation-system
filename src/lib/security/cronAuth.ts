@@ -2,21 +2,35 @@ import { NextRequest, NextResponse } from "next/server";
 import { createHash, timingSafeEqual } from "node:crypto";
 
 /**
- * Cron auth shared by every `/api/cron/*` route: authenticate with the
- * `CRON_SECRET` env var via the `x-cron-secret` request header (plan.md
- * §Cron). Vercel Cron sends the header for configured schedules; any manual
- * or curl trigger must include it.
+ * Cron auth shared by every `/api/cron/*` route.
  *
- * @returns a 401 response when the header is missing or does not match, or
+ * **Vercel Cron sends `CRON_SECRET` in the `Authorization` header as
+ * `Bearer <CRON_SECRET>`** (see Vercel docs → "Securing cron jobs"). Manual or
+ * third-party triggers (curl, cron-job.org, …) may send the same secret in the
+ * `x-cron-secret` header instead. Both are accepted; the comparison is
+ * constant-time either way. (The previous implementation read only
+ * `x-cron-secret`, which Vercel never sends — every scheduled job would have
+ * 401'd in production.)
+ *
+ * @returns a 401 response when the secret is missing or does not match, or
  *   null when the caller should proceed with the job.
  */
 export function requireCronSecret(request: NextRequest): Response | null {
   const secret = process.env.CRON_SECRET;
-  const provided = request.headers.get("x-cron-secret");
-  if (!secret || !provided || !safeEqual(secret, provided)) {
-    return new NextResponse("Unauthorized", { status: 401 });
-  }
+  if (!secret) return unauthorized();
+
+  const auth = request.headers.get("authorization");
+  const bearer = auth?.startsWith("Bearer ")
+    ? auth.slice("Bearer ".length)
+    : null;
+  const provided = bearer ?? request.headers.get("x-cron-secret");
+
+  if (!provided || !safeEqual(secret, provided)) return unauthorized();
   return null;
+}
+
+function unauthorized(): Response {
+  return new NextResponse("Unauthorized", { status: 401 });
 }
 
 /**

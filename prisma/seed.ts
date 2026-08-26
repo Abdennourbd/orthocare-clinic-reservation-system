@@ -3,6 +3,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
 import * as argon2 from "argon2";
 import dotenv from "dotenv";
+import { CLINIC_IDENTITY } from "../src/lib/settings/clinicIdentity";
 
 dotenv.config();
 
@@ -180,12 +181,10 @@ async function main() {
     {
       // Clinic identity shown on the self-service token page (minimum
       // disclosure) and on the contact page. Editable from the dashboard.
+      // Values come from the shared CLINIC_IDENTITY so seed/defaults/public
+      // site can never drift.
       key: "clinicInfo",
-      value: {
-        name: "Ortho'Care Clinic",
-        address: "Alger, Algérie",
-        phone: "0550 12 34 56"
-      }
+      value: { ...CLINIC_IDENTITY }
     },
     {
       // Messaging templates (Task 7/8). French-only for now; the booking-received

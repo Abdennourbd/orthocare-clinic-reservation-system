@@ -130,9 +130,9 @@ Task details + rationale live in `tasks/plan.md`. This is the working checklist.
 - [x] `lib/security/clientIp.ts` — `getClientIp()` reads trusted proxy headers (`x-real-ip` / `x-vercel-forwarded-for`) and never trusts raw `x-forwarded-for` by default; unit-tested against forged-header cases. **Every per-IP rate-limit caller (Tasks 6, 12) MUST use this** or a forged `x-forwarded-for` mints a fresh identity and bypasses the limiter.
 - [x] `lib/security/headers.ts` + `next.config.ts` — `SECURITY_HEADERS` (CSP, HSTS, `frame-ancestors 'none'`, `Referrer-Policy`, `nosniff`, `Permissions-Policy`) applied globally; `NO_REFERRER_HEADERS` on `/[locale]/appointment/[token]`.
 - [x] `src/i18n/request.ts` — locale validated unconditionally against the allow-list before it is interpolated into a filesystem import path.
-- [x] `/api/cron/cleanup` — idempotent prune of expired rate-limit rows; `x-cron-secret` header equals `CRON_SECRET`. Same auth convention applies to Task 9's cron routes.
+- [x] `/api/cron/cleanup` — idempotent prune of expired rate-limit rows; authenticated with `CRON_SECRET` (Vercel sends `Authorization: Bearer <secret>`; `x-cron-secret` also accepted for manual triggers). Same auth convention applies to Task 9's cron routes.
 - [ ] **Manual (operator):** rotate the Neon `DATABASE_URL` password — the live connection string was echoed in debug output during the session. Also, never paste `DATABASE_URL` into chat/logs.
-- [ ] **Task 10 dependency:** extend the CSP in `headers.ts` with the Google embed domains before mounting Reviews/Maps.
+- [x] **Task 10 dependency:** extend the CSP in `headers.ts` with the Google embed domains before mounting Reviews/Maps. Done — `frame-src https://www.google.com https://maps.google.com` added to `SECURITY_HEADERS` only; token-page CSP deliberately untouched (regression-tested in `headers.test.ts`).
 
 ## Cancellation-watch foundations (delivered ahead of schedule)
 **Description:** Patient-initiated waitlist ("notify me if someone cancels on a day I watch") decided after the original plan; foundations landed now because Task 6 writes them and retrofitting later means reworking the booking transaction.
@@ -213,21 +213,23 @@ Task details + rationale live in `tasks/plan.md`. This is the working checklist.
 **Skill:** A **scheduled-jobs / idempotency** skill (retries, at-least-once delivery, safe re-runs). No framework skill needed beyond Vercel Cron's basics — the risk here is duplicate messages, not the plumbing.
 
 ## Task 10: Google Reviews embed (+ location map)
-**Description:** Official Google Reviews embed widget on public site (live rating). Clinic wants **only 4★-and-up reviews shown** — the free embed can't filter by rating, so this needs the Google Places API (key + billing) or a third-party widget; confirm with the clinic (Open Question in plan.md) before implementing the filter. Also: **Google Maps location** — embedded map + one-click "Open in Google Maps" directions button on the contact page (and optionally home/footer).
+**Description:** Google Reviews widget on public site (live rating) + Google Maps location — embedded map + one-click "Open in Google Maps" directions button.
+**Decision recorded in plan.md:** free no-key embed chosen (shows the live rating card + review count + link — not the individual review list, so the 4★+ filter is N/A; the Places-API 4★+ list remains a tracked future option). Mounted on the home page + footer location strip as reusable components (`GoogleReviews`, `ClinicMap`, `DirectionsButton`, `ReviewsSection`, `LocationSection`) for the Task 11 contact page.
 **Acceptance criteria:**
-- [ ] Widget renders on public page
-- [ ] Works across all 3 locales
-- [ ] **Only 4★+ reviews displayed** — if the clinic confirmed the Places API route; otherwise free embed shows all reviews (decision recorded in plan.md)
-- [ ] Allow-listed in the Content-Security-Policy; disclosed in the privacy notice as a data flow to Google
-- [ ] **Not loaded on `/[locale]/appointment/[token]` pages** (it would receive the token in the `Referer` header)
-- [ ] Page still renders correctly if the widget fails to load
-- [ ] Clinic location map embeds on contact page with address
-- [ ] "Open in Google Maps" button opens directions in one click (mobile + desktop, no API key)
-- [ ] Map iframe allow-listed in CSP; also excluded from token pages
-**Verification:** Manual check on public site in `/fr`, `/ar`, `/en`; confirm no widget/map request on the token page; one-click directions opens the Maps app/page.
+- [x] Widget renders on public page (home page, all locales — verified live rating card in browser)
+- [x] Works across all 3 locales (fr/ar/en embed `hl` per locale, verified in browser)
+- [x] **4★+ filter** — N/A: free embed shows the live rating card, not a review list; decision recorded in plan.md
+- [x] Allow-listed in the Content-Security-Policy (`frame-src` for `www.google.com` + `maps.google.com` only)
+- [ ] Disclosed in the privacy notice as a data flow to Google — **deferred to Task 11** (the privacy page does not exist yet; tracked here so it isn't lost)
+- [x] **Not loaded on `/[locale]/appointment/[token]` pages** (verified: no Google request on the token page; `no-referrer` CSP intact)
+- [x] Page still renders correctly if the widget fails to load (visible "See all reviews on Google" fallback link behind each widget)
+- [x] Clinic location map + address rendered (home page location section; contact page in Task 11 reuses `ClinicMap`/`LocationSection`)
+- [x] "Open in Google Maps" directions button opens directions in one click (`google.com/maps/dir/?api=1&destination=…`, no API key)
+- [x] Map iframe allow-listed in CSP; excluded from token pages (headers regression test added)
+**Verification:** Browser-tested on `/fr`, `/ar`, `/en` (widgets render, live rating card shown); token page network log shows zero Google requests; `typecheck`, `lint`, `build` green; unit tests for the embed URL builders + CSP. ✅ passed — see `tasks/task10-summary.md`.
 **Dependencies:** Task 2
-**Estimated scope:** Small (0.5–1 day; the 4★ filter via Places API adds an API key + cost + server-side caching)
-**Skill:** None needed for the embed + map link — an embed snippet plus a locale check. The Places-API 4★ filter (if chosen) needs a **server-side fetch + cache** approach. First candidate on the cut list if time runs short.
+**Estimated scope:** Small (0.5–1 day) — free embed route, no Places API key.
+**Skill:** None needed for the embed + map link. Places-API 4★+ list (if ever chosen) needs a server-side fetch + cache approach.
 
 ## Task 11: Public content pages
 **Description:** Build public-facing content pages: services list + detail, FAQ, testimonials, gallery, about, contact, **privacy notice**. All consume `localized()` helper (Task 2) + content schema (Task 3b). The privacy notice states what is collected, why, which processors are involved (hosting, database, messaging, error monitoring — all outside Algeria), and how to request correction or deletion.

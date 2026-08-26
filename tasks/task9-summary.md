@@ -147,3 +147,20 @@ too (run 1: 1 reminder + 3 expiries; run 2: 0/0/0).
   new templates (reminder = "rappel", no-show = "n'êtes pas venu", expired =
   "n'a pas été confirmée … annulée" — never a false "confirmé"). Suite now
   **231 passing**.
+
+## Security review fixes (security pass on Tasks 9 & 10)
+
+- **Cron auth read the wrong header for Vercel.** `requireCronSecret` checked
+  only `x-cron-secret`, but Vercel Cron sends `CRON_SECRET` as
+  `Authorization: Bearer <CRON_SECRET>` (per the Vercel docs) — so every
+  scheduled job would have 401'd in production and never run. It now accepts
+  the Vercel-native `Authorization: Bearer` header (constant-time compare,
+  `Bearer ` prefix stripped) and still accepts `x-cron-secret` for manual /
+  third-party triggers. `plan.md`, `todo.md` and `.env.example` corrected.
+- **Opt-out re-check on the retry path.** `sendMessage`'s FAILED-row retry
+  re-delivered without re-checking `messagingOptOut`, so a patient who opted
+  out after a failed send could still receive a non-transactional retry. The
+  dispatcher now re-checks the opt-out gate before retrying delivery.
+- **New tests:** malformed `Authorization` header rejected; `Authorization:
+  Bearer` accepted; FAILED non-transactional message is not retried after the
+  patient opts out. Suite now **246 passing**.

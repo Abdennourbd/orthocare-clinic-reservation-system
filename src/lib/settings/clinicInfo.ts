@@ -1,4 +1,5 @@
 import { getPrisma } from "@/lib/db";
+import { CLINIC_IDENTITY } from "./clinicIdentity";
 
 // Clinic identity shown on the self-service token page (minimum disclosure)
 // and later on the contact page (Task 10/11). Stored as the `clinicInfo`
@@ -11,11 +12,8 @@ export type ClinicInfo = {
   phone: string;
 };
 
-export const DEFAULT_CLINIC_INFO: ClinicInfo = {
-  name: "Ortho'Care Clinic",
-  address: "Alger, Algérie",
-  phone: "0550 12 34 56",
-};
+// Single source of truth for the identity values: `CLINIC_IDENTITY`.
+export const DEFAULT_CLINIC_INFO: ClinicInfo = { ...CLINIC_IDENTITY };
 
 /** Read the clinic identity, falling back to documented defaults field by
  * field (a partially-filled Setting must not wipe a default). */

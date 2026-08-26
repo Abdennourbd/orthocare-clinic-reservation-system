@@ -32,8 +32,24 @@
     "tagline": "Modern orthodontics in the heart of Algiers.",
     "quickLinks": "Quick links",
     "contact": "Contact",
-    "address": "Algiers, Algeria",
+    "hours": "Sat – Thu: 10:00 – 17:00",
     "rights": "All rights reserved."
+  },
+  "Reviews": {
+    "title": "What our patients say",
+    "subtitle": "Real reviews from our patients, straight from Google.",
+    "seeAll": "See all reviews on Google",
+    "widgetTitle": "Google reviews of Ortho'Care Clinic"
+  },
+  "Location": {
+    "title": "Find us",
+    "subtitle": "In Rouiba, Algiers — easy to reach.",
+    "addressLabel": "Address",
+    "phoneLabel": "Phone",
+    "hoursLabel": "Opening hours",
+    "hours": "Saturday – Thursday: 10:00 – 17:00",
+    "directions": "Get directions",
+    "mapTitle": "Map — Ortho'Care Clinic, Rouiba"
   },
   "Common": {
     "loading": "Loading…",
