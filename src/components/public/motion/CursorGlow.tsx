@@ -45,7 +45,7 @@ export default function CursorGlow() {
       }}
     >
       <motion.div
-        className="absolute w-[600px] h-[600px] rounded-full blur-[100px] opacity-20 bg-primary/30 mix-blend-screen"
+        className="absolute h-[600px] w-[600px] rounded-full bg-teal-400/25 mix-blend-multiply blur-[100px]"
         style={{
           x: cursorX,
           y: cursorY,
