@@ -24,6 +24,10 @@ export type AuditActor = {
 
 export type AuditDetail = Record<string, unknown>;
 
+/** Reusable actor for cron/system actions — no staff user is behind a cron
+ * job, so `userId` is always unset (plan.md §Audit logging, Task 9). */
+export const SYSTEM_ACTOR = { type: AuditActorType.SYSTEM } as const;
+
 export async function logAction(
   actor: AuditActor,
   action: AuditAction,

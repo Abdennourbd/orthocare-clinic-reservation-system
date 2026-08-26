@@ -273,6 +273,17 @@ Next.js App Router route handlers under `/app/api/`. ~50 routes total. Admin rou
 | GET | `/api/cron/expire-pending` | Auto-cancel unconfirmed PENDING bookings via `releaseSlot()` (frees the slot, triggers waitlist) |
 | GET | `/api/health` | Uptime probe (no auth, no data) |
 
+**Cron schedules (`vercel.json`)** — Vercel runs cron in UTC; the clinic thinks in Africa/Algiers (UTC+1, no DST). Schedules are written below in UTC with the intended clinic-local hour beside them:
+
+| Job | Schedule (UTC) | Clinic-local | Why |
+|---|---|---|---|
+| `/api/cron/reminders` | daily `0 8 * * *` | 09:00 | Morning reminders catch every appointment of the next clinic day |
+| `/api/cron/no-show-followup` | daily `0 17 * * *` | 18:00 | Runs after the clinic closes (17:00 local) so every day's appointments have passed |
+| `/api/cron/expire-pending` | hourly `0 * * * *` | varies | Frees stale slots promptly; `pendingExpiryHours` (24h) plus the "always before start" rule make the exact hour a latency choice, not a correctness one |
+| `/api/cron/cleanup` | daily `0 3 * * *` | 04:00 | Off-hours prune of rate-limit counters |
+
+All four jobs are idempotent (safe to re-run, safe to trigger manually with `x-cron-secret`), so a missed or retried schedule cannot double-message patients.
+
 ## Code Structure
 
 Target directory layout. Created incrementally per task (empty dirs aren't tracked by git — the structure materializes as files land). Task 1 creates the skeleton; every later task fills its slice.

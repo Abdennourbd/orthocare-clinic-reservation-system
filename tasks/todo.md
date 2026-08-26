@@ -199,15 +199,15 @@ Task details + rationale live in `tasks/plan.md`. This is the working checklist.
 ## Task 9: Reminders + no-show follow-up + PENDING expiry cron (mock provider)
 **Description:** Vercel Cron routes (CRON_SECRET auth): `/api/cron/reminders` (24h-before SMS to CONFIRMED appointments), `/api/cron/no-show-followup` (mark past CONFIRMED as NO_SHOW + send follow-up SMS), **`/api/cron/expire-pending`** (auto-cancel unconfirmed PENDING bookings past `pendingExpiryHours`, and always before the appointment starts, via `releaseSlot()` — which frees the slot and later triggers the waitlist). Plus `/api/health` for uptime monitoring. Uses mock provider for now; real wiring is Task 22.
 **Acceptance criteria:**
-- [ ] Cron routes reject without `CRON_SECRET` header
-- [ ] Reminders fire for CONFIRMED appointments 24h out
-- [ ] No-show follow-up marks NO_SHOW + sets `noShowAt` + sends SMS
-- [ ] Expiry cancels stale PENDING bookings through `releaseSlot()` with `cancelReason = AUTO_EXPIRED`, notifies the patient, and creates a staff notification
-- [ ] **Every cron job is idempotent — running it twice sends exactly one message** (`reminderSentAt` + unique index)
-- [ ] Cron schedules documented in UTC with the intended clinic-local hour written beside them
-- [ ] Cron actions audited with actor `SYSTEM`
-- [ ] Dry-run against seeded data logs mock SMS correctly
-**Verification:** `npm test -- cron` (including a double-run idempotency test); manual trigger with seeded past/future appointments.
+- [x] Cron routes reject without `CRON_SECRET` header
+- [x] Reminders fire for CONFIRMED appointments 24h out
+- [x] No-show follow-up marks NO_SHOW + sets `noShowAt` + sends SMS
+- [x] Expiry cancels stale PENDING bookings through `releaseSlot()` with `cancelReason = AUTO_EXPIRED`, notifies the patient, and creates a staff notification
+- [x] **Every cron job is idempotent — running it twice sends exactly one message** (`reminderSentAt` + unique index)
+- [x] Cron schedules documented in UTC with the intended clinic-local hour written beside them
+- [x] Cron actions audited with actor `SYSTEM`
+- [x] Dry-run against seeded data logs mock SMS correctly
+**Verification:** `npm test -- cron` (including a double-run idempotency test); manual trigger with seeded past/future appointments. ✅ passed — see `tasks/task9-summary.md`.
 **Dependencies:** Task 7
 **Estimated scope:** Medium (2 days)
 **Skill:** A **scheduled-jobs / idempotency** skill (retries, at-least-once delivery, safe re-runs). No framework skill needed beyond Vercel Cron's basics — the risk here is duplicate messages, not the plumbing.
@@ -248,7 +248,7 @@ Task details + rationale live in `tasks/plan.md`. This is the working checklist.
 - [x] Public booking flow works end-to-end, consent recorded
 - [x] Booking-received message + self-service verified; `releaseSlot()` fires on self-service cancel
 - [x] Token page exposes minimum data only and loads no third-party scripts
-- [ ] Reminders + no-show + expiry cron run against seeded data (mock SMS); **each run twice sends once**
+- [x] Reminders + no-show + expiry cron run against seeded data (mock SMS); **each run twice sends once**
 - [x] Rate limits reject a booking flood from one IP/phone
 - [ ] Google Reviews widget live in 3 locales; map embed + one-click directions working
 - [ ] Public content pages + privacy notice render in 3 locales

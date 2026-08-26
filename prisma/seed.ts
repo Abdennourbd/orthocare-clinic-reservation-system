@@ -197,7 +197,10 @@ async function main() {
         bookingReceived: "Bonjour {firstName}, votre demande de rendez-vous {serviceName} le {date} à {time} a bien été reçue. La clinique vous appellera au {phone} pour la confirmer. Ortho'Care Clinic",
         confirmation: "Bonjour {firstName}, votre rendez-vous {serviceName} le {date} à {time} est confirmé. Pour le déplacer ou l'annuler : {selfServiceLink} Ortho'Care Clinic",
         cancelled: "Bonjour {firstName}, votre rendez-vous {serviceName} du {date} à {time} a été annulé. Ortho'Care Clinic",
-        reschedule: "Bonjour {firstName}, votre rendez-vous {serviceName} a été déplacé du {oldDate} à {oldTime} au {newDate} à {newTime}. Pour le gérer : {selfServiceLink} Ortho'Care Clinic"
+        reschedule: "Bonjour {firstName}, votre rendez-vous {serviceName} a été déplacé du {oldDate} à {oldTime} au {newDate} à {newTime}. Pour le gérer : {selfServiceLink} Ortho'Care Clinic",
+        reminder: "Bonjour {firstName}, rappel : votre rendez-vous {serviceName} du {date} à {time}. Ortho'Care Clinic",
+        noShow: "Bonjour {firstName}, vous n'êtes pas venu à votre rendez-vous {serviceName} du {date} à {time}. Pour le reprogrammer, appelez la clinique. Ortho'Care Clinic",
+        expired: "Bonjour {firstName}, votre demande de rendez-vous {serviceName} du {date} à {time} n'a pas été confirmée à temps et a été annulée. Contactez la clinique pour reprendre rendez-vous. Ortho'Care Clinic"
       }
     }
   ];

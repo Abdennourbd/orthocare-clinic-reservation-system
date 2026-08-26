@@ -24,6 +24,16 @@ export const DEFAULT_MESSAGE_TEMPLATES = {
    * link for the new appointment. */
   reschedule:
     "Bonjour {firstName}, votre rendez-vous {serviceName} a été déplacé du {oldDate} à {oldTime} au {newDate} à {newTime}. Pour le gérer : {selfServiceLink} Ortho'Care Clinic",
+  /** 24h-before reminder to a confirmed appointment (Task 9 cron). */
+  reminder:
+    "Bonjour {firstName}, rappel : votre rendez-vous {serviceName} du {date} à {time}. Ortho'Care Clinic",
+  /** No-show follow-up after the appointment window passed (Task 9 cron).
+   * Non-transactional — suppressed for patients with `messagingOptOut`. */
+  noShow:
+    "Bonjour {firstName}, vous n'êtes pas venu à votre rendez-vous {serviceName} du {date} à {time}. Pour le reprogrammer, appelez la clinique. Ortho'Care Clinic",
+  /** Stale PENDING booking auto-cancelled by the expiry cron (Task 9). */
+  expired:
+    "Bonjour {firstName}, votre demande de rendez-vous {serviceName} du {date} à {time} n'a pas été confirmée à temps et a été annulée. Contactez la clinique pour reprendre rendez-vous. Ortho'Care Clinic",
 } as const;
 
 export type MessageTemplateKey = keyof typeof DEFAULT_MESSAGE_TEMPLATES;

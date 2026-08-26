@@ -34,4 +34,22 @@ describe("DEFAULT_MESSAGE_TEMPLATES", () => {
     expect(tpl).not.toContain("confirmé");
     expect(tpl).toContain("confirmer");
   });
+
+  it("reminder wording is a rappel, never a confirmation", () => {
+    const tpl = DEFAULT_MESSAGE_TEMPLATES.reminder.toLowerCase();
+    expect(tpl).toContain("rappel");
+    expect(tpl).not.toContain("confirmé");
+  });
+
+  it("no-show wording tells the patient they missed it, never that it was confirmed", () => {
+    const tpl = DEFAULT_MESSAGE_TEMPLATES.noShow.toLowerCase();
+    expect(tpl).toContain("n'êtes pas venu");
+    expect(tpl).not.toContain("confirmé");
+  });
+
+  it("expired wording explains the auto-cancellation and says the booking was NOT confirmed", () => {
+    const tpl = DEFAULT_MESSAGE_TEMPLATES.expired.toLowerCase();
+    expect(tpl).toContain("n'a pas été confirmée");
+    expect(tpl).toContain("annulée");
+  });
 });

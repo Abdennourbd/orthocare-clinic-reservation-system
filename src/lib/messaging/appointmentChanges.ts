@@ -1,13 +1,10 @@
 import { getPrisma } from "@/lib/db";
 import { SmsMessageType, SmsStatus } from "@/generated/prisma/client";
 import { localized, type LocalizedField } from "@/lib/i18n/localized";
-import {
-  formatClinicLocalTime,
-  toClinicLocalDateString,
-} from "@/lib/time/clinicTime";
 import { createSelfServiceToken } from "@/lib/selfservice/tokens";
 import { buildSelfServiceLink } from "@/lib/selfservice/link";
 import { sendMessage } from "./index";
+import { localParts } from "./format";
 
 // Patient-facing messages for appointment CHANGES (Task 8):
 //
@@ -27,11 +24,6 @@ async function loadContext(appointmentId: string) {
     where: { id: appointmentId },
     include: { patient: true, service: true },
   });
-}
-
-function localParts(utc: Date): { date: string; time: string } {
-  const [y, m, d] = toClinicLocalDateString(utc).split("-");
-  return { date: `${d}/${m}/${y}`, time: formatClinicLocalTime(utc) };
 }
 
 /**

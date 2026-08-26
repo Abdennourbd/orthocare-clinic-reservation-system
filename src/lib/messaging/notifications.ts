@@ -1,24 +1,15 @@
 import { getPrisma } from "@/lib/db";
-import { NotificationType } from "@/generated/prisma/client";
+import { NotificationType, type Prisma } from "@/generated/prisma/client";
 
 // Staff in-app notification feed (plan.md §Domain model — `Notification`).
 // Fan-out rule: one row per ACTIVE staff user, so nothing depends on a
 // particular person being logged in.
 
-export type NewBookingNotificationPayload = {
-  appointmentId: string;
-  patientName: string;
-  serviceId: string;
-  /** Full per-locale service name, so the dashboard can render any language. */
-  serviceName: Record<string, string>;
-  /** Appointment start, ISO-8601 UTC. */
-  startTime: string;
-};
-
-/** Create a NEW_BOOKING notification for every active staff user. Returns the
+/** Fan out one notification row to every active staff user. Returns the
  * number of rows created (0 when there are no active staff). */
-export async function notifyNewBooking(
-  payload: NewBookingNotificationPayload,
+async function fanOut<T extends object>(
+  type: NotificationType,
+  payload: T,
 ): Promise<number> {
   const prisma = getPrisma();
   const staff = await prisma.user.findMany({
@@ -30,11 +21,28 @@ export async function notifyNewBooking(
   const { count } = await prisma.notification.createMany({
     data: staff.map((u) => ({
       userId: u.id,
-      type: NotificationType.NEW_BOOKING,
-      payload,
+      type,
+      payload: payload as Prisma.InputJsonValue,
     })),
   });
   return count;
+}
+
+export type NewBookingNotificationPayload = {
+  appointmentId: string;
+  patientName: string;
+  serviceId: string;
+  /** Full per-locale service name, so the dashboard can render any language. */
+  serviceName: Record<string, string>;
+  /** Appointment start, ISO-8601 UTC. */
+  startTime: string;
+};
+
+/** Create a NEW_BOOKING notification for every active staff user. */
+export function notifyNewBooking(
+  payload: NewBookingNotificationPayload,
+): Promise<number> {
+  return fanOut(NotificationType.NEW_BOOKING, payload);
 }
 
 export type CancellationNotificationPayload = {
@@ -52,22 +60,46 @@ export type CancellationNotificationPayload = {
 /** Create a CANCELLATION notification for every active staff user — a slot
  * freed (patient cancelled via link, staff cancelled, auto-expired, closure).
  * Same fan-out rule as NEW_BOOKING. */
-export async function notifyCancellation(
+export function notifyCancellation(
   payload: CancellationNotificationPayload,
 ): Promise<number> {
-  const prisma = getPrisma();
-  const staff = await prisma.user.findMany({
-    where: { active: true },
-    select: { id: true },
-  });
-  if (staff.length === 0) return 0;
+  return fanOut(NotificationType.CANCELLATION, payload);
+}
 
-  const { count } = await prisma.notification.createMany({
-    data: staff.map((u) => ({
-      userId: u.id,
-      type: NotificationType.CANCELLATION,
-      payload,
-    })),
-  });
-  return count;
+export type NoShowAlertPayload = {
+  appointmentId: string;
+  patientName: string;
+  serviceId: string;
+  /** Full per-locale service name, so the dashboard can render any language. */
+  serviceName: Record<string, string>;
+  /** Appointment start, ISO-8601 UTC. */
+  startTime: string;
+};
+
+/** Create a NO_SHOW_ALERT notification for every active staff user (Task 9
+ * no-show-followup cron). */
+export function notifyNoShowAlert(
+  payload: NoShowAlertPayload,
+): Promise<number> {
+  return fanOut(NotificationType.NO_SHOW_ALERT, payload);
+}
+
+export type PendingExpiredPayload = {
+  appointmentId: string;
+  patientName: string;
+  serviceId: string;
+  /** Full per-locale service name, so the dashboard can render any language. */
+  serviceName: Record<string, string>;
+  /** Appointment start, ISO-8601 UTC. */
+  startTime: string;
+  /** `AUTO_EXPIRED` — the only reason the expiry cron uses. */
+  cancelReason: string;
+};
+
+/** Create a PENDING_EXPIRED notification for every active staff user (Task 9
+ * expire-pending cron). */
+export function notifyPendingExpired(
+  payload: PendingExpiredPayload,
+): Promise<number> {
+  return fanOut(NotificationType.PENDING_EXPIRED, payload);
 }
