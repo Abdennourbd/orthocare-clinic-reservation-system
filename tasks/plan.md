@@ -279,7 +279,7 @@ Next.js App Router route handlers under `/app/api/`. ~50 routes total. Admin rou
 |---|---|---|---|
 | `/api/cron/reminders` | daily `0 8 * * *` | 09:00 | Morning reminders catch every appointment of the next clinic day |
 | `/api/cron/no-show-followup` | daily `0 17 * * *` | 18:00 | Runs after the clinic closes (17:00 local) so every day's appointments have passed |
-| `/api/cron/expire-pending` | hourly `0 * * * *` | varies | Frees stale slots promptly; `pendingExpiryHours` (24h) plus the "always before start" rule make the exact hour a latency choice, not a correctness one |
+| `/api/cron/expire-pending` | daily `0 2 * * *` | 03:00 | Frees stale slots; **Hobby plan caps cron jobs at once/day, so this is daily, not hourly** — `pendingExpiryHours` (24h) plus the "always before start" rule make the cadence a latency choice, not a correctness one (hourly on Pro if wanted) |
 | `/api/cron/cleanup` | daily `0 3 * * *` | 04:00 | Off-hours prune of rate-limit counters |
 
 All four jobs are idempotent (safe to re-run, safe to trigger manually with `x-cron-secret`), so a missed or retried schedule cannot double-message patients.

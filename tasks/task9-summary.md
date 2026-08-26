@@ -58,7 +58,9 @@ messaging dispatcher; uses the mock provider (real wiring is Task 22).
 - `vercel.json` — the four cron schedules (UTC, with the intended clinic-local
   hour beside each in `plan.md`):
   reminders `0 8 * * *` (09:00 local), no-show `0 17 * * *` (18:00 local),
-  expire-pending hourly `0 * * * *`, cleanup `0 3 * * *` (04:00 local).
+  expire-pending daily `0 2 * * *` (03:00 local — **Hobby plan caps cron jobs
+  at once/day**, so it is daily, not hourly; see note below), cleanup `0 3 * * *`
+  (04:00 local).
 - `scripts/cron-dry-run.ts` — run the three jobs against the seeded dev DB and
   print what the mock provider logged.
 
@@ -123,8 +125,10 @@ too (run 1: 1 reminder + 3 expiries; run 2: 0/0/0).
   (401) in dev until an operator sets it — the safe default.
 - Cron schedules are in `vercel.json`; the operator-facing "what runs when"
   table with clinic-local hours is in `plan.md` §Cron.
-- **Ops note:** Vercel's Hobby plan allows only 2 cron jobs; the 4 schedules
-  here (plus the hourly expire-pending cadence) require the Pro plan.
+- **Ops note:** the Hobby plan limits cron jobs to **once per day**, so the
+  expire-pending job runs daily (`0 2 * * *`) rather than hourly. Hourly
+  scheduling is available on the Pro plan — change it back in `vercel.json`
+  (`0 * * * *`) only if the project is upgraded.
 
 ## Post-review fixes (code review of this task)
 
