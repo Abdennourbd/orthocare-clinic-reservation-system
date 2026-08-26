@@ -19,6 +19,12 @@
     "ar": "العربية",
     "en": "English"
   },
+  "Home": {
+    "heroTitle": "Your smile, our priority",
+    "cta": "Book an appointment",
+    "gameTitle": "Brush the plaque away!",
+    "gameCTA": "Move your mouse or finger to brush!"
+  },
   "Hero": {
     "title": "Your smile, our priority",
     "subtitle": "Orthodontics clinic in Algiers. Book your consultation online in a few clicks.",

@@ -19,6 +19,12 @@
     "ar": "العربية",
     "en": "English"
   },
+  "Home": {
+    "heroTitle": "Votre sourire, notre priorité",
+    "cta": "Prendre rendez-vous",
+    "gameTitle": "Brossez la plaque !",
+    "gameCTA": "Bougez votre souris ou votre doigt pour brosser !"
+  },
   "Hero": {
     "title": "Votre sourire, notre priorité",
     "subtitle": "Cabinet d'orthodontie à Alger. Réservez votre consultation en ligne en quelques clics.",
