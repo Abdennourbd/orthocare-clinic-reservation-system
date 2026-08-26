@@ -23,7 +23,9 @@
     "heroTitle": "Votre sourire, notre priorité",
     "cta": "Prendre rendez-vous",
     "gameTitle": "Brossez la plaque !",
-    "gameCTA": "Bougez votre souris ou votre doigt pour brosser !"
+    "gameCTA": "Bougez votre souris ou votre doigt pour brosser !",
+    "gameWon": "D'une propreté éclatante ! ✨",
+    "gameFallback": "Les animations interactives sont désactivées pour réduire les mouvements. Gardez le sourire !"
   },
   "Hero": {
     "title": "Votre sourire, notre priorité",

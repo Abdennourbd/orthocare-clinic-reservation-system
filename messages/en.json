@@ -23,7 +23,9 @@
     "heroTitle": "Your smile, our priority",
     "cta": "Book an appointment",
     "gameTitle": "Brush the plaque away!",
-    "gameCTA": "Move your mouse or finger to brush!"
+    "gameCTA": "Move your mouse or finger to brush!",
+    "gameWon": "Sparkling Clean! ✨",
+    "gameFallback": "Interactive animations are disabled for reduced motion. Keep smiling!"
   },
   "Hero": {
     "title": "Your smile, our priority",

@@ -11,11 +11,16 @@ export default function ToothBrushGameClient() {
   const containerRef = useRef<HTMLDivElement>(null);
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [won, setWon] = useState(false);
+  const [mounted, setMounted] = useState(false);
   
   const prefersReducedMotion = useReducedMotion();
 
   useEffect(() => {
-    if (prefersReducedMotion) return;
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!mounted || prefersReducedMotion) return;
     
     const canvas = canvasRef.current;
     const container = containerRef.current;
@@ -36,10 +41,10 @@ export default function ToothBrushGameClient() {
     ctx.fillRect(0, 0, width, height);
 
     ctx.fillStyle = "#ffffff"; // tooth color
-  }, [prefersReducedMotion]);
+  }, [prefersReducedMotion, mounted]);
 
   const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
-    if (won || !gameState || prefersReducedMotion) return;
+    if (won || !gameState || prefersReducedMotion || !mounted) return;
     
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext("2d");
@@ -69,11 +74,22 @@ export default function ToothBrushGameClient() {
     }
   };
 
+  if (!mounted) {
+    // Avoid hydration mismatch by rendering a generic placeholder matching the server HTML
+    return (
+      <div className="bg-teal-50 p-8 rounded-2xl text-center flex flex-col items-center">
+        <h2 className="text-3xl font-bold text-teal-900 mb-6">{t("gameTitle")}</h2>
+        <div className="relative inline-block" style={{ width: "300px", height: "200px" }}></div>
+        <p className="mt-4 text-sm text-teal-600 invisible">Placeholder</p>
+      </div>
+    );
+  }
+
   if (prefersReducedMotion) {
     return (
-      <div className="bg-teal-50 p-8 rounded-2xl text-center">
+      <div className="bg-teal-50 p-8 rounded-2xl text-center flex flex-col items-center">
         <h2 className="text-3xl font-bold text-teal-900 mb-4">{t("gameTitle")}</h2>
-        <p className="text-teal-700">{t("gameCTA")}</p>
+        <p className="text-teal-700">{t("gameFallback")}</p>
       </div>
     );
   }
@@ -89,11 +105,13 @@ export default function ToothBrushGameClient() {
           onTouchMove={handleMouseMove}
           className="rounded-lg shadow-inner cursor-crosshair touch-none"
           style={{ width: "300px", height: "200px" }}
+          aria-label="Toothbrush mini-game"
+          role="img"
         />
         {won && (
           <div className="absolute inset-0 flex items-center justify-center bg-white/80 rounded-lg">
             <p className="text-2xl font-bold text-teal-600 animate-bounce">
-              Sparkling Clean! ✨
+              {t("gameWon")}
             </p>
           </div>
         )}
