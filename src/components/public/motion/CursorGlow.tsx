@@ -15,23 +15,25 @@ export default function CursorGlow() {
   const cursorY = useSpring(mouseY, springConfig);
 
   useEffect(() => {
-    // Only show on devices with a fine pointer (like a mouse)
+    const isFinePointer = window.matchMedia("(pointer: fine)").matches;
+    const shouldShow = isFinePointer && !shouldReduceMotion;
+    
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setIsVisible(window.matchMedia("(pointer: fine)").matches && !shouldReduceMotion);
+    setIsVisible(shouldShow);
+
+    if (!shouldShow) return;
 
     const handleMouseMove = (e: MouseEvent) => {
       mouseX.set(e.clientX);
       mouseY.set(e.clientY);
     };
 
-    if (isVisible) {
-      window.addEventListener("mousemove", handleMouseMove);
-    }
+    window.addEventListener("mousemove", handleMouseMove);
 
     return () => {
       window.removeEventListener("mousemove", handleMouseMove);
     };
-  }, [isVisible, mouseX, mouseY, shouldReduceMotion]);
+  }, [mouseX, mouseY, shouldReduceMotion]);
 
   if (!isVisible) return null;
 

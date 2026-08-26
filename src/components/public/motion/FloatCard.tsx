@@ -8,7 +8,11 @@ export default function FloatCard({ children, className }: { children: React.Rea
       className={className}
       animate={shouldReduceMotion ? {} : { y: [0, -10, 0] }}
       transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-      whileHover={{ y: -5, boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.1)" }}
+      whileHover={
+        shouldReduceMotion 
+          ? { boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.1)" } 
+          : { y: -5, boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.1)" }
+      }
     >
       {children}
     </motion.div>
