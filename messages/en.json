@@ -138,7 +138,6 @@
     "errAppointmentUnavailable": "This appointment can no longer be changed.",
     "errRateLimited": "Too many attempts. Please try again later.",
     "errGeneric": "Something went wrong. Please try again.",
-    "errConflict": "This slot was just taken. Please choose another one.",
-    "errNoSlots": "No slot available that day. Choose another day."
+    "errConflict": "This slot was just taken. Please choose another one."
   }
 }

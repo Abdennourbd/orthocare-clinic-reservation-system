@@ -60,8 +60,13 @@ export type VerifiedSelfServiceToken = {
  * Issue a self-service token for a confirmed appointment.
  *
  * Requires the appointment to be CONFIRMED (the token lives in the
- * confirmation SMS) and ROTATES: any previously issued, still-live token for
- * the same appointment is revoked so at most one live token exists at a time.
+ * confirmation SMS). This function does NOT rotate/revoke any existing token —
+ * rotation is the reschedule flow's responsibility (`selfServiceReschedule`
+ * explicitly revokes the old token), and auto-revoking here would break
+ * concurrent confirmations: two overlapping confirmation requests each revoke
+ * the other's token, so the SMS could carry a link that is already revoked.
+ * A second token for the same appointment is harmless (an equivalent,
+ * unknown-to-anyone capability).
  *
  * Returns the raw token (never stored) so the caller can build the SMS link.
  */
@@ -81,13 +86,6 @@ export async function createSelfServiceToken(
     if (appointment.status !== AppointmentStatus.CONFIRMED) {
       throw new AppointmentNotConfirmedError();
     }
-
-    // Rotation: revoke any live token for this appointment so a re-issued link
-    // always supersedes the previous one.
-    await tx.selfServiceToken.updateMany({
-      where: { appointmentId, revokedAt: null, usedAt: null },
-      data: { revokedAt: new Date() },
-    });
 
     const expiresAt = new Date(
       appointment.endTime.getTime() + TOKEN_EXPIRY_AFTER_APPOINTMENT_MS,

@@ -444,6 +444,92 @@ describe("self-service token negative tests", () => {
   });
 });
 
+describe("self-service reschedule negative tests", () => {
+  it("rejects a reschedule with a used token (no double move)", async () => {
+    const appointmentId = await bookOnline("11:00");
+    const { rawToken } = await confirmAndIssueToken(appointmentId);
+    await getPrisma().selfServiceToken.updateMany({
+      where: { appointmentId },
+      data: { usedAt: new Date() },
+    });
+
+    const res = await postReschedule(
+      request("POST", `/api/appointments/${rawToken}/reschedule`, {
+        startTime: localStart(DAY, "12:00").toISOString(),
+      }),
+      { params: Promise.resolve({ token: rawToken }) },
+    );
+    expect(res.status).toBe(410);
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("TOKEN_USED");
+  });
+
+  it("rejects a reschedule with an expired token", async () => {
+    const appointmentId = await bookOnline("11:00");
+    await getPrisma().appointment.update({
+      where: { id: appointmentId },
+      data: { status: AppointmentStatus.CONFIRMED },
+    });
+    const { rawToken } = await createSelfServiceToken(appointmentId);
+    await getPrisma().selfServiceToken.updateMany({
+      where: { appointmentId },
+      data: { expiresAt: new Date(Date.now() - 1000) },
+    });
+
+    const res = await postReschedule(
+      request("POST", `/api/appointments/${rawToken}/reschedule`, {
+        startTime: localStart(DAY, "12:00").toISOString(),
+      }),
+      { params: Promise.resolve({ token: rawToken }) },
+    );
+    expect(res.status).toBe(410);
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("TOKEN_EXPIRED");
+  });
+
+  it("rejects a reschedule with a revoked token", async () => {
+    const appointmentId = await bookOnline("11:00");
+    await getPrisma().appointment.update({
+      where: { id: appointmentId },
+      data: { status: AppointmentStatus.CONFIRMED },
+    });
+    const { rawToken } = await createSelfServiceToken(appointmentId);
+    await getPrisma().selfServiceToken.updateMany({
+      where: { appointmentId },
+      data: { revokedAt: new Date() },
+    });
+
+    const res = await postReschedule(
+      request("POST", `/api/appointments/${rawToken}/reschedule`, {
+        startTime: localStart(DAY, "12:00").toISOString(),
+      }),
+      { params: Promise.resolve({ token: rawToken }) },
+    );
+    expect(res.status).toBe(410);
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("TOKEN_REVOKED");
+  });
+
+  it("rejects a cross-site reschedule (CSRF origin guard)", async () => {
+    vi.stubEnv("APP_URL", "https://orthocare-clinic.vercel.app");
+    const appointmentId = await bookOnline("11:00");
+    const { rawToken } = await confirmAndIssueToken(appointmentId);
+
+    const res = await postReschedule(
+      new Request(`http://localhost/api/appointments/${rawToken}/reschedule`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          origin: "https://evil.example",
+        },
+        body: JSON.stringify({ startTime: localStart(DAY, "12:00").toISOString() }),
+      }),
+      { params: Promise.resolve({ token: rawToken }) },
+    );
+    expect(res.status).toBe(403);
+  });
+});
+
 describe("self-service rate limiting", () => {
   it("rejects lookups beyond the per-IP limit", async () => {
     const ip = "203.0.113.99";

@@ -8,7 +8,7 @@
 /** The raw token does not match any stored token hash. Maps to HTTP 404. */
 export class SelfServiceTokenNotFoundError extends Error {
   constructor() {
-    super("This link is not valid.");
+    super("Ce lien n'est pas valide.");
     this.name = "SelfServiceTokenNotFoundError";
   }
 }
@@ -16,7 +16,7 @@ export class SelfServiceTokenNotFoundError extends Error {
 /** The token was already consumed by a cancel/reschedule. Maps to HTTP 410. */
 export class SelfServiceTokenUsedError extends Error {
   constructor() {
-    super("This link has already been used.");
+    super("Ce lien a déjà été utilisé.");
     this.name = "SelfServiceTokenUsedError";
   }
 }
@@ -24,7 +24,7 @@ export class SelfServiceTokenUsedError extends Error {
 /** The token was revoked (e.g. rotated after a reschedule). Maps to HTTP 410. */
 export class SelfServiceTokenRevokedError extends Error {
   constructor() {
-    super("This link has been revoked.");
+    super("Ce lien a été révoqué.");
     this.name = "SelfServiceTokenRevokedError";
   }
 }
@@ -32,7 +32,7 @@ export class SelfServiceTokenRevokedError extends Error {
 /** The token has passed its expiry. Maps to HTTP 410. */
 export class SelfServiceTokenExpiredError extends Error {
   constructor() {
-    super("This link has expired.");
+    super("Ce lien a expiré.");
     this.name = "SelfServiceTokenExpiredError";
   }
 }
@@ -40,7 +40,7 @@ export class SelfServiceTokenExpiredError extends Error {
 /** The appointment is no longer PENDING/CONFIRMED (cancelled, completed…). */
 export class AppointmentNotActiveError extends Error {
   constructor() {
-    super("This appointment can no longer be changed.");
+    super("Ce rendez-vous ne peut plus être modifié.");
     this.name = "AppointmentNotActiveError";
   }
 }
@@ -49,7 +49,7 @@ export class AppointmentNotActiveError extends Error {
  * confirmation SMS). */
 export class AppointmentNotConfirmedError extends Error {
   constructor() {
-    super("Only confirmed appointments can receive a self-service link.");
+    super("Seuls les rendez-vous confirmés reçoivent un lien de gestion.");
     this.name = "AppointmentNotConfirmedError";
   }
 }

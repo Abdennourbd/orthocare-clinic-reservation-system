@@ -138,7 +138,6 @@
     "errAppointmentUnavailable": "Ce rendez-vous ne peut plus être modifié.",
     "errRateLimited": "Trop de tentatives. Merci de réessayer plus tard.",
     "errGeneric": "Une erreur est survenue. Merci de réessayer.",
-    "errConflict": "Ce créneau vient d'être pris. Merci d'en choisir un autre.",
-    "errNoSlots": "Aucun créneau disponible ce jour-là. Choisissez un autre jour."
+    "errConflict": "Ce créneau vient d'être pris. Merci d'en choisir un autre."
   }
 }

@@ -1,10 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { clinicNoon } from "@/lib/time/clinicTime";
-import { rescheduleSchema } from "@/schemas/selfService";
-import TimeGrid, { type SlotDto } from "@/components/public/BookingWizard/TimeGrid";
+import RescheduleStep from "./RescheduleStep";
+import {
+  api,
+  cardClass,
+  dangerButtonClass,
+  errorKey,
+  primaryButtonClass,
+  secondaryButtonClass,
+  type ApiError,
+} from "./shared";
 
 // Self-service appointment manager (Task 8). Fetch = the min-disclosure GET,
 // then cancel / reschedule into an available slot. All requests are to our own
@@ -26,59 +34,7 @@ type SelfServiceLookup = {
   meta: { today: string; maxDate: string };
 };
 
-type SlotResponse = { available: SlotDto[]; occupied: SlotDto[] };
-
-type ApiError = Error & { code?: string; status?: number };
-
-type Mode = "view" | "confirmCancel" | "reschedule" | "busy" | "done";
-
-const cardClass =
-  "rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm sm:p-7";
-
-const primaryButtonClass =
-  "inline-flex items-center justify-center gap-2 rounded-full bg-teal-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-teal-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-600 disabled:cursor-not-allowed disabled:opacity-60";
-
-const secondaryButtonClass =
-  "inline-flex items-center justify-center gap-1.5 rounded-full border border-zinc-300 bg-white px-5 py-2.5 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-600";
-
-const dangerButtonClass =
-  "inline-flex items-center justify-center gap-2 rounded-full bg-red-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-red-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-600 disabled:cursor-not-allowed disabled:opacity-60";
-
-function errorKey(code?: string): string {
-  switch (code) {
-    case "TOKEN_NOT_FOUND":
-      return "errTokenNotFound";
-    case "TOKEN_EXPIRED":
-      return "errTokenExpired";
-    case "TOKEN_USED":
-      return "errTokenUsed";
-    case "TOKEN_REVOKED":
-      return "errTokenRevoked";
-    case "APPOINTMENT_UNAVAILABLE":
-      return "errAppointmentUnavailable";
-    case "RATE_LIMITED":
-      return "errRateLimited";
-    case "SLOT_CONFLICT":
-      return "errConflict";
-    default:
-      return "errGeneric";
-  }
-}
-
-async function api<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, init);
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    const err = new Error(
-      (body as { error?: { message?: string } }).error?.message ??
-        `HTTP ${res.status}`,
-    ) as ApiError;
-    err.code = (body as { error?: { code?: string } }).error?.code;
-    err.status = res.status;
-    throw err;
-  }
-  return body as T;
-}
+type Mode = "view" | "confirmCancel" | "reschedule" | "done";
 
 export default function AppointmentManager({ token }: { token: string }) {
   const t = useTranslations("SelfService");
@@ -87,38 +43,20 @@ export default function AppointmentManager({ token }: { token: string }) {
   const [lookup, setLookup] = useState<SelfServiceLookup | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [mode, setMode] = useState<Mode>("view");
-  const [busyAction, setBusyAction] = useState<"cancel" | "reschedule" | null>(
-    null,
-  );
+  const [cancelling, setCancelling] = useState(false);
   const [doneAction, setDoneAction] = useState<"cancel" | "reschedule" | null>(
     null,
   );
-  const [date, setDate] = useState("");
-  const [slots, setSlots] = useState<SlotResponse | null>(null);
-  const [slotsLoading, setSlotsLoading] = useState(false);
-  const [slotsError, setSlotsError] = useState<ApiError | null>(null);
-  const [selectedStartUTC, setSelectedStartUTC] = useState<string | null>(null);
 
-  /** Fetch one day's slots for the reschedule picker. */
-  const loadSlotsFor = useCallback(
-    async (data: SelfServiceLookup, d: string) => {
-      setSlotsLoading(true);
-      setSlotsError(null);
-      setSlots(null);
-      setSelectedStartUTC(null);
-      try {
-        const body = await api<SlotResponse>(
-          `/api/slots?serviceId=${encodeURIComponent(data.appointment.serviceId)}&date=${d}&locale=${locale}`,
-        );
-        setSlots(body);
-      } catch (e) {
-        setSlotsError(e as ApiError);
-      } finally {
-        setSlotsLoading(false);
-      }
-    },
-    [locale],
-  );
+  // Focus management: move focus to the confirm dialog when it opens and to the
+  // success heading when an action completes, so keyboard/screen-reader users
+  // aren't left on a removed button.
+  const confirmBoxRef = useRef<HTMLDivElement>(null);
+  const successHeadingRef = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    if (mode === "confirmCancel") confirmBoxRef.current?.focus();
+    if (mode === "done") successHeadingRef.current?.focus();
+  }, [mode]);
 
   useEffect(() => {
     let cancelled = false;
@@ -126,8 +64,6 @@ export default function AppointmentManager({ token }: { token: string }) {
       .then((body) => {
         if (cancelled) return;
         setLookup(body);
-        setDate(body.meta.today);
-        void loadSlotsFor(body, body.meta.today);
       })
       .catch((e: ApiError) => {
         if (!cancelled) setError(e);
@@ -135,12 +71,25 @@ export default function AppointmentManager({ token }: { token: string }) {
     return () => {
       cancelled = true;
     };
-  }, [token, locale, loadSlotsFor]);
+  }, [token, locale]);
 
-  const onDateChange = (d: string) => {
-    setDate(d);
-    if (lookup) void loadSlotsFor(lookup, d);
-  };
+  const doCancel = useCallback(async () => {
+    setCancelling(true);
+    try {
+      await api(`/api/appointments/${encodeURIComponent(token)}/cancel`, {
+        method: "POST",
+      });
+      setDoneAction("cancel");
+      setMode("done");
+    } catch (e) {
+      // Unrecoverable for this flow (token dead, network, rate limit) — the
+      // top-level error card explains the situation.
+      setError(e as ApiError);
+      setMode("view");
+    } finally {
+      setCancelling(false);
+    }
+  }, [token]);
 
   const dateLabel = useMemo(() => {
     if (!lookup) return "";
@@ -151,43 +100,6 @@ export default function AppointmentManager({ token }: { token: string }) {
       year: "numeric",
     }).format(clinicNoon(lookup.appointment.localDate));
   }, [lookup, locale]);
-
-  const doCancel = async () => {
-    setBusyAction("cancel");
-    try {
-      await api(`/api/appointments/${encodeURIComponent(token)}/cancel`, {
-        method: "POST",
-      });
-      setDoneAction("cancel");
-      setMode("done");
-    } catch (e) {
-      setError(e as ApiError);
-      setMode("view");
-    } finally {
-      setBusyAction(null);
-    }
-  };
-
-  const doReschedule = async () => {
-    if (!selectedStartUTC) return;
-    setBusyAction("reschedule");
-    try {
-      const parsed = rescheduleSchema.safeParse({ startTime: selectedStartUTC });
-      if (!parsed.success) throw new Error("invalid startTime");
-      await api(`/api/appointments/${encodeURIComponent(token)}/reschedule`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(parsed.data),
-      });
-      setDoneAction("reschedule");
-      setMode("done");
-    } catch (e) {
-      setError(e as ApiError);
-      setMode("reschedule");
-    } finally {
-      setBusyAction(null);
-    }
-  };
 
   if (error) {
     return (
@@ -216,7 +128,11 @@ export default function AppointmentManager({ token }: { token: string }) {
     return (
       <div className="mx-auto max-w-xl px-4 py-16 sm:px-6">
         <div className={cardClass}>
-          <h1 className="text-2xl font-bold text-zinc-900">
+          <h1
+            ref={successHeadingRef}
+            tabIndex={-1}
+            className="text-2xl font-bold text-zinc-900"
+          >
             {t(
               doneAction === "cancel"
                 ? "successCancelTitle"
@@ -293,7 +209,16 @@ export default function AppointmentManager({ token }: { token: string }) {
         )}
 
         {mode === "confirmCancel" && (
-          <div className="mt-6 rounded-xl border border-red-200 bg-red-50 p-4">
+          <div
+            ref={confirmBoxRef}
+            tabIndex={-1}
+            role="alertdialog"
+            aria-label={t("cancelConfirmTitle")}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") setMode("view");
+            }}
+            className="mt-6 rounded-xl border border-red-200 bg-red-50 p-4 outline-none"
+          >
             <p className="font-semibold text-zinc-900">
               {t("cancelConfirmTitle")}
             </p>
@@ -304,15 +229,15 @@ export default function AppointmentManager({ token }: { token: string }) {
               <button
                 type="button"
                 onClick={() => void doCancel()}
-                disabled={busyAction !== null}
+                disabled={cancelling}
                 className={dangerButtonClass}
               >
-                {busyAction === "cancel" ? t("cancelling") : t("confirmCancel")}
+                {cancelling ? t("cancelling") : t("confirmCancel")}
               </button>
               <button
                 type="button"
                 onClick={() => setMode("view")}
-                disabled={busyAction !== null}
+                disabled={cancelling}
                 className={secondaryButtonClass}
               >
                 {t("keepAppointment")}
@@ -322,78 +247,18 @@ export default function AppointmentManager({ token }: { token: string }) {
         )}
 
         {mode === "reschedule" && (
-          <div className="mt-6 space-y-4">
-            <p className="text-sm text-zinc-600">{t("rescheduleIntro")}</p>
-
-            <div>
-              <label
-                htmlFor="self-service-date"
-                className="mb-1.5 block text-sm font-medium text-zinc-700"
-              >
-                {t("chooseDate")}
-              </label>
-              <input
-                id="self-service-date"
-                type="date"
-                value={date}
-                min={lookup.meta.today}
-                max={lookup.meta.maxDate}
-                onChange={(e) => onDateChange(e.target.value)}
-                className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-600"
-              />
-            </div>
-
-            {slotsLoading && (
-              <p role="status" className="text-sm text-zinc-500">
-                {t("loading")}
-              </p>
-            )}
-
-            {slotsError && (
-              <p role="alert" className="text-sm text-red-600">
-                {t(errorKey(slotsError.code))}
-              </p>
-            )}
-
-            {!slotsLoading && !slotsError && slots && (
-              <TimeGrid
-                dateLabel={new Intl.DateTimeFormat(locale, {
-                  weekday: "long",
-                  day: "numeric",
-                  month: "long",
-                  year: "numeric",
-                }).format(clinicNoon(date))}
-                available={slots.available}
-                occupied={slots.occupied}
-                selectedStartUTC={selectedStartUTC}
-                onSelect={(slot) => setSelectedStartUTC(slot.startUTC)}
-              />
-            )}
-
-            <div className="flex flex-wrap gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => void doReschedule()}
-                disabled={busyAction !== null || !selectedStartUTC}
-                className={primaryButtonClass}
-              >
-                {busyAction === "reschedule"
-                  ? t("rescheduling")
-                  : t("confirmReschedule")}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setMode("view");
-                  setError(null);
-                }}
-                disabled={busyAction !== null}
-                className={secondaryButtonClass}
-              >
-                {t("back")}
-              </button>
-            </div>
-          </div>
+          <RescheduleStep
+            token={token}
+            serviceId={lookup.appointment.serviceId}
+            today={lookup.meta.today}
+            maxDate={lookup.meta.maxDate}
+            onDone={() => {
+              setDoneAction("reschedule");
+              setMode("done");
+            }}
+            onBack={() => setMode("view")}
+            onFatalError={(e) => setError(e)}
+          />
         )}
       </div>
     </div>

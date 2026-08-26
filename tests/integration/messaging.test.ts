@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { getPrisma } from "@/lib/db";
 import {
+  AppointmentStatus,
   NotificationType,
   Role,
   SmsMessageType,
@@ -9,6 +10,8 @@ import {
 import { sendMessage } from "@/lib/messaging/index";
 import type { MessageProvider } from "@/lib/messaging/provider";
 import { notifyBookingCreated } from "@/lib/messaging/notifyBookingCreated";
+import { sendAppointmentRescheduled } from "@/lib/messaging/appointmentChanges";
+import { AppointmentNotConfirmedError } from "@/lib/selfservice/errors";
 import { POST as postAppointments } from "@/app/api/appointments/route";
 
 let serviceId: string;
@@ -418,5 +421,42 @@ describe("POST /api/appointments end-to-end", () => {
     expect(res.status).toBe(422);
     expect(await getPrisma().smsMessage.count()).toBe(0);
     expect(await getPrisma().notification.count()).toBe(0);
+  });
+});
+
+describe("sendAppointmentRescheduled — CONFIRMED requirement", () => {
+  it("refuses to issue a reschedule link for a non-CONFIRMED new appointment", async () => {
+    // `createSelfServiceToken` only issues tokens for CONFIRMED appointments,
+    // so the reschedule message (which carries the rotated link) must be sent
+    // for a CONFIRMED new appointment. Task 14's staff reschedule must pass
+    // `newStatus: CONFIRMED` (as `selfServiceReschedule` does) or the patient
+    // silently gets no message — this test locks that contract.
+    const patient = await makePatient();
+    const oldAppointment = await makeAppointment(patient.id);
+    const newPending = await getPrisma().appointment.create({
+      data: {
+        patientId: patient.id,
+        serviceId,
+        startTime: localStart("2026-08-29", "12:00"),
+        endTime: localStart("2026-08-29", "12:30"),
+        status: AppointmentStatus.PENDING,
+      },
+    });
+
+    await expect(
+      sendAppointmentRescheduled(oldAppointment.id, newPending.id),
+    ).rejects.toThrow(AppointmentNotConfirmedError);
+
+    // No token and no message were created for the pending appointment.
+    expect(
+      await getPrisma().selfServiceToken.count({
+        where: { appointmentId: newPending.id },
+      }),
+    ).toBe(0);
+    expect(
+      await getPrisma().smsMessage.count({
+        where: { appointmentId: oldAppointment.id, type: SmsMessageType.RESCHEDULE },
+      }),
+    ).toBe(0);
   });
 });

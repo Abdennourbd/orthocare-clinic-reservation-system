@@ -124,6 +124,32 @@ Delivered per `tasks/todo.md` Task 8 and `tasks/plan.md` (§Self-service link,
   new CONFIRMED, old token dead, audit `SELF_SERVICE_RESCHEDULED`, fresh token
   live.
 
+## Post-review fixes (code review of this task)
+
+- **Reschedule `SLOT_CONFLICT` handled inline** (was a dead-end error card). The
+  picker now stays open, shows the conflict message beside the grid, clears the
+  selection and reloads the day so the just-taken slot renders as occupied.
+- **Stale-slot race guard** in the reschedule picker (the `dateRef` pattern from
+  the booking wizard) so a slow response for a previous date can't overwrite the
+  active date's slots.
+- **Cancel is now atomic**: the slot release *and* the single-use token
+  consumption run in one transaction (via the exported `releaseSlotInTx`), with
+  the `slot-freed` event emitted after commit. Reschedule keeps post-commit
+  rotation deliberately — rotating before `rescheduleSlot` would break retry on
+  a taken slot, and the old appointment's RESCHEDULED status already deads its
+  token.
+- **Self-service API errors translated to French** (were English).
+- **`AppointmentManager` decomposed** into `shared.ts` (fetch wrapper, error
+  mapping, button styles), `RescheduleStep.tsx` and a slimmer
+  `AppointmentManager.tsx` (401 → 265 lines).
+- **a11y**: focus moves to the cancel confirm dialog and to the success heading;
+  Escape closes the confirm dialog.
+- **Removed dead `errNoSlots` i18n keys** and the redundant
+  `cancelReasonValue` audit field.
+- **New tests**: reschedule negatives (used/expired/revoked token → 410, CSRF →
+  403) and a test locking the CONFIRMED-new-appointment contract that Task 14's
+  staff reschedule must honor. Suite now **193 passing**.
+
 ## Notes / deferred
 
 - **No staff route to send the confirmation** yet — that's Task 14

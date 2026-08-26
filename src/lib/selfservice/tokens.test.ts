@@ -95,16 +95,16 @@ describe("createSelfServiceToken", () => {
     );
   });
 
-  it("rotates: issuing a second token revokes the first (one live token per appointment)", async () => {
+  it("does not revoke an existing token on issue (rotation is the reschedule flow's job)", async () => {
     const appointment = await makeAppointment();
 
     const first = await createSelfServiceToken(appointment.id);
     const second = await createSelfServiceToken(appointment.id);
 
-    // The first token is now revoked; the second is live.
-    await expect(verifySelfServiceToken(first.rawToken)).rejects.toThrow(
-      SelfServiceTokenRevokedError,
-    );
+    // Both remain live — a second issue must not silently revoke the first,
+    // or two concurrent confirmations could leave the SMS carrying an
+    // already-revoked link.
+    await expect(verifySelfServiceToken(first.rawToken)).resolves.toBeTruthy();
     const verified = await verifySelfServiceToken(second.rawToken);
     expect(verified.appointment.id).toBe(appointment.id);
 
@@ -112,7 +112,7 @@ describe("createSelfServiceToken", () => {
       where: { appointmentId: appointment.id },
     });
     expect(rows).toHaveLength(2);
-    expect(rows.filter((r) => r.revokedAt).length).toBe(1);
+    expect(rows.filter((r) => r.revokedAt).length).toBe(0);
   });
 });
 

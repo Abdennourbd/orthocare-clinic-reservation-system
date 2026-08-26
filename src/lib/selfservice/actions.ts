@@ -6,8 +6,9 @@ import {
   CancelReason,
   type Appointment,
 } from "@/generated/prisma/client";
-import { releaseSlot } from "@/lib/booking/releaseSlot";
+import { releaseSlotInTx } from "@/lib/booking/releaseSlot";
 import { rescheduleSlot } from "@/lib/booking/rescheduleSlot";
+import { emitSlotFreed } from "@/lib/booking/events";
 import { logAction } from "@/lib/audit/logAction";
 import { localized, type LocalizedField } from "@/lib/i18n/localized";
 import {
@@ -43,16 +44,32 @@ export async function selfServiceCancel(
 ): Promise<SelfServiceCancelResult> {
   const { token, appointment } = await verifySelfServiceToken(rawToken);
 
-  const released = await releaseSlot(
-    appointment.id,
-    CancelReason.PATIENT_SELF_SERVICE,
-  );
+  // Release the slot AND consume the single-use token in ONE transaction, so
+  // a failure can never leave the appointment cancelled with an unconsumed
+  // token (or an active appointment with a dead one). The `updateMany` guard
+  // inside `releaseSlotInTx` still makes a concurrent double-cancel lose here.
+  // Mirrors `releaseSlot`'s contract: the slot-freed event fires only after
+  // commit.
+  const released = await getPrisma().$transaction(async (tx) => {
+    const r = await releaseSlotInTx(
+      appointment.id,
+      CancelReason.PATIENT_SELF_SERVICE,
+      AppointmentStatus.CANCELLED,
+      tx,
+    );
+    await tx.selfServiceToken.update({
+      where: { id: token.id },
+      data: { usedAt: new Date() },
+    });
+    return r;
+  });
 
-  // Single-use: mark the token consumed. Only reached if releaseSlot succeeded
-  // (it is atomic, so a concurrent double-cancel loses here).
-  await getPrisma().selfServiceToken.update({
-    where: { id: token.id },
-    data: { usedAt: new Date() },
+  emitSlotFreed({
+    appointmentId: released.id,
+    serviceId: released.serviceId,
+    resourceId: released.resourceId,
+    startTime: released.startTime,
+    endTime: released.endTime,
   });
 
   // Side effects never fail the cancel itself.
@@ -74,8 +91,7 @@ export async function selfServiceCancel(
     "Appointment",
     appointment.id,
     {
-      cancelReason: "patient-self-service",
-      cancelReasonValue: CancelReason.PATIENT_SELF_SERVICE,
+      cancelReason: CancelReason.PATIENT_SELF_SERVICE,
       serviceId: appointment.serviceId,
       startTime: appointment.startTime.toISOString(),
     },
@@ -116,6 +132,15 @@ export async function selfServiceReschedule(
 
   // Rotate: the old token is dead (used + revoked), a fresh one is issued for
   // the new appointment inside the reschedule message helper.
+  //
+  // NOTE on ordering: the rotation runs AFTER `rescheduleSlot` commits rather
+  // than inside its transaction, because `rescheduleSlot` is a shared domain
+  // function that must not know about tokens — and rotating BEFORE it would
+  // leave the patient unable to retry when the new slot is taken (the
+  // transaction rolls back but the token is already dead). The status change
+  // alone enforces the security property: the old appointment becomes
+  // RESCHEDULED, so `verifySelfServiceToken` rejects its token even if this
+  // update were skipped.
   await getPrisma().selfServiceToken.update({
     where: { id: token.id },
     data: { usedAt: new Date(), revokedAt: new Date() },
