@@ -100,6 +100,7 @@
     "errorPhone": "Numéro de téléphone invalide. Ex : 0550 12 34 56.",
     "errorRequired": "Ce champ est obligatoire.",
     "errorEmail": "Adresse email invalide.",
-    "bookAnother": "Réserver un autre rendez-vous"
+    "bookAnother": "Réserver un autre rendez-vous",
+    "whatsappOptIn": "J'accepte d'être contacté(e) par WhatsApp pour confirmer mon rendez-vous et pour les rappels."
   }
 }

@@ -1,0 +1,159 @@
+import { getPrisma } from "@/lib/db";
+import {
+  SmsStatus,
+  type SmsMessage,
+  type SmsMessageType,
+} from "@/generated/prisma/client";
+import { MockProvider } from "./mock";
+import { TwilioProvider } from "./twilio";
+import { WhatsAppProvider } from "./whatsapp";
+import type { MessageProvider, SendMessageResult } from "./provider";
+import { isTransactional } from "./classify";
+import {
+  readMessageTemplate,
+  renderTemplate,
+  type MessageTemplateKey,
+} from "./templates";
+
+// Dispatcher + provider factory (plan.md §Messaging). The provider is selected
+// once per process by MESSAGE_PROVIDER; `sendMessage` is the single gate
+// through which every outbound message flows. It enforces the opt-out split
+// here so no feature can bypass it, and it owns the SmsMessage row lifecycle
+// (the "log to DB" for the mock provider, the audit record for real channels).
+
+const mockProvider = new MockProvider();
+const twilioProvider = new TwilioProvider();
+const whatsappProvider = new WhatsAppProvider();
+
+/** Select the active provider from `MESSAGE_PROVIDER`. Unknown values fall
+ * back to mock (a typo in an env var must never take down a booking). */
+export function getProvider(): MessageProvider {
+  const env = (process.env.MESSAGE_PROVIDER ?? "mock").trim().toLowerCase();
+  switch (env) {
+    case "twilio":
+      return twilioProvider;
+    case "whatsapp":
+      return whatsappProvider;
+    case "mock":
+      return mockProvider;
+    default:
+      console.warn(
+        `Unknown MESSAGE_PROVIDER "${env}" — falling back to mock.`,
+      );
+      return mockProvider;
+  }
+}
+
+export type SendMessageInput = {
+  type: SmsMessageType;
+  /** Owning patient. Used for the opt-out check on non-transactional types. */
+  patientId: string;
+  /** E.164 recipient. */
+  to: string;
+  /** Template key into `messageTemplates` Settings. */
+  templateKey: MessageTemplateKey;
+  /** Placeholders substituted into the template. */
+  vars: Record<string, string>;
+  appointmentId?: string;
+  batchId?: string;
+  sentById?: string;
+};
+
+/**
+ * Send one outbound message through the active provider and record it in
+ * `SmsMessage`.
+ *
+ * - **Opt-out:** non-transactional types are suppressed (returns null, no row)
+ *   for patients with `messagingOptOut`. Transactional types always send.
+ * - **Idempotent:** the unique `(appointmentId, type)` index means a retried
+ *   or overlapping send of an automated message returns the existing row and
+ *   does not message the patient twice.
+ * - A provider failure — whether it *returns* a failed result or *throws* — is
+ *   recorded on the row (status FAILED + error) and the row is still returned,
+ *   so a messaging failure never fails the caller's operation.
+ *
+ * @param provider overrides the env-selected provider (used by tests).
+ */
+export async function sendMessage(
+  input: SendMessageInput,
+  provider: MessageProvider = getProvider(),
+): Promise<SmsMessage | null> {
+  const prisma = getPrisma();
+
+  // 1. Opt-out gate (non-transactional only).
+  if (!isTransactional(input.type)) {
+    const patient = await prisma.patient.findUnique({
+      where: { id: input.patientId },
+      select: { messagingOptOut: true },
+    });
+    if (patient?.messagingOptOut) return null;
+  }
+
+  // 2. Render the body from the (admin-editable) template.
+  const body = renderTemplate(
+    await readMessageTemplate(input.templateKey),
+    input.vars,
+  );
+
+  // 3. Record the send. A unique-violation here means this appointment+type
+  // was already messaged (a retried cron/route) — return the existing row.
+  let message: SmsMessage;
+  try {
+    message = await prisma.smsMessage.create({
+      data: {
+        to: input.to,
+        body,
+        patientId: input.patientId,
+        type: input.type,
+        templateId: input.templateKey,
+        batchId: input.batchId,
+        provider: provider.name,
+        status: SmsStatus.SENDING,
+        appointmentId: input.appointmentId,
+        sentById: input.sentById,
+      },
+    });
+  } catch (e) {
+    if (isUniqueViolation(e)) {
+      const existing = await prisma.smsMessage.findFirst({
+        where: {
+          appointmentId: input.appointmentId,
+          type: input.type,
+        },
+        orderBy: { createdAt: "asc" },
+      });
+      return existing;
+    }
+    throw e;
+  }
+
+  // 4. Deliver, then persist the outcome. A provider that throws is recorded
+  // as FAILED (not left SENDING) so a transient network error never leaves a
+  // dangling row and never fails the caller's operation.
+  let result: SendMessageResult;
+  try {
+    result = await provider.send({ to: input.to, body: message.body });
+  } catch (e) {
+    result = {
+      ok: false,
+      status: SmsStatus.FAILED,
+      error: e instanceof Error ? e.message : "Message provider error",
+    };
+  }
+  return prisma.smsMessage.update({
+    where: { id: message.id },
+    data: {
+      status: result.status,
+      error: result.error ?? null,
+      sentAt: result.ok ? new Date() : null,
+    },
+  });
+}
+
+function isUniqueViolation(e: unknown): boolean {
+  return (
+    typeof e === "object" &&
+    e !== null &&
+    (e as { code?: string }).code === "P2002"
+  );
+}

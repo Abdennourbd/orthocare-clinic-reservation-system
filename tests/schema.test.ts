@@ -1,6 +1,11 @@
 import { describe, it, expect } from "vitest";
 import { getPrisma } from "@/lib/db";
-import { Role } from "@/generated/prisma/client";
+import {
+  NotificationType,
+  Role,
+  SmsMessageType,
+  SmsStatus,
+} from "@/generated/prisma/client";
 
 // Per-locale fields are stored as JSON columns; narrow them to a known shape.
 type LocaleObject = { fr?: string; ar?: string; en?: string };
@@ -148,5 +153,89 @@ describe("Schema smoke test (Task 3a)", () => {
       include: { createdBy: true },
     });
     expect(fetched?.createdBy.email).toBe("content-admin-test@orthocare.com");
+  });
+
+  it("can create and read SmsMessage and Notification (Task 7)", async () => {
+    const prisma = getPrisma();
+
+    const staff = await prisma.user.create({
+      data: {
+        name: "Receptionist",
+        email: "receptionist-test@orthocare.com",
+        passwordHash: "dummyhash",
+        role: Role.RECEPTIONIST,
+      },
+    });
+
+    const patient = await prisma.patient.create({
+      data: {
+        firstName: "Sara",
+        lastName: "Haddad",
+        phone: "0550777888",
+        phoneE164: "+213550777888",
+        preferredLocale: "ar",
+      },
+    });
+    expect(patient.preferredLocale).toBe("ar");
+
+    const service = await prisma.service.create({
+      data: {
+        slug: "msg-service",
+        name: { fr: "Test", ar: "اختبار", en: "Test" },
+        description: { fr: "Desc", ar: "وصف", en: "Desc" },
+        durationMinutes: 30,
+      },
+    });
+
+    const appointment = await prisma.appointment.create({
+      data: {
+        patientId: patient.id,
+        serviceId: service.id,
+        startTime: new Date("2026-08-29T10:00:00.000Z"),
+        endTime: new Date("2026-08-29T10:30:00.000Z"),
+      },
+    });
+
+    const sms = await prisma.smsMessage.create({
+      data: {
+        to: patient.phoneE164,
+        body: "Bonjour Sara",
+        patientId: patient.id,
+        type: SmsMessageType.BOOKING_RECEIVED,
+        provider: "mock",
+        status: SmsStatus.SENT,
+        appointmentId: appointment.id,
+        sentAt: new Date(),
+      },
+    });
+    expect(sms.type).toBe(SmsMessageType.BOOKING_RECEIVED);
+    expect(sms.status).toBe(SmsStatus.SENT);
+
+    const notification = await prisma.notification.create({
+      data: {
+        userId: staff.id,
+        type: NotificationType.NEW_BOOKING,
+        payload: { appointmentId: appointment.id, patientName: "Sara Haddad" },
+      },
+    });
+    expect(notification.type).toBe(NotificationType.NEW_BOOKING);
+    expect((notification.payload as { patientName: string }).patientName).toBe(
+      "Sara Haddad",
+    );
+
+    // The unique (appointmentId, type) index rejects a duplicate automated send.
+    await expect(
+      prisma.smsMessage.create({
+        data: {
+          to: patient.phoneE164,
+          body: "dup",
+          patientId: patient.id,
+          type: SmsMessageType.BOOKING_RECEIVED,
+          provider: "mock",
+          status: SmsStatus.SENT,
+          appointmentId: appointment.id,
+        },
+      }),
+    ).rejects.toThrow();
   });
 });

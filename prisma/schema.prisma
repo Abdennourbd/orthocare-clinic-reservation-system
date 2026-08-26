@@ -46,6 +46,8 @@ model User {
   patientsCreated    Patient[] @relation("PatientCreatedBy")
   patientsUpdated    Patient[] @relation("PatientUpdatedBy")
   scheduleExceptions ScheduleException[]
+  smsMessagesSent    SmsMessage[]
+  notifications      Notification[]
 }
 
 model Patient {
@@ -62,6 +64,13 @@ model Patient {
   consentAt          DateTime?
   consentVersion     String?
   messagingOptOut    Boolean   @default(false)
+  
+  // Messaging channel preferences (Task 7)
+  // Language the patient booked in — later SMS/WhatsApp tasks read it so they
+  // don't have to ask again. WhatsApp opt-in is Meta's documented-opt-in
+  // requirement for business-initiated messages.
+  preferredLocale    String    @default("fr")
+  whatsappOptIn      Boolean   @default(false)
   
   // Erasure request
   anonymizedAt       DateTime?
@@ -80,6 +89,7 @@ model Patient {
 
   appointments       Appointment[]
   waitlistEntries    WaitlistEntry[]
+  smsMessages        SmsMessage[]
 
   @@index([phoneE164])
 }
@@ -159,6 +169,8 @@ model Appointment {
   
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
+
+  smsMessages        SmsMessage[]
 }
 
 // -----------------------------------------------------------------------------
@@ -259,4 +271,79 @@ model WaitlistEntry {
   updatedAt  DateTime       @updatedAt
 
   @@index([serviceId, active])
+}
+
+// -----------------------------------------------------------------------------
+// Task 7: Messaging (SmsMessage + Notification) — 3c schema slice.
+//
+// Every outbound message is recorded in `SmsMessage` regardless of channel
+// (SMS or WhatsApp later); `provider` records which channel was actually used
+// so delivery cost and WhatsApp coverage can be measured. The unique index on
+// (appointmentId, type) makes automated sends idempotent: a retried cron or a
+// retried route can never message the same appointment twice.
+// -----------------------------------------------------------------------------
+
+enum SmsMessageType {
+  BOOKING_RECEIVED // "request received, we will call to confirm" (Task 7)
+  CONFIRMATION     // staff confirmed after the phone call (Task 14)
+  REMINDER         // 24h-before reminder (Task 9)
+  NO_SHOW          // no-show follow-up (Task 9)
+  MANUAL           // staff single SMS (Task 16)
+  RESCHEDULE       // appointment moved (Tasks 8/14)
+  DELAY            // broadcast delay template (Task 16)
+  WAITLIST         // slot-freed offer (Task 17)
+  EXPIRED          // stale PENDING auto-cancelled (Task 9)
+}
+
+enum SmsStatus {
+  SENDING
+  SENT
+  FAILED
+}
+
+model SmsMessage {
+  id            String         @id @default(cuid())
+  to            String         // E.164 recipient
+  body          String
+  patientId     String?
+  patient       Patient?       @relation(fields: [patientId], references: [id])
+  type          SmsMessageType
+  templateId    String?        // lineage to the Settings template key
+  batchId       String?        // broadcast grouping (Task 16)
+  provider      String         // "mock" | "twilio" | "whatsapp" — channel used
+  status        SmsStatus
+  appointmentId String?
+  appointment   Appointment?   @relation(fields: [appointmentId], references: [id])
+  sentById      String?
+  sentBy        User?          @relation(fields: [sentById], references: [id])
+  error         String?
+  sentAt        DateTime?
+  createdAt     DateTime       @default(now())
+
+  // Idempotency guard for automated sends: one message of a given type per
+  // appointment. (MANUAL/broadcast messages have no appointmentId, so NULLs
+  // are not constrained — Postgres unique indexes allow multiple NULLs.)
+  @@unique([appointmentId, type])
+  @@index([patientId])
+  @@index([batchId])
+}
+
+enum NotificationType {
+  NEW_BOOKING
+  CANCELLATION
+  WAITLIST_MATCH
+  NO_SHOW_ALERT
+  PENDING_EXPIRED
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id])
+  type      NotificationType
+  payload   Json
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+
+  @@index([userId, readAt])
 }

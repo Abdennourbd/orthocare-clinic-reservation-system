@@ -23,6 +23,10 @@ export type CreateBookingPatientInput = {
   birthDate?: Date | null;
   consentAt: Date;
   consentVersion: string;
+  /** Locale the patient booked in (Task 7 — stored for later messaging). */
+  preferredLocale: string;
+  /** WhatsApp opt-in (Task 7 — Meta's documented-opt-in requirement). */
+  whatsappOptIn: boolean;
 };
 
 export type CreateBookingInput = {
@@ -131,6 +135,10 @@ async function upsertPatient(
     phone: input.phone,
     consentAt: input.consentAt,
     consentVersion: input.consentVersion,
+    // The latest booking reflects the patient's current language/WhatsApp
+    // preference, so re-booking in a different language updates it.
+    preferredLocale: input.preferredLocale,
+    whatsappOptIn: input.whatsappOptIn,
     active: true,
   };
 

@@ -33,6 +33,18 @@ export const bookingInputSchema = z.object({
    * slots. Validated against the booking policy (horizon, no past) server-side.
    */
   watchDates: z.array(watchDateSchema).max(10).optional(),
+  /**
+   * Locale the patient booked in. Stored as `Patient.preferredLocale` so later
+   * messaging tasks (confirm, reminders, waitlist) know the patient's language
+   * without asking again.
+   */
+  locale: z.enum(["fr", "ar", "en"]).default("fr"),
+  /**
+   * WhatsApp opt-in (Task 7). Meta's documented-opt-in requirement for any
+   * business-initiated WhatsApp message. Stored on the patient; the production
+   * WhatsApp channel (Task 22) may only message patients who opted in.
+   */
+  whatsappOptIn: z.boolean().default(false),
 });
 
 export type BookingInput = z.infer<typeof bookingInputSchema>;

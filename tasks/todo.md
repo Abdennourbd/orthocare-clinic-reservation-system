@@ -165,13 +165,15 @@ Task details + rationale live in `tasks/plan.md`. This is the working checklist.
 ## Task 7: Message abstraction + providers + `SmsMessage` + `Notification`
 **Description:** `MessageProvider` interface; `MockProvider` (logs to DB), `TwilioProvider` (stub, env-gated), `WhatsAppProvider` (stub, env-gated). Add `SmsMessage` + `Notification` models (3c schema). Booking-received message + staff `Notification` rows (NEW_BOOKING, one per active staff user). Provider selected via `MESSAGE_PROVIDER` env. The dispatcher enforces the **transactional vs non-transactional** split in one place: transactional messages always send; non-transactional ones are suppressed for `messagingOptOut` patients.
 **Acceptance criteria:**
-- [ ] Booking triggers message via provider (mock logs to SmsMessage)
-- [ ] Provider selected by env (`MESSAGE_PROVIDER=mock|twilio|whatsapp`)
-- [ ] Staff `Notification` rows created on new booking for every active staff user; queryable
-- [ ] SmsMessage history queryable by patientId / batchId
-- [ ] Opt-out respected for non-transactional types; transactional types still send (unit-tested both ways)
-- [ ] Message wording matches reality: a new online booking is **"request received, we will call to confirm"**, not "confirmed"
-- [ ] Unique index on `(appointmentId, type)` prevents duplicate automated sends
+- [x] Booking triggers message via provider (mock logs to SmsMessage)
+- [x] Provider selected by env (`MESSAGE_PROVIDER=mock|twilio|whatsapp`)
+- [x] Staff `Notification` rows created on new booking for every active staff user; queryable
+- [x] SmsMessage history queryable by patientId / batchId
+- [x] Opt-out respected for non-transactional types; transactional types still send (unit-tested both ways)
+- [x] Message wording matches reality: a new online booking is **"request received, we will call to confirm"**, not "confirmed"
+- [x] Unique index on `(appointmentId, type)` prevents duplicate automated sends
+- [x] Channel strategy decided: **WhatsApp-first + SMS fallback** (recorded in plan.md §Messaging with cost rationale); booking form captures `locale` + WhatsApp opt-in, stored on `Patient` (`preferredLocale`/`whatsappOptIn`) for later tasks
+**Verification:** `npm test` (158 passing incl. messaging suite), typecheck, lint, build clean. See `tasks/task7-summary.md`.
 **Verification:** Manual booking shows message log + notification; unit test on provider interface + dispatch + opt-out.
 **Dependencies:** Task 6
 **Estimated scope:** Medium (2–3 days)

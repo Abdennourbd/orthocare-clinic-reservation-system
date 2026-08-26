@@ -23,9 +23,11 @@ export type PatientFormErrors = {
 type PatientFormProps = {
   value: PatientFormValue;
   consent: boolean;
+  whatsappOptIn: boolean;
   errors: PatientFormErrors;
   onChange: (patch: Partial<PatientFormValue>) => void;
   onConsentChange: (checked: boolean) => void;
+  onWhatsappOptInChange: (checked: boolean) => void;
 };
 
 const inputClass = (invalid: boolean) =>
@@ -42,9 +44,11 @@ const inputClass = (invalid: boolean) =>
 export default function PatientForm({
   value,
   consent,
+  whatsappOptIn,
   errors,
   onChange,
   onConsentChange,
+  onWhatsappOptInChange,
 }: PatientFormProps) {
   const t = useTranslations("Booking");
 
@@ -115,6 +119,18 @@ export default function PatientForm({
             {errors.consent}
           </p>
         )}
+      </div>
+
+      <div>
+        <label className="flex items-start gap-3">
+          <input
+            type="checkbox"
+            checked={whatsappOptIn}
+            onChange={(e) => onWhatsappOptInChange(e.target.checked)}
+            className="mt-0.5 h-4 w-4 accent-teal-600"
+          />
+          <span className="text-sm text-zinc-700">{t("whatsappOptIn")}</span>
+        </label>
       </div>
     </div>
   );

@@ -176,6 +176,16 @@ async function main() {
     {
       key: "consentVersion",
       value: "1.0"
+    },
+    {
+      // Messaging templates (Task 7). French-only for now; the booking-received
+      // message is a REQUEST — the clinic still calls to confirm. Per-locale
+      // templates + the remaining keys (confirmation, reminder, …) land with
+      // their tasks. Editable from the dashboard (Task 21).
+      key: "messageTemplates",
+      value: {
+        bookingReceived: "Bonjour {firstName}, votre demande de rendez-vous {serviceName} le {date} à {time} a bien été reçue. La clinique vous appellera au {phone} pour la confirmer. Ortho'Care Clinic"
+      }
     }
   ];
 

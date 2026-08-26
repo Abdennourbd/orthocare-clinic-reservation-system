@@ -100,6 +100,7 @@
     "errorPhone": "Invalid phone number. e.g. 0550 12 34 56.",
     "errorRequired": "This field is required.",
     "errorEmail": "Invalid email address.",
-    "bookAnother": "Book another appointment"
+    "bookAnother": "Book another appointment",
+    "whatsappOptIn": "I agree to be contacted on WhatsApp to confirm my appointment and for reminders."
   }
 }

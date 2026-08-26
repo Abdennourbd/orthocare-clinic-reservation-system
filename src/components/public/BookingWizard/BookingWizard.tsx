@@ -137,6 +137,7 @@ export default function BookingWizard({
     birthDate: "",
   });
   const [consent, setConsent] = useState(false);
+  const [whatsappOptIn, setWhatsappOptIn] = useState(false);
   const [formErrors, setFormErrors] = useState<PatientFormErrors>({});
   const [watchDates, setWatchDates] = useState<string[]>([]);
   const [watchAddValue, setWatchAddValue] = useState("");
@@ -344,6 +345,8 @@ export default function BookingWizard({
       },
       consent,
       consentVersion,
+      locale,
+      whatsappOptIn,
     });
     if (!parsed.success) {
       setFieldErrorsFromZod(parsed);
@@ -368,6 +371,8 @@ export default function BookingWizard({
       consent,
       consentVersion,
       watchDates,
+      locale,
+      whatsappOptIn,
     };
 
     const parsed = bookingInputSchema.safeParse(payload);
@@ -610,9 +615,11 @@ export default function BookingWizard({
             <PatientForm
               value={patient}
               consent={consent}
+              whatsappOptIn={whatsappOptIn}
               errors={formErrors}
               onChange={(patch) => setPatient((p) => ({ ...p, ...patch }))}
               onConsentChange={setConsent}
+              onWhatsappOptInChange={setWhatsappOptIn}
             />
           </div>
           <div className="mt-6 flex gap-3">

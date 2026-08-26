@@ -76,6 +76,8 @@ const patientInput = {
   phoneE164: "+213551122334",
   consentAt: new Date(),
   consentVersion: "1.0",
+  preferredLocale: "fr",
+  whatsappOptIn: false,
 };
 
 describe("createBooking", () => {

@@ -6,6 +6,7 @@ import { createBooking } from "@/lib/booking/createBooking";
 import { SlotConflictError, PendingLimitError } from "@/lib/booking/bookSlot";
 import { validateWatchDates } from "@/lib/booking/watchDates";
 import { readBookingPolicy, readConsentVersion } from "@/lib/booking/policy";
+import { notifyBookingCreated } from "@/lib/messaging/notifyBookingCreated";
 import { ok, errorResponse } from "@/lib/api/http";
 import { isSameSiteOrigin } from "@/lib/security/origin";
 
@@ -130,9 +131,19 @@ export async function POST(request: Request): Promise<Response> {
           : null,
         consentAt: new Date(),
         consentVersion,
+        preferredLocale: parsed.data.locale,
+        whatsappOptIn: parsed.data.whatsappOptIn,
       },
       watchDates: parsed.data.watchDates,
     });
+
+    // Send the booking-received message + staff notification AFTER the
+    // transaction commits, and never let a messaging failure fail the booking.
+    try {
+      await notifyBookingCreated(appointment.id);
+    } catch (e) {
+      console.error("notifyBookingCreated failed", e);
+    }
 
     return ok(
       {
