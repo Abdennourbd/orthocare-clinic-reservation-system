@@ -10,6 +10,9 @@ export type RescheduleSlotInput = {
   reason: CancelReason;
   resourceId?: string | null;
   source?: BookSlotInput["source"];
+  /** Target status for the NEW appointment. Defaults to PENDING; self-service
+   * reschedule passes CONFIRMED (the patient was already confirmed by phone). */
+  newStatus?: AppointmentStatus;
 };
 
 export type RescheduleSlotResult = {
@@ -42,6 +45,7 @@ export async function rescheduleSlot(
           startUTC: input.newStartUTC,
           resourceId: input.resourceId,
           source: input.source,
+          status: input.newStatus,
         },
         tx,
       );

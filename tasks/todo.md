@@ -182,16 +182,16 @@ Task details + rationale live in `tasks/plan.md`. This is the working checklist.
 ## Task 8: Self-service link (cancel + reschedule)
 **Description:** `SelfServiceToken` model (3c schema: **tokenHash only — the raw token is never stored**, revocable, expiresAt, usedAt). Token embedded in the confirmation message. Public routes: `GET /api/appointments/[token]`, `POST .../cancel`, `POST .../reschedule`. Cancel and reschedule both route through `releaseSlot()` (Task 5) so the slot-freed event fires. Rescheduling issues a fresh token and revokes the old one.
 **Acceptance criteria:**
-- [ ] Token verifies (not expired, not used, not revoked)
-- [ ] Cancel frees the slot via `releaseSlot()`; token marked used
-- [ ] Reschedule only into available slots; calls `releaseSlot()` + `bookSlot()`
-- [ ] Actions audited **with actor `PATIENT`** + confirmation message sent on change
-- [ ] **Minimum disclosure:** the page shows only service, date/time, clinic info and first name — never phone, email, birth date, notes, history, documents or any other appointment
-- [ ] `Referrer-Policy: no-referrer` on the token page and **no third-party scripts** on it (otherwise an embedded widget receives the token in the `Referer` header)
-- [ ] Token lookups rate-limited; reschedule rotates the token and revokes the previous one
-- [ ] Negative tests: expired token, already-used token, revoked token, token for a different appointment — all rejected
-- [ ] Integration test: book → open link → cancel/reschedule → slot availability reflects change
-**Verification:** Manual flow + `npm test -- self-service`; confirm no third-party request fires on the token page.
+- [x] Token verifies (not expired, not used, not revoked)
+- [x] Cancel frees the slot via `releaseSlot()`; token marked used
+- [x] Reschedule only into available slots; calls `releaseSlot()` + `bookSlot()`
+- [x] Actions audited **with actor `PATIENT`** + confirmation message sent on change
+- [x] **Minimum disclosure:** the page shows only service, date/time, clinic info and first name — never phone, email, birth date, notes, history, documents or any other appointment
+- [x] `Referrer-Policy: no-referrer` on the token page and **no third-party scripts** on it (otherwise an embedded widget receives the token in the `Referer` header)
+- [x] Token lookups rate-limited; reschedule rotates the token and revokes the previous one
+- [x] Negative tests: expired token, already-used token, revoked token, token for a different appointment — all rejected
+- [x] Integration test: book → open link → cancel/reschedule → slot availability reflects change
+**Verification:** Manual flow + `npm test -- self-service`; confirm no third-party request fires on the token page. ✅ passed — see `tasks/task8-summary.md`.
 **Dependencies:** Task 7, Task 5 (releaseSlot)
 **Estimated scope:** Medium (2–3 days)
 **Skill:** A **secure-token design** skill (capability URLs, hashing at rest, expiry, replay protection, referrer leakage). This is a patient-facing credential in a forwardable SMS — the one place on the public site where a design mistake exposes real data.
@@ -246,8 +246,8 @@ Task details + rationale live in `tasks/plan.md`. This is the working checklist.
 
 ## Checkpoint: After Tasks 6-11 (Public booking + comms work end-to-end)
 - [x] Public booking flow works end-to-end, consent recorded
-- [ ] Booking-received message + self-service verified; `releaseSlot()` fires on self-service cancel
-- [ ] Token page exposes minimum data only and loads no third-party scripts
+- [x] Booking-received message + self-service verified; `releaseSlot()` fires on self-service cancel
+- [x] Token page exposes minimum data only and loads no third-party scripts
 - [ ] Reminders + no-show + expiry cron run against seeded data (mock SMS); **each run twice sends once**
 - [x] Rate limits reject a booking flood from one IP/phone
 - [ ] Google Reviews widget live in 3 locales; map embed + one-click directions working

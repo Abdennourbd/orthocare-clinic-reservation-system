@@ -48,6 +48,7 @@ model User {
   scheduleExceptions ScheduleException[]
   smsMessagesSent    SmsMessage[]
   notifications      Notification[]
+  auditLogs          AuditLog[]
 }
 
 model Patient {
@@ -171,6 +172,7 @@ model Appointment {
   updatedAt          DateTime          @updatedAt
 
   smsMessages        SmsMessage[]
+  selfServiceTokens  SelfServiceToken[]
 }
 
 // -----------------------------------------------------------------------------
@@ -285,11 +287,12 @@ model WaitlistEntry {
 
 enum SmsMessageType {
   BOOKING_RECEIVED // "request received, we will call to confirm" (Task 7)
-  CONFIRMATION     // staff confirmed after the phone call (Task 14)
+  CONFIRMATION     // staff confirmed after the phone call (Task 14); carries the self-service link (Task 8)
   REMINDER         // 24h-before reminder (Task 9)
   NO_SHOW          // no-show follow-up (Task 9)
   MANUAL           // staff single SMS (Task 16)
-  RESCHEDULE       // appointment moved (Tasks 8/14)
+  RESCHEDULE       // appointment moved (Tasks 8/14); carries the rotated self-service link (Task 8)
+  CANCELLED        // appointment cancelled by the patient via the self-service link (Task 8) or staff (Task 14)
   DELAY            // broadcast delay template (Task 16)
   WAITLIST         // slot-freed offer (Task 17)
   EXPIRED          // stale PENDING auto-cancelled (Task 9)
@@ -346,4 +349,98 @@ model Notification {
   createdAt DateTime         @default(now())
 
   @@index([userId, readAt])
+}
+
+// -----------------------------------------------------------------------------
+// Task 8: Self-service link (SelfServiceToken) — delivered now.
+//
+// A revocable capability URL embedded in the confirmation SMS. Grants exactly
+// two actions: cancel the appointment, or reschedule it into an available
+// slot. ONLY the SHA-256 hash of the raw token is stored (`tokenHash`); the
+// raw token is returned to the caller once (to build the SMS link) and never
+// persisted, so a DB leak cannot mint live tokens. Replay protection: a token
+// is rejected once `usedAt` or `revokedAt` is set, and after `expiresAt`.
+// Rescheduling revokes the previous token and issues a fresh one (rotation).
+// -----------------------------------------------------------------------------
+
+model SelfServiceToken {
+  id            String       @id @default(cuid())
+  /** SHA-256 of the raw token. The raw token is never stored. */
+  tokenHash     String       @unique
+  appointmentId String
+  appointment   Appointment  @relation(fields: [appointmentId], references: [id])
+  /** Set on a single-use action (cancel). */
+  usedAt        DateTime?
+  /** Set when the token is rotated (reschedule) or revoked. */
+  revokedAt     DateTime?
+  expiresAt     DateTime
+  createdAt     DateTime     @default(now())
+
+  @@index([appointmentId])
+}
+
+// -----------------------------------------------------------------------------
+// Audit logging — delivered NOW (ahead of Task 12) because the
+// patient-initiated actions of Task 8 (and the SYSTEM actions of Tasks 9/17)
+// need an actor model (`STAFF | SYSTEM | PATIENT`) that a userId-only helper
+// could not express. Plan.md §Audit logging. Task 12 builds the admin read
+// surface + authorization matrix on top of this model.
+//
+// Append-only: the application never updates or deletes AuditLog rows.
+// -----------------------------------------------------------------------------
+
+enum AuditActorType {
+  STAFF
+  SYSTEM
+  PATIENT
+}
+
+enum AuditAction {
+  APPOINTMENT_CONFIRMED
+  APPOINTMENT_CANCELLED
+  APPOINTMENT_RESCHEDULED
+  APPOINTMENT_COMPLETED
+  APPOINTMENT_NO_SHOW
+  APPOINTMENT_AUTO_CANCELLED
+  PATIENT_CREATED
+  PATIENT_UPDATED
+  PATIENT_ANONYMIZED
+  SMS_SENT
+  PATIENT_DOCUMENT_UPLOADED
+  PATIENT_DOCUMENT_DELETED
+  TEAM_MEMBER_CREATED
+  TEAM_MEMBER_DEACTIVATED
+  TEAM_MEMBER_ROLE_CHANGED
+  SETTINGS_UPDATED
+  CLOSURE_CREATED
+  CLOSURE_DELETED
+  WAITLIST_ENTRY_ADDED
+  LOGIN_SUCCESS
+  LOGIN_FAILED
+  LOGIN_LOCKED
+  LOGOUT
+  PASSWORD_RESET
+  PATIENT_RECORD_VIEWED
+  PATIENT_DOCUMENT_DOWNLOADED
+  EXPORT_GENERATED
+  AUDIT_VIEWED
+  SELF_SERVICE_CANCELLED
+  SELF_SERVICE_RESCHEDULED
+}
+
+model AuditLog {
+  id         String         @id @default(cuid())
+  actorType  AuditActorType
+  /** Null for SYSTEM and PATIENT actors (no staff user). */
+  userId     String?
+  user       User?          @relation(fields: [userId], references: [id])
+  action     AuditAction
+  entityType String
+  entityId   String
+  detail     Json
+  ipAddress  String?
+  createdAt  DateTime       @default(now())
+
+  @@index([createdAt])
+  @@index([entityType, entityId])
 }

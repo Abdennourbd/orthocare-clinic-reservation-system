@@ -277,6 +277,59 @@ describe("sendMessage dispatcher", () => {
     expect(msg!.error).toBe("network down");
     expect(msg!.sentAt).toBeNull();
   });
+
+  it("retries a FAILED send on the next call instead of silently skipping it", async () => {
+    const patient = await makePatient();
+    const appointment = await makeAppointment(patient.id);
+    const throwingProvider: MessageProvider = {
+      name: "mock",
+      async send() {
+        throw new Error("network down");
+      },
+    };
+
+    const first = await sendMessage(
+      {
+        type: SmsMessageType.BOOKING_RECEIVED,
+        patientId: patient.id,
+        to: patient.phoneE164,
+        appointmentId: appointment.id,
+        templateKey: "bookingReceived",
+        vars,
+      },
+      throwingProvider,
+    );
+    expect(first!.status).toBe(SmsStatus.FAILED);
+
+    // A retry with a healthy provider re-attempts the SAME row (unique
+    // index) rather than returning the FAILED row as if nothing was wrong.
+    const second = await sendMessage(
+      {
+        type: SmsMessageType.BOOKING_RECEIVED,
+        patientId: patient.id,
+        to: patient.phoneE164,
+        appointmentId: appointment.id,
+        templateKey: "bookingReceived",
+        vars,
+      },
+      {
+        name: "mock",
+        async send() {
+          return { ok: true, status: SmsStatus.SENT };
+        },
+      },
+    );
+
+    expect(second!.id).toBe(first!.id);
+    expect(second!.status).toBe(SmsStatus.SENT);
+    expect(second!.error).toBeNull();
+    expect(second!.sentAt).toBeInstanceOf(Date);
+    expect(
+      await getPrisma().smsMessage.count({
+        where: { appointmentId: appointment.id, type: SmsMessageType.BOOKING_RECEIVED },
+      }),
+    ).toBe(1);
+  });
 });
 
 describe("notifyBookingCreated", () => {

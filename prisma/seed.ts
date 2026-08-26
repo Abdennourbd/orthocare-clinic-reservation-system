@@ -178,13 +178,26 @@ async function main() {
       value: "1.0"
     },
     {
-      // Messaging templates (Task 7). French-only for now; the booking-received
-      // message is a REQUEST — the clinic still calls to confirm. Per-locale
-      // templates + the remaining keys (confirmation, reminder, …) land with
-      // their tasks. Editable from the dashboard (Task 21).
+      // Clinic identity shown on the self-service token page (minimum
+      // disclosure) and on the contact page. Editable from the dashboard.
+      key: "clinicInfo",
+      value: {
+        name: "Ortho'Care Clinic",
+        address: "Alger, Algérie",
+        phone: "0550 12 34 56"
+      }
+    },
+    {
+      // Messaging templates (Task 7/8). French-only for now; the booking-received
+      // message is a REQUEST — the clinic still calls to confirm. The
+      // confirmation/reschedule messages carry the self-service link
+      // ({selfServiceLink}). Editable from the dashboard (Task 21).
       key: "messageTemplates",
       value: {
-        bookingReceived: "Bonjour {firstName}, votre demande de rendez-vous {serviceName} le {date} à {time} a bien été reçue. La clinique vous appellera au {phone} pour la confirmer. Ortho'Care Clinic"
+        bookingReceived: "Bonjour {firstName}, votre demande de rendez-vous {serviceName} le {date} à {time} a bien été reçue. La clinique vous appellera au {phone} pour la confirmer. Ortho'Care Clinic",
+        confirmation: "Bonjour {firstName}, votre rendez-vous {serviceName} le {date} à {time} est confirmé. Pour le déplacer ou l'annuler : {selfServiceLink} Ortho'Care Clinic",
+        cancelled: "Bonjour {firstName}, votre rendez-vous {serviceName} du {date} à {time} a été annulé. Ortho'Care Clinic",
+        reschedule: "Bonjour {firstName}, votre rendez-vous {serviceName} a été déplacé du {oldDate} à {oldTime} au {newDate} à {newTime}. Pour le gérer : {selfServiceLink} Ortho'Care Clinic"
       }
     }
   ];

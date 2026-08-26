@@ -36,3 +36,38 @@ export async function notifyNewBooking(
   });
   return count;
 }
+
+export type CancellationNotificationPayload = {
+  appointmentId: string;
+  patientName: string;
+  serviceId: string;
+  /** Full per-locale service name, so the dashboard can render any language. */
+  serviceName: Record<string, string>;
+  /** Appointment start, ISO-8601 UTC. */
+  startTime: string;
+  /** What freed the slot: patient via link, staff, auto-expiry, closure. */
+  reason: string;
+};
+
+/** Create a CANCELLATION notification for every active staff user — a slot
+ * freed (patient cancelled via link, staff cancelled, auto-expired, closure).
+ * Same fan-out rule as NEW_BOOKING. */
+export async function notifyCancellation(
+  payload: CancellationNotificationPayload,
+): Promise<number> {
+  const prisma = getPrisma();
+  const staff = await prisma.user.findMany({
+    where: { active: true },
+    select: { id: true },
+  });
+  if (staff.length === 0) return 0;
+
+  const { count } = await prisma.notification.createMany({
+    data: staff.map((u) => ({
+      userId: u.id,
+      type: NotificationType.CANCELLATION,
+      payload,
+    })),
+  });
+  return count;
+}

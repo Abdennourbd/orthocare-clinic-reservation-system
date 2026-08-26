@@ -67,6 +67,14 @@ export const SECURITY_HEADERS: Header[] = [
  * token is present in the URL. Sends `Referrer-Policy: no-referrer` so no
  * `Referer` header (and therefore no token) is disclosed to any linked or
  * embedded resource. These pages must also load NO third-party scripts.
+ *
+ * The CSP here mirrors `SECURITY_HEADERS` (Next.js's own inline RSC scripts +
+ * self-hosted chunks must be allowed or the page never hydrates) BUT it is a
+ * hard override of the global CSP: it must NEVER gain the Google embed domains
+ * that Task 10 adds to the global `script-src`/`frame-src`/`img-src` — a
+ * widget receiving the token in its `Referer` header is the exact leak this
+ * rule exists to prevent. `frame-ancestors 'none'` stops clickjacking of the
+ * token page.
  */
 export const NO_REFERRER_HEADERS: Header[] = [
   {
@@ -74,11 +82,19 @@ export const NO_REFERRER_HEADERS: Header[] = [
     headers: [
       { key: "Referrer-Policy", value: "no-referrer" },
       { key: "X-Content-Type-Options", value: "nosniff" },
-      // frame-ancestors 'none' here too: the token page must never render in
-      // another site's iframe (clickjacking).
       {
         key: "Content-Security-Policy",
-        value: "default-src 'self'; frame-ancestors 'none'",
+        value: [
+          "default-src 'self'",
+          "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+          "style-src 'self' 'unsafe-inline'",
+          "img-src 'self' data:",
+          "font-src 'self'",
+          "connect-src 'self'",
+          "frame-ancestors 'none'",
+          "base-uri 'self'",
+          "form-action 'self'",
+        ].join("; "),
       },
     ],
   },

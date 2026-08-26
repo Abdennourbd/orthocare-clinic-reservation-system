@@ -17,6 +17,7 @@ describe("isTransactional", () => {
     expect(isTransactional(SmsMessageType.BOOKING_RECEIVED)).toBe(true);
     expect(isTransactional(SmsMessageType.CONFIRMATION)).toBe(true);
     expect(isTransactional(SmsMessageType.RESCHEDULE)).toBe(true);
+    expect(isTransactional(SmsMessageType.CANCELLED)).toBe(true);
     expect(isTransactional(SmsMessageType.REMINDER)).toBe(true);
   });
 });

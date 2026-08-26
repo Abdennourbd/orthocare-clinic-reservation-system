@@ -96,7 +96,10 @@ export async function sendMessage(
   );
 
   // 3. Record the send. A unique-violation here means this appointment+type
-  // was already messaged (a retried cron/route) — return the existing row.
+  // was already messaged. If the previous attempt FAILED the patient never
+  // received it, so RETRY the send (at-least-once); if it was already SENT,
+  // return the existing row (exactly-once) — a retried cron/route can never
+  // message the same patient twice.
   let message: SmsMessage;
   try {
     message = await prisma.smsMessage.create({
@@ -122,6 +125,19 @@ export async function sendMessage(
         },
         orderBy: { createdAt: "asc" },
       });
+      if (existing && existing.status === SmsStatus.FAILED) {
+        // The patient never got the message — deliver it now.
+        const retryResult = await deliver(provider, existing.to, existing.body);
+        return prisma.smsMessage.update({
+          where: { id: existing.id },
+          data: {
+            provider: provider.name,
+            status: retryResult.status,
+            error: retryResult.error ?? null,
+            sentAt: retryResult.ok ? new Date() : null,
+          },
+        });
+      }
       return existing;
     }
     throw e;
@@ -130,16 +146,7 @@ export async function sendMessage(
   // 4. Deliver, then persist the outcome. A provider that throws is recorded
   // as FAILED (not left SENDING) so a transient network error never leaves a
   // dangling row and never fails the caller's operation.
-  let result: SendMessageResult;
-  try {
-    result = await provider.send({ to: input.to, body: message.body });
-  } catch (e) {
-    result = {
-      ok: false,
-      status: SmsStatus.FAILED,
-      error: e instanceof Error ? e.message : "Message provider error",
-    };
-  }
+  const result = await deliver(provider, message.to, message.body);
   return prisma.smsMessage.update({
     where: { id: message.id },
     data: {
@@ -148,6 +155,23 @@ export async function sendMessage(
       sentAt: result.ok ? new Date() : null,
     },
   });
+}
+
+/** Call the provider, converting a throw into a recorded FAILED result. */
+async function deliver(
+  provider: MessageProvider,
+  to: string,
+  body: string,
+): Promise<SendMessageResult> {
+  try {
+    return await provider.send({ to, body });
+  } catch (e) {
+    return {
+      ok: false,
+      status: SmsStatus.FAILED,
+      error: e instanceof Error ? e.message : "Message provider error",
+    };
+  }
 }
 
 function isUniqueViolation(e: unknown): boolean {

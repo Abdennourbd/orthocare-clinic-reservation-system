@@ -12,6 +12,18 @@ export const DEFAULT_MESSAGE_TEMPLATES = {
    * has to call. The wording must never say "confirmé". */
   bookingReceived:
     "Bonjour {firstName}, votre demande de rendez-vous {serviceName} le {date} à {time} a bien été reçue. La clinique vous appellera au {phone} pour la confirmer. Ortho'Care Clinic",
+  /** Sent when the clinic confirms after the phone call (Task 14). Carries the
+   * self-service link (Task 8) to cancel or reschedule. */
+  confirmation:
+    "Bonjour {firstName}, votre rendez-vous {serviceName} le {date} à {time} est confirmé. Pour le déplacer ou l'annuler : {selfServiceLink} Ortho'Care Clinic",
+  /** Sent when the appointment is cancelled by the patient via the link (Task
+   * 8) or by staff (Task 14). No self-service link — nothing left to manage. */
+  cancelled:
+    "Bonjour {firstName}, votre rendez-vous {serviceName} du {date} à {time} a été annulé. Ortho'Care Clinic",
+  /** Sent after a reschedule (Task 8/14). Carries the ROTATED self-service
+   * link for the new appointment. */
+  reschedule:
+    "Bonjour {firstName}, votre rendez-vous {serviceName} a été déplacé du {oldDate} à {oldTime} au {newDate} à {newTime}. Pour le gérer : {selfServiceLink} Ortho'Care Clinic",
 } as const;
 
 export type MessageTemplateKey = keyof typeof DEFAULT_MESSAGE_TEMPLATES;

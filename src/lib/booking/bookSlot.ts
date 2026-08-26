@@ -18,6 +18,10 @@ export type BookSlotInput = {
   startUTC: Date;
   resourceId?: string | null;
   source?: AppointmentSource;
+  /** Target status for the new appointment. Defaults to PENDING; a
+   * reschedule of an already-confirmed appointment passes CONFIRMED (the
+   * patient was confirmed by phone — no need to re-confirm). */
+  status?: AppointmentStatus;
 };
 
 /**
@@ -73,7 +77,7 @@ export async function bookSlotInTx(
       serviceId: input.serviceId,
       startTime: input.startUTC,
       endTime,
-      status: AppointmentStatus.PENDING,
+      status: input.status ?? AppointmentStatus.PENDING,
       source: input.source ?? AppointmentSource.ONLINE,
       resourceId: input.resourceId ?? null,
     },
