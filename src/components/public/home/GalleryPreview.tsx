@@ -19,10 +19,10 @@ export default async function GalleryPreview() {
         <p className="mx-auto mt-3 max-w-2xl text-zinc-600">{t("gallerySubtitle")}</p>
       </Reveal>
 
-      <div className="mt-12 grid grid-cols-2 gap-4 sm:grid-cols-3">
+      <div className="mt-12 grid grid-cols-2 gap-4 sm:grid-cols-3 sm:gap-6">
         {items.map((item, i) => (
           <Reveal key={item.id} delay={i * 0.05}>
-            <figure className="group relative overflow-hidden rounded-2xl border border-zinc-200">
+            <figure className="group relative overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm transition-shadow duration-300 hover:shadow-md">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={item.imageUrl}

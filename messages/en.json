@@ -99,7 +99,10 @@
     "title": "Gallery",
     "subtitle": "A glimpse of our clinic and our care.",
     "emptyTitle": "Photos coming soon",
-    "empty": "We will publish clinic photos soon."
+    "empty": "We will publish clinic photos soon.",
+    "beforeLabel": "Before",
+    "afterLabel": "After",
+    "comparisonLabel": "Before / after comparison"
   },
   "About": {
     "title": "About Ortho'Care Clinic",

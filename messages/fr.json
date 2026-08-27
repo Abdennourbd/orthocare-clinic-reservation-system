@@ -99,7 +99,10 @@
     "title": "Galerie",
     "subtitle": "Un aperçu de notre cabinet et de nos soins.",
     "emptyTitle": "Photos à venir",
-    "empty": "Nous publierons bientôt des photos du cabinet."
+    "empty": "Nous publierons bientôt des photos du cabinet.",
+    "beforeLabel": "Avant",
+    "afterLabel": "Après",
+    "comparisonLabel": "Comparaison avant / après"
   },
   "About": {
     "title": "À propos d'Ortho'Care Clinic",
