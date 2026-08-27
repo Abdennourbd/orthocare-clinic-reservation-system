@@ -46,7 +46,7 @@ Task details + rationale live in `tasks/plan.md`. This is the working checklist.
 **Verification:** Manual check across `/fr`, `/ar`, `/en`; `npm test -- localized`; typecheck passes.
 **Dependencies:** Task 1
 **Estimated scope:** Medium (2–3 days)
-**Skill:** An **i18n / next-intl skill** (locale routing, RTL, fallbacks) — genuinely worth having, since RTL mistakes are cheap to prevent and expensive to retrofit. The available **frontend-design** skill helps with the shell and typography.
+**Skill:** An **i18n / next-intl skill** (locale routing, RTL, fallbacks) — genuinely worth having, since RTL mistakes are cheap to prevent and expensive to retrofit. The available **frontend-ui-engineering** skill helps with the shell and typography.
 
 ## Checkpoint: After Tasks 1-2 (Foundation)
 - [ ] All tests pass, build clean, CI green — tests (10/10) + build clean locally; CI green on GitHub not yet confirmed
@@ -160,7 +160,7 @@ Task details + rationale live in `tasks/plan.md`. This is the working checklist.
 **Verification:** Manual end-to-end booking; `npm test -- booking`; keyboard-only pass through the wizard.
 **Dependencies:** Task 5, Task 2 (i18n/shell)
 **Estimated scope:** Large (4–5 days)
-**Skill:** The available **frontend-design** skill for the wizard, plus a **form-validation (Zod) skill** for shared client/server schemas and an **accessibility** reference for the slot picker (a grid of buttons is exactly where screen-reader support is usually forgotten).
+**Skill:** The available **frontend-ui-engineering** skill for the wizard, plus a **form-validation (Zod) skill** for shared client/server schemas and an **accessibility** reference for the slot picker (a grid of buttons is exactly where screen-reader support is usually forgotten).
 
 ## Task 7: Message abstraction + providers + `SmsMessage` + `Notification`
 **Description:** `MessageProvider` interface; `MockProvider` (logs to DB), `TwilioProvider` (stub, env-gated), `WhatsAppProvider` (stub, env-gated). Add `SmsMessage` + `Notification` models (3c schema). Booking-received message + staff `Notification` rows (NEW_BOOKING, one per active staff user). Provider selected via `MESSAGE_PROVIDER` env. The dispatcher enforces the **transactional vs non-transactional** split in one place: transactional messages always send; non-transactional ones are suppressed for `messagingOptOut` patients.
@@ -244,7 +244,7 @@ Task details + rationale live in `tasks/plan.md`. This is the working checklist.
 **Verification:** Manual check across 3 locales; typecheck; mobile performance spot-check on a throttled connection.
 **Dependencies:** Task 2, Task 3b
 **Estimated scope:** Medium (3–4 days)
-**Skill:** The available **frontend-design** skill, plus a **web-performance** reference for image handling (a dental gallery is image-dense and this is a mobile-first audience). The privacy-notice text needs review by the clinic, not a skill.
+**Skill:** The available **frontend-ui-engineering** skill, plus a **web-performance** reference for image handling (a dental gallery is image-dense and this is a mobile-first audience). The privacy-notice text needs review by the clinic, not a skill.
 
 ## Checkpoint: After Tasks 6-11 (Public booking + comms work end-to-end)
 - [x] Public booking flow works end-to-end, consent recorded
@@ -271,10 +271,12 @@ Task details + rationale live in `tasks/plan.md`. This is the working checklist.
 - [ ] Session expires on idle (2h) and absolutely (12h)
 - [ ] **Authorization matrix test exists**: every `/api/admin/*` route × {anonymous, receptionist, admin, deactivated} → expected status. This table is updated by every later task that adds a route
 - [ ] Unit tests: auth gating per role, tokenVersion revocation, password policy
-**Verification:** Manual auth flow; `npm test -- auth`; `npm test -- authz-matrix`; security review of session handling.
+- [ ] Admin shell keyboard-navigable with visible focus states — the a11y baseline every screen built after it (Tasks 13–21) copies
+- [ ] Admin layout sets `dir="ltr"` explicitly (FR-only dashboard; RTL never leaks in if public locales change later)
+**Verification:** Manual auth flow; `npm test -- auth`; `npm test -- authz-matrix`; security review of session handling; keyboard-only pass through the shell.
 **Dependencies:** Task 3a (User schema) — **NOT** Task 7
 **Estimated scope:** Large (4–5 days)
-**Skill:** An **auth / RBAC / session-security** skill **plus** a **security-review or threat-modeling** skill. Together these are the single most valuable install on the project: this task defines who can reach patient data, and every task after it inherits the decision.
+**Skill:** An **auth / RBAC / session-security** skill **plus** a **security-review or threat-modeling** skill. Together these are the single most valuable install on the project: this task defines who can reach patient data, and every task after it inherits the decision. The **frontend-ui-engineering** skill applies to the dashboard shell itself: it sets the page scaffold, nav hierarchy, density and focus/keyboard patterns that every later admin screen (Tasks 13–21) inherits — getting it right here is what keeps the rest of the dashboard consistent instead of generic. **ui-ux-pro-max** is useful for targeted UX-guideline searches (dashboard layout, accessible navigation) during the build.
 
 ## Task 13: Patient records + duplicate detection
 **Description:** Patient CRUD, visit history timeline (COMPLETED appointments UNION Visit rows), notes. Duplicate detection: on create/edit, query patients sharing **normalized phone (E.164)** or name; return warnings; require staff acknowledgment to proceed. `Visit` model (3c schema). Anonymization path for erasure requests (`lib/privacy/anonymize.ts` — scrub identifying fields, set `anonymizedAt`, keep the appointment shell so statistics stay correct). Routes: `GET/POST /api/admin/patients`, `GET/PATCH /api/admin/patients/[id]`, `GET .../history`, `POST .../visits`, `POST .../anonymize` (ADMIN only).
@@ -286,10 +288,11 @@ Task details + rationale live in `tasks/plan.md`. This is the working checklist.
 - [ ] Duplicate detection matches across DZ phone formats (proves normalization is actually used)
 - [ ] Soft-delete only (active=false); anonymization available to ADMIN and audited as `PATIENT_ANONYMIZED`
 - [ ] Opening a patient record logs `PATIENT_RECORD_VIEWED` (for patient data, who *looked* matters as much as who changed)
+- [ ] Duplicate warning renders inline with an explicit save-anyway acknowledgment (never a dead-end blocking modal); visit timeline has defined loading + empty states
 **Verification:** Manual CRUD + duplicate flag test; `npm test -- patient-duplicates`; verify an anonymized patient keeps their appointment history count but loses identifiers.
 **Dependencies:** Task 12
 **Estimated scope:** Medium (3–4 days)
-**Skill:** No specialized skill required — standard CRUD over the Task 3a model. A **fuzzy-matching / record-deduplication** reference helps if you want name matching to tolerate spelling variants (worthwhile for Arabic/French transliterations of the same name).
+**Skill:** No specialized skill required — standard CRUD over the Task 3a model. A **fuzzy-matching / record-deduplication** reference helps if you want name matching to tolerate spelling variants (worthwhile for Arabic/French transliterations of the same name). The **frontend-ui-engineering** skill applies to the patient-record UI: a readable unified visit timeline with defined loading/empty states, and a duplicate-warning UX that keeps staff moving — inline banner with an explicit "it's a different person / save anyway" acknowledgment rather than a dead-end modal.
 
 ## Task 14: Appointment management
 **Description:** Day view of appointments; **call queue** (`GET /api/admin/appointments/pending` — bookings awaiting a confirmation call, oldest first, showing time left before auto-expiry) and **search by phone or name** (`GET /api/admin/appointments/search` — for when a patient is on the line right now); confirm-after-call, cancel, reschedule (re-checks availability via Task 5), mark completed/no-show, manual booking creation (CONFIRMED, blocks slot). All status changes set the matching timestamp (`confirmedAt`/`cancelledAt`/`completedAt`/`noShowAt`), call `logAction`, and fire SMS. Routes: `GET/POST /api/admin/appointments`, `GET/PATCH .../[id]`, `POST .../[id]/reschedule`.
@@ -304,7 +307,7 @@ Task details + rationale live in `tasks/plan.md`. This is the working checklist.
 **Verification:** Manual admin flow end-to-end; integration test on status transitions; time a receptionist-style task ("patient calls to cancel") to confirm it takes a few seconds, not a hunt through dates.
 **Dependencies:** Task 13 (manual booking needs patient CRUD), Task 5
 **Estimated scope:** Large (4–5 days)
-**Skill:** No specialized skill needed — this is domain UI over existing functions. The available **frontend-design** skill helps make the day view and call queue genuinely fast to use, which matters more here than anywhere else in the dashboard.
+**Skill:** No specialized skill needed — this is domain UI over existing functions. The available **frontend-ui-engineering** skill (plus targeted **ui-ux-pro-max** searches for data-dense list/table UX guidelines) helps make the day view and call queue genuinely fast to use, which matters more here than anywhere else in the dashboard.
 
 ## Task 15: Patient documents
 **Description:** `PatientDocument` model (3c schema). Vercel Blob upload/download, patient-scoped, staff-only. **Blobs are stored privately — never as a public URL.** Downloads go through `GET /api/admin/documents/[id]`, which checks the staff session on every request, then streams the file or issues a short-lived signed URL. Routes: `POST /api/admin/patients/[id]/documents`, `GET .../documents`, `GET /api/admin/documents/[id]`, `DELETE ...` (ADMIN only).
@@ -317,7 +320,7 @@ Task details + rationale live in `tasks/plan.md`. This is the working checklist.
 **Verification:** Manual upload/download; security check (non-staff → 403, raw blob URL in a logged-out browser → denied); `npm test -- documents`.
 **Dependencies:** Task 13
 **Estimated scope:** Medium (2–3 days)
-**Skill:** A **file-upload security** skill (storage access modes, signed URLs, MIME validation, content-sniffing defences). Worth reading before starting: X-rays are the most sensitive data in the system, and the default "public blob with a random URL" pattern silently fails the staff-only requirement.
+**Skill:** A **file-upload security** skill (storage access modes, signed URLs, MIME validation, content-sniffing defences). Worth reading before starting: X-rays are the most sensitive data in the system, and the default "public blob with a random URL" pattern silently fails the staff-only requirement. The upload UI itself is standard **frontend-ui-engineering** basics: multi-file input, upload progress, and inline error states per rejected file (type/size) so staff immediately see *why* an upload failed.
 
 ## Checkpoint: After Tasks 12-15 (Admin core complete)
 - [ ] Staff auth + role gating + audit working; session revocation tested
@@ -484,7 +487,7 @@ The skills worth having *before* you start, roughly in order of how much they ch
 3. **Date/time and timezone handling** — Task 4, the highest-risk task on the critical path. Silent one-hour drift is the classic failure of every scheduling system.
 4. **Messaging-provider integration (Twilio / WhatsApp Business)** — Tasks 7, 16, 22. The provider's rules (E.164, opt-in, template approval) are most of the work.
 5. **Database transactions / concurrency** — Task 5. A subtle mistake here double-books real patients.
-6. **frontend-design** *(already available)* — Tasks 2, 6, 11, 14. The booking wizard and the receptionist day view are used daily; speed of use matters more than polish.
+6. **frontend-ui-engineering** *(already available)* — Tasks 2, 6, 11, 12 (admin shell), 13, 14. The booking wizard, the admin shell and the receptionist day view are used daily; speed of use and accessibility matter more than polish. **ui-ux-pro-max** *(already available)* complements it for targeted UX-guideline/dashboard-layout searches. **design-taste-frontend** *(already available)* is scoped to landing pages/portfolios and explicitly excludes dashboards — not applicable to the admin core.
 7. **File-upload security** — Task 15. X-rays are the most sensitive data in the system.
 8. **SEO for local, multilingual businesses** — Tasks 11 and 23. Discoverability is a stated goal, and this is a live-domain replacement where redirects and hreflang decide whether existing ranking survives.
 9. **Testing strategy (Vitest, integration, authorization matrices)** — applies throughout; the authorization matrix test is the highest-value single test in the project.

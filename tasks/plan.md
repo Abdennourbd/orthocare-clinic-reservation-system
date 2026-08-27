@@ -556,8 +556,8 @@ Implementation order is bottom-up: schema (3a) → slot engine + atomic booking 
 - [ ] Public content pages render in all 3 locales with FR fallback
 
 ### Phase 4: Admin Core
-- [ ] Task 12: Auth + RBAC + audit helper + dashboard shell — staff login (throttled, lockout), CSRF + cookie hardening, sessions (tokenVersion revocation), middleware, `/admin` shell, role-gated nav, `logAction(actor, …)` helper, `AuditLog` model, audit viewer, **authorization matrix test** (deps: 3a — **not** Task 7)
-- [ ] Task 13: Patient records + duplicate detection — CRUD, visit history timeline (COMPLETED appointments UNION Visits), notes, phone/name duplicate flagging (deps: Task 12)
+- [ ] Task 12: Auth + RBAC + audit helper + dashboard shell — staff login (throttled, lockout), CSRF + cookie hardening, sessions (tokenVersion revocation), middleware, `/admin` shell (keyboard-navigable, visible focus, `dir="ltr"` — the a11y/scaffold baseline Tasks 13–21 copy), role-gated nav, `logAction(actor, …)` helper, `AuditLog` model, audit viewer, **authorization matrix test** (deps: 3a — **not** Task 7)
+- [ ] Task 13: Patient records + duplicate detection — CRUD, visit history timeline (COMPLETED appointments UNION Visits), notes, phone/name duplicate flagging with inline save-anyway acknowledgment UX (deps: Task 12)
 - [ ] Task 14: Appointment management — day view, **call queue** (PENDING awaiting call), **search by phone/name**, confirm-after-call, cancel, reschedule (re-checks availability), mark completed/no-show, manual booking creation (deps: Task 13 — manual booking needs patient CRUD)
 - [ ] Task 15: Patient documents — **private** Blob storage + authenticated download route, MIME allow-list + size cap, patient-scoped, staff-only, downloads audited (deps: Task 13)
 
