@@ -14,8 +14,11 @@ export default function Marquee({
 }) {
   const shouldReduceMotion = useReducedMotion();
 
+  // No `whitespace-nowrap` on the root: the row layout comes from `min-w-max`
+  // on the track plus `shrink-0` on each item, so text inside an item is free
+  // to wrap within that item's own width instead of overflowing it.
   return (
-    <div className={`overflow-hidden flex whitespace-nowrap ${className}`}>
+    <div className={`overflow-hidden flex ${className}`}>
       <motion.div
         className="flex min-w-max"
         animate={
