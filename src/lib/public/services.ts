@@ -55,3 +55,14 @@ export async function getActiveServiceBySlug(
   if (!row || !row.active) return null;
   return toPublicService(row, locale);
 }
+
+/** Format a service price in the requested locale; free/unspecified → freeLabel. */
+export function formatPrice(
+  price: number | null,
+  currency: string,
+  freeLabel: string,
+  locale: string,
+): string {
+  if (price === null || price === 0) return freeLabel;
+  return `${price.toLocaleString(locale)} ${currency}`;
+}

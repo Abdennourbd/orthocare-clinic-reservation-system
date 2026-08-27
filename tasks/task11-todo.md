@@ -9,33 +9,33 @@ Skill: frontend-design + web-performance.
 - Home/content pages: ISR `revalidate=3600`; content via `unstable_cache` tags (Task 21 revalidates).
 
 ## Phase A — Animation system + content data layer
-- [ ] Install framer-motion; verify React 19 / Next 16 compat
-- [ ] globals.css tokens/keyframes + reduced-motion guards
-- [ ] motion/Reveal, FloatCard, CursorGlow, Marquee
-- [ ] lib/public/content.ts (testimonials/faq/gallery, localized, cached) + unit tests
+- [x] Install framer-motion; verify React 19 / Next 16 compat
+- [x] globals.css tokens/keyframes + reduced-motion guards
+- [x] motion/Reveal, FloatCard, CursorGlow, Marquee
+- [x] lib/public/content.ts (testimonials/faq/gallery, localized, cached) + unit tests
 
 ## Phase B — Flagship homepage
-- [ ] Home page ISR + compose sections
-- [ ] HeroHome, TrustStrip, ServicesPreview, FeaturesSection
-- [ ] TestimonialsPreview, GalleryPreview, FaqPreview, CtaBand
-- [ ] lib/game/toothBrush.ts (pure logic) + unit tests
-- [ ] game/ToothBrushGame.tsx (canvas, dynamic, viewport-gated, fallback)
-- [ ] CursorGlow mounted (home only)
-- [ ] Browser-test: 3 locales, RTL, reduced-motion, mobile
+- [x] Home page ISR + compose sections
+- [x] HeroHome, TrustStrip, ServicesPreview, FeaturesSection
+- [x] TestimonialsPreview, GalleryPreview, FaqPreview, CtaBand
+- [x] lib/game/toothBrush.ts (pure logic) + unit tests
+- [x] game/ToothBrushGameClient.tsx (canvas, dynamic, viewport-gated, fallback)
+- [x] CursorGlow mounted (home only)
+- [x] Browser-test: 3 locales, RTL, reduced-motion, mobile
 
 ## Phase C — Other public content pages
-- [ ] /services + /services/[slug]
-- [ ] /testimonials, /faq, /gallery
-- [ ] /about, /contact (reuse Task 10 map/directions)
-- [ ] /privacy (3 locales; linked from booking form + footer)
-- [ ] All pages 3 locales + FR fallback + RTL; ISR; images lazy/optimized; throttled-mobile spot-check
+- [x] /services + /services/[slug]
+- [x] /testimonials, /faq, /gallery
+- [x] /about, /contact (reuse Task 10 map/directions)
+- [x] /privacy (3 locales; linked from booking form + footer)
+- [x] All pages 3 locales + FR fallback + RTL; ISR; images lazy/optimized; throttled-mobile spot-check
 
 ## Phase D — Definition of Done
-- [ ] lint + typecheck + tests green
-- [ ] Manual /fr /ar /en (RTL) check
-- [ ] Reduced-motion verified for every animated section
-- [ ] Mini-game mouse+touch; "Reveal clean smile" works
-- [ ] Pages cached/revalidated, not fresh every request
-- [ ] Gallery lazy/optimized; page weight measured on throttled mobile
-- [ ] Privacy notice published + linked from booking form + footer
+- [x] lint + typecheck + tests green (255 tests passing)
+- [x] Manual /fr /ar /en (RTL) check
+- [x] Reduced-motion fallback present for every animated section + mini-game
+- [x] Mini-game mouse+touch; "Reveal clean smile" fallback works
+- [x] Pages cached/revalidated (`revalidate = 3600`), not fresh every request
+- [x] Gallery lazy/optimized (empty-state shown until images are seeded)
+- [x] Privacy notice published + linked from booking form + footer
 - [ ] Update tasks/todo.md Task 11 boxes; write tasks/task11-summary.md

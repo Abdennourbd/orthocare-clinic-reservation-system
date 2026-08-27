@@ -10,9 +10,12 @@ export default function Footer() {
 
   const links = [
     { key: "services", href: "/services" },
+    { key: "gallery", href: "/gallery" },
     { key: "testimonials", href: "/testimonials" },
     { key: "faq", href: "/faq" },
+    { key: "about", href: "/about" },
     { key: "contact", href: "/contact" },
+    { key: "privacy", href: "/privacy" },
   ] as const;
 
   return (

@@ -11,6 +11,7 @@
     "gallery": "Gallery",
     "about": "About",
     "contact": "Contact",
+    "privacy": "Privacy",
     "book": "Book an appointment"
   },
   "LocaleSwitcher": {
@@ -20,12 +21,114 @@
     "en": "English"
   },
   "Home": {
-    "heroTitle": "Your smile, our priority",
+    "heroBadge": "Orthodontics & dental care in Algiers",
+    "heroTitle": "Your smile,",
+    "heroTitleAccent": "our priority",
+    "heroSubtitle": "Orthodontics clinic in Rouiba, Algiers. Book your consultation online in a few clicks — the clinic will call you back to confirm.",
     "cta": "Book an appointment",
-    "gameTitle": "Brush the plaque away!",
-    "gameCTA": "Move your mouse or finger to brush!",
-    "gameWon": "Sparkling Clean! ✨",
-    "gameFallback": "Interactive animations are disabled for reduced motion. Keep smiling!"
+    "secondaryCta": "Discover our services",
+    "scrollHint": "Scroll",
+    "heroRating": "4.9/5 on Google",
+    "gameTitle": "Reveal the whitening result!",
+    "gameIntro": "Our patient had a whitening session at our clinic. Move your cursor over her teeth to discover the result!",
+    "gameCTA": "Sweep over the teeth area 3 times to reveal the bright smile!",
+    "gameWon": "Radiant result! ✨",
+    "gameWonSub": "Our patient's smile after her whitening at the clinic. Book yours!",
+    "gamePlayAgain": "Play again",
+    "gameBook": "Book a real whitening",
+    "gameReveal": "Reveal the result",
+    "gameAriaLabel": "Mini-game: reveal the whitening result",
+    "gameFallback": "Interactive animations are disabled for reduced motion. Keep smiling!",
+    "gameCaption": "Real patient result — whitening performed at our clinic",
+    "servicesTitle": "Our treatments",
+    "servicesSubtitle": "A look at the treatments we offer, from consultation to a complete smile.",
+    "servicesFree": "Free",
+    "servicesDuration": "{minutes} min",
+    "servicesLearnMore": "Learn more",
+    "servicesViewAll": "View all services",
+    "testimonialsTitle": "They trust us",
+    "testimonialsSubtitle": "What our patients say about us.",
+    "testimonialsViewAll": "View all reviews",
+    "galleryTitle": "Our clinic",
+    "gallerySubtitle": "A glimpse of our space and our care.",
+    "galleryViewAll": "View the gallery",
+    "faqTitle": "Frequently asked questions",
+    "faqSubtitle": "Answers to the questions we get asked the most.",
+    "faqViewAll": "View all questions",
+    "ctaTitle": "Ready for your best smile?",
+    "ctaSubtitle": "Book your consultation online. The clinic will call you to confirm your appointment.",
+    "ctaButton": "Book an appointment",
+    "Stats": {
+      "years": "Years of experience",
+      "patients": "Patients treated",
+      "rating": "Google rating",
+      "satisfaction": "Satisfied patients"
+    },
+    "Features": {
+      "title": "Why choose us",
+      "subtitle": "Modern, gentle and personalised care in the heart of Rouiba.",
+      "gentle": { "title": "Gentle care", "desc": "A patient, reassuring approach for children and adults alike." },
+      "tech": { "title": "Modern techniques", "desc": "Contemporary orthodontics and up-to-date equipment for effective treatment." },
+      "team": { "title": "Dedicated team", "desc": "An attentive doctor and staff who listen to every patient." },
+      "booking": { "title": "Easy booking", "desc": "Book online in a few clicks, at any time." }
+    }
+  },
+  "ServicesPage": {
+    "title": "Our services",
+    "subtitle": "From consultation to a complete smile, discover all our treatments.",
+    "empty": "No services available right now.",
+    "free": "Free",
+    "duration": "{minutes} min",
+    "durationLabel": "Duration",
+    "priceLabel": "Price",
+    "details": "View details",
+    "back": "All services",
+    "book": "Book this service"
+  },
+  "TestimonialsPage": {
+    "title": "Patient reviews",
+    "subtitle": "What those who trusted us have to say.",
+    "empty": "No reviews yet."
+  },
+  "FaqPage": {
+    "title": "Frequently asked questions",
+    "subtitle": "Everything you need to know before your consultation.",
+    "empty": "No questions yet."
+  },
+  "GalleryPage": {
+    "title": "Gallery",
+    "subtitle": "A glimpse of our clinic and our care.",
+    "emptyTitle": "Photos coming soon",
+    "empty": "We will publish clinic photos soon."
+  },
+  "About": {
+    "title": "About Ortho'Care Clinic",
+    "subtitle": "A modern, caring orthodontics clinic in Rouiba, Algiers.",
+    "storyTitle": "Our story",
+    "story1": "Ortho'Care Clinic is a practice specialised in orthodontics and dental care, located in Rouiba, Algiers. We welcome children and adults alike with treatments tailored to every smile.",
+    "story2": "Our team puts the patient at the centre of every decision: precise care, clear communication and regular follow-up, from the first appointment to the end of treatment.",
+    "valuesTitle": "Our values",
+    "values": {
+      "care": { "title": "Kindness", "desc": "Patient, reassuring support at every step." },
+      "safety": { "title": "Safety", "desc": "Rigorous hygiene and proven care protocols." },
+      "quality": { "title": "Quality", "desc": "Modern techniques for lasting results." }
+    },
+    "cta": "Book an appointment"
+  },
+  "Contact": {
+    "title": "Contact us",
+    "subtitle": "Call us or drop by in Rouiba, Algiers. We would love to welcome you."
+  },
+  "Privacy": {
+    "title": "Privacy policy",
+    "lastUpdated": "Last updated: August 2026",
+    "intro": "This page explains what data we collect when you use the Ortho'Care Clinic website, why we collect it, and your rights.",
+    "what": { "title": "What we collect", "body": "When you book online, we collect your first name, last name and phone number, and, if you provide them, your email address and date of birth. We also store your appointment details (service, date, time) and your consent.\nWe do not collect any payment data on this site." },
+    "why": { "title": "Why we collect this data", "body": "This information is used solely to manage your appointments: create them, contact you to confirm, send reminders and follow up on your care." },
+    "processors": { "title": "Our providers", "body": "Your data is hosted and processed by providers located outside Algeria: our host (Vercel), our database (hosted PostgreSQL), our messaging service (SMS/WhatsApp) and our error-monitoring tool (Sentry). Google reviews and the map are embedded via Google widgets." },
+    "retention": { "title": "How long we keep data", "body": "We keep your appointment and patient data as long as needed for your follow-up, then in line with our legal obligations." },
+    "rights": { "title": "Your rights", "body": "You can ask at any time to correct or delete your data by contacting the clinic. You can also opt out of non-essential messages (SMS/WhatsApp) by letting us know." },
+    "contact": { "title": "Contact", "body": "For any question about your data, contact us at +213 793 03 58 93 or at the clinic: 10, rue Larbi Abdelsalem, Rouiba, Algiers." }
   },
   "Hero": {
     "title": "Your smile, our priority",

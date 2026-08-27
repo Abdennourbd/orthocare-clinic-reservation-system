@@ -11,6 +11,7 @@
     "gallery": "Galerie",
     "about": "À propos",
     "contact": "Contact",
+    "privacy": "Confidentialité",
     "book": "Prendre rendez-vous"
   },
   "LocaleSwitcher": {
@@ -20,12 +21,114 @@
     "en": "English"
   },
   "Home": {
-    "heroTitle": "Votre sourire, notre priorité",
+    "heroBadge": "Orthodontie & soins dentaires à Alger",
+    "heroTitle": "Votre sourire,",
+    "heroTitleAccent": "notre priorité",
+    "heroSubtitle": "Cabinet d'orthodontie à Rouiba, Alger. Réservez votre consultation en ligne en quelques clics — la clinique vous rappelle pour confirmer.",
     "cta": "Prendre rendez-vous",
-    "gameTitle": "Brossez la plaque !",
-    "gameCTA": "Bougez votre souris ou votre doigt pour brosser !",
-    "gameWon": "D'une propreté éclatante ! ✨",
-    "gameFallback": "Les animations interactives sont désactivées pour réduire les mouvements. Gardez le sourire !"
+    "secondaryCta": "Découvrir nos services",
+    "scrollHint": "Faites défiler",
+    "heroRating": "4,9/5 sur Google",
+    "gameTitle": "Révélez le résultat du blanchiment !",
+    "gameIntro": "Notre patiente a réalisé un blanchiment dans notre clinique. Passez la souris sur ses dents pour découvrir le résultat !",
+    "gameCTA": "Balayez 3 fois la zone des dents pour révéler le sourire éclatant !",
+    "gameWon": "Résultat éclatant ! ✨",
+    "gameWonSub": "Le sourire de notre patiente après son blanchiment réalisé à la clinique. Réservez le vôtre !",
+    "gamePlayAgain": "Rejouer",
+    "gameBook": "Réserver un blanchiment",
+    "gameReveal": "Révéler le résultat",
+    "gameAriaLabel": "Mini-jeu : révélez le résultat du blanchiment",
+    "gameFallback": "Les animations interactives sont désactivées pour réduire les mouvements. Gardez le sourire !",
+    "gameCaption": "Résultat réel — blanchiment réalisé dans notre clinique",
+    "servicesTitle": "Nos soins",
+    "servicesSubtitle": "Un aperçu des traitements que nous proposons, de la consultation au sourire complet.",
+    "servicesFree": "Gratuit",
+    "servicesDuration": "{minutes} min",
+    "servicesLearnMore": "En savoir plus",
+    "servicesViewAll": "Voir tous les services",
+    "testimonialsTitle": "Ils nous font confiance",
+    "testimonialsSubtitle": "Ce que nos patients disent de nous.",
+    "testimonialsViewAll": "Voir tous les avis",
+    "galleryTitle": "Notre cabinet",
+    "gallerySubtitle": "Un aperçu de l'espace et de nos soins.",
+    "galleryViewAll": "Voir la galerie",
+    "faqTitle": "Questions fréquentes",
+    "faqSubtitle": "Les réponses aux questions que l'on nous pose le plus.",
+    "faqViewAll": "Voir toutes les questions",
+    "ctaTitle": "Prêt pour votre plus beau sourire ?",
+    "ctaSubtitle": "Réservez votre consultation en ligne. La clinique vous appellera pour confirmer votre rendez-vous.",
+    "ctaButton": "Prendre rendez-vous",
+    "Stats": {
+      "years": "Années d'expérience",
+      "patients": "Patients traités",
+      "rating": "Note Google",
+      "satisfaction": "Patients satisfaits"
+    },
+    "Features": {
+      "title": "Pourquoi nous choisir",
+      "subtitle": "Des soins modernes, doux et personnalisés, au cœur de Rouiba.",
+      "gentle": { "title": "Soins tout en douceur", "desc": "Une approche patiente et rassurante, pour les enfants comme pour les adultes." },
+      "tech": { "title": "Techniques modernes", "desc": "Orthodontie contemporaine et équipements récents pour des traitements efficaces." },
+      "team": { "title": "Équipe dévouée", "desc": "Une doctoresse et un personnel attentifs, à l'écoute de chaque patient." },
+      "booking": { "title": "Réservation facile", "desc": "Prenez rendez-vous en ligne en quelques clics, à tout moment." }
+    }
+  },
+  "ServicesPage": {
+    "title": "Nos services",
+    "subtitle": "De la consultation au sourire complet, découvrez tous nos traitements.",
+    "empty": "Aucun service disponible pour le moment.",
+    "free": "Gratuit",
+    "duration": "{minutes} min",
+    "durationLabel": "Durée",
+    "priceLabel": "Tarif",
+    "details": "Voir les détails",
+    "back": "Tous les services",
+    "book": "Réserver ce service"
+  },
+  "TestimonialsPage": {
+    "title": "Avis de nos patients",
+    "subtitle": "Ce que disent celles et ceux qui nous ont fait confiance.",
+    "empty": "Aucun avis pour le moment."
+  },
+  "FaqPage": {
+    "title": "Questions fréquentes",
+    "subtitle": "Tout ce qu'il faut savoir avant votre consultation.",
+    "empty": "Aucune question pour le moment."
+  },
+  "GalleryPage": {
+    "title": "Galerie",
+    "subtitle": "Un aperçu de notre cabinet et de nos soins.",
+    "emptyTitle": "Photos à venir",
+    "empty": "Nous publierons bientôt des photos du cabinet."
+  },
+  "About": {
+    "title": "À propos d'Ortho'Care Clinic",
+    "subtitle": "Un cabinet d'orthodontie moderne et attentionné à Rouiba, Alger.",
+    "storyTitle": "Notre histoire",
+    "story1": "Ortho'Care Clinic est un cabinet spécialisé en orthodontie et soins dentaires, situé à Rouiba, Alger. Nous accueillons les enfants comme les adultes pour des traitements adaptés à chaque sourire.",
+    "story2": "Notre équipe place le patient au centre de chaque décision : des soins précis, une communication claire et un suivi régulier, du premier rendez-vous à la fin du traitement.",
+    "valuesTitle": "Nos valeurs",
+    "values": {
+      "care": { "title": "Bienveillance", "desc": "Un accompagnement patient et rassurant à chaque étape." },
+      "safety": { "title": "Sécurité", "desc": "Hygiène rigoureuse et protocoles de soins éprouvés." },
+      "quality": { "title": "Qualité", "desc": "Des techniques modernes pour des résultats durables." }
+    },
+    "cta": "Prendre rendez-vous"
+  },
+  "Contact": {
+    "title": "Contactez-nous",
+    "subtitle": "Appelez-nous ou passez nous voir à Rouiba, Alger. Nous serons ravis de vous accueillir."
+  },
+  "Privacy": {
+    "title": "Politique de confidentialité",
+    "lastUpdated": "Dernière mise à jour : août 2026",
+    "intro": "Cette page explique quelles données nous collectons lorsque vous utilisez le site d'Ortho'Care Clinic, pourquoi nous les collectons, et quels sont vos droits.",
+    "what": { "title": "Ce que nous collectons", "body": "Lorsque vous prenez rendez-vous en ligne, nous collectons votre prénom, votre nom, votre numéro de téléphone, et, si vous le fournissez, votre adresse e-mail et votre date de naissance. Nous enregistrons également les détails de votre rendez-vous (service, date, heure) ainsi que votre consentement.\nNous ne collectons aucune donnée de paiement sur ce site." },
+    "why": { "title": "Pourquoi nous collectons ces données", "body": "Ces informations servent uniquement à gérer vos rendez-vous : les créer, vous contacter pour les confirmer, vous envoyer des rappels et assurer le suivi de vos soins." },
+    "processors": { "title": "Nos prestataires", "body": "Vos données sont hébergées et traitées par des prestataires situés hors d'Algérie : notre hébergeur (Vercel), notre base de données (PostgreSQL hébergé), notre service de messagerie (SMS/WhatsApp) et notre outil de surveillance des erreurs (Sentry). Les avis et la carte Google sont intégrés via des widgets Google." },
+    "retention": { "title": "Durée de conservation", "body": "Nous conservons vos données de rendez-vous et de patient aussi longtemps que nécessaire à votre suivi, puis conformément à nos obligations légales." },
+    "rights": { "title": "Vos droits", "body": "Vous pouvez demander à tout moment la correction ou la suppression de vos données en contactant la clinique. Vous pouvez également refuser de recevoir des messages non essentiels (SMS/WhatsApp) en nous le signalant." },
+    "contact": { "title": "Contact", "body": "Pour toute question concernant vos données, contactez-nous au +213 793 03 58 93 ou à l'adresse du cabinet : 10, rue Larbi Abdelsalem, Rouiba, Alger." }
   },
   "Hero": {
     "title": "Votre sourire, notre priorité",
