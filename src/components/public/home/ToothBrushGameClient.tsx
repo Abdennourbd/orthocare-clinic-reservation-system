@@ -341,13 +341,17 @@ export default function ToothBrushGameClient() {
     [spawnSparkles],
   );
 
+  // Once won, the overlay's buttons sit inside this same wrapper. Capturing the
+  // pointer here would retarget the pointerup to the wrapper, so the browser
+  // would fire the click on the wrapper instead of the button and "play again"
+  // would do nothing. There is nothing left to brush after a win, so skip it.
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (prefersReducedMotion || !mounted) return;
+    if (prefersReducedMotion || !mounted || won) return;
     e.currentTarget.setPointerCapture(e.pointerId);
     track(e.clientX, e.clientY);
   };
   const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (prefersReducedMotion || !mounted) return;
+    if (prefersReducedMotion || !mounted || won) return;
     track(e.clientX, e.clientY);
   };
   const handlePointerEnd = () => {
