@@ -18,8 +18,19 @@ const TEST_DATABASE_URL =
 // accidentally pointing at the shared Neon DB) from letting tests truncate
 // real/shared data.
 if (!/localhost|127\.0\.0\.1|::1/.test(TEST_DATABASE_URL)) {
+  // Never interpolate the raw connection string here: it carries the DB
+  // credentials, and this exact guard is what fires when a CI box has
+  // TEST_DATABASE_URL misconfigured to point at the shared Neon DB — i.e.
+  // exactly the case where the message is most likely to end up in
+  // widely-readable build logs. Surface only the (non-secret) hostname.
+  let host: string;
+  try {
+    host = new URL(TEST_DATABASE_URL).hostname;
+  } catch {
+    host = "<invalid URL>";
+  }
   throw new Error(
-    `TEST_DATABASE_URL must point at a LOCAL database, got: ${TEST_DATABASE_URL}. ` +
+    `TEST_DATABASE_URL must point at a LOCAL database, got host: "${host}". ` +
       "Tests must never run against a shared or production database.",
   );
 }
