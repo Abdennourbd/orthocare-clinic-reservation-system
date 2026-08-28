@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { getPrisma } from "@/lib/db";
 import {
+  AuditAction,
+  AuditActorType,
   NotificationType,
   Role,
   SmsMessageType,
@@ -237,5 +239,145 @@ describe("Schema smoke test (Task 3a)", () => {
         },
       }),
     ).rejects.toThrow();
+  });
+
+  it("can create a Visit and read it back through patient.visits (Task 13)", async () => {
+    const prisma = getPrisma();
+
+    const staff = await prisma.user.create({
+      data: {
+        name: "Visit Author",
+        email: "visit-staff-test@orthocare.com",
+        passwordHash: "dummyhash",
+        role: Role.RECEPTIONIST,
+      },
+    });
+
+    const patient = await prisma.patient.create({
+      data: {
+        firstName: "Yacine",
+        lastName: "Belkacem",
+        phone: "0551223344",
+        phoneE164: "+213551223344",
+      },
+    });
+
+    const service = await prisma.service.create({
+      data: {
+        slug: "visit-service",
+        name: { fr: "Detartrage", ar: "تنظيف", en: "Scaling" },
+        description: { fr: "Desc", ar: "وصف", en: "Desc" },
+        durationMinutes: 30,
+      },
+    });
+
+    const visitDate = new Date("2026-03-14T09:00:00.000Z");
+    const visit = await prisma.visit.create({
+      data: {
+        patientId: patient.id,
+        date: visitDate,
+        serviceId: service.id,
+        type: "CONSULTATION",
+        notes: "Note clinique synthetique",
+        treatment: "Detartrage complet",
+        createdById: staff.id,
+      },
+    });
+    expect(visit.id).toBeDefined();
+
+    // History = COMPLETED appointments UNION Visit rows (plan.md §Domain /
+    // Data Model): the timeline query reads this relation.
+    const withVisits = await prisma.patient.findUnique({
+      where: { id: patient.id },
+      include: { visits: true },
+    });
+    expect(withVisits?.visits).toHaveLength(1);
+    expect(withVisits?.visits[0].id).toBe(visit.id);
+    expect(withVisits?.visits[0].date.toISOString()).toBe(
+      visitDate.toISOString(),
+    );
+
+    const fetched = await prisma.visit.findUnique({
+      where: { id: visit.id },
+      include: { service: true, createdBy: true },
+    });
+    expect(fetched?.service?.slug).toBe("visit-service");
+    expect(fetched?.createdBy?.email).toBe("visit-staff-test@orthocare.com");
+
+    // A walk-in recorded from the paper records has neither a catalogue
+    // service nor a known author — both relations are optional on purpose.
+    const walkIn = await prisma.visit.create({
+      data: {
+        patientId: patient.id,
+        date: new Date("2025-11-02T08:30:00.000Z"),
+        type: "URGENCE",
+      },
+    });
+    expect(walkIn.serviceId).toBeNull();
+    expect(walkIn.createdById).toBeNull();
+    expect(await prisma.visit.count({ where: { patientId: patient.id } })).toBe(
+      2,
+    );
+
+    // VISIT_CREATED is the audit action for a manually added visit; `detail`
+    // carries ids and enums only, never the clinical note.
+    const log = await prisma.auditLog.create({
+      data: {
+        actorType: AuditActorType.STAFF,
+        userId: staff.id,
+        action: AuditAction.VISIT_CREATED,
+        entityType: "Visit",
+        entityId: visit.id,
+        detail: { patientId: patient.id, type: "CONSULTATION" },
+      },
+    });
+    expect(log.action).toBe(AuditAction.VISIT_CREATED);
+  });
+
+  it("rejects a Visit whose patient does not exist (Task 13)", async () => {
+    const prisma = getPrisma();
+
+    // Also proves the per-test TRUNCATE ... CASCADE in tests/setup.ts reaches
+    // "Visit" through its FK to "Patient", although the table is not named
+    // there: the previous test left two rows behind.
+    expect(await prisma.visit.count()).toBe(0);
+
+    await expect(
+      prisma.visit.create({
+        data: {
+          patientId: "does-not-exist",
+          date: new Date("2026-03-14T09:00:00.000Z"),
+          type: "AUTRE",
+        },
+      }),
+    ).rejects.toThrow();
+  });
+
+  it("refuses to hard-delete a Patient that has a Visit (ON DELETE RESTRICT, Task 13)", async () => {
+    const prisma = getPrisma();
+
+    const patient = await prisma.patient.create({
+      data: {
+        firstName: "Nadia",
+        lastName: "Restrict",
+        phone: "0552334455",
+        phoneE164: "+213552334455",
+      },
+    });
+
+    await prisma.visit.create({
+      data: {
+        patientId: patient.id,
+        date: new Date("2026-01-10T10:00:00.000Z"),
+        type: "CONTROLE",
+      },
+    });
+
+    // A patient with history must never be hard-deletable: erasure is the
+    // soft path (`anonymizedAt`), never `prisma.patient.delete`. This is the
+    // guarantee the schema header comment documents for `Visit.patient`.
+    await expect(prisma.patient.delete({ where: { id: patient.id } })).rejects.toThrow();
+
+    expect(await prisma.patient.count({ where: { id: patient.id } })).toBe(1);
   });
 });

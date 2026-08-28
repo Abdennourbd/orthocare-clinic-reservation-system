@@ -45,6 +45,7 @@ model User {
 
   patientsCreated    Patient[] @relation("PatientCreatedBy")
   patientsUpdated    Patient[] @relation("PatientUpdatedBy")
+  visitsCreated      Visit[]
   scheduleExceptions ScheduleException[]
   smsMessagesSent    SmsMessage[]
   notifications      Notification[]
@@ -91,6 +92,7 @@ model Patient {
   appointments       Appointment[]
   waitlistEntries    WaitlistEntry[]
   smsMessages        SmsMessage[]
+  visits             Visit[]
 
   @@index([phoneE164])
 }
@@ -112,6 +114,7 @@ model Service {
   appointments       Appointment[]
   scheduleExceptions ScheduleException[]
   waitlistEntries    WaitlistEntry[]
+  visits             Visit[]
 }
 
 enum AppointmentStatus {
@@ -173,6 +176,57 @@ model Appointment {
 
   smsMessages        SmsMessage[]
   selfServiceTokens  SelfServiceToken[]
+}
+
+// -----------------------------------------------------------------------------
+// Task 13: Visit — manually recorded patient history.
+//
+// A patient's history is `COMPLETED` appointments UNION `Visit` rows. This
+// table carries the care the appointment book cannot know about: treatments
+// given before the clinic used this system, and walk-in patients treated
+// without ever booking a slot. plan.md §Domain / Data Model.
+//
+// PATIENT HEALTH DATA. `notes` and `treatment` are free-text clinical notes,
+// as confidential as `Appointment.visitNotes`: they must never reach a log, an
+// error message, a URL or an audit `detail`. An erasure request clears both
+// while keeping the row, so history and KPI counts stay exact.
+//
+// Deletion behaviour (Prisma defaults, spelled out because it is a data-loss
+// decision): `patient` is required -> ON DELETE RESTRICT, so a patient with
+// history can never be hard-deleted (erasure is the soft path, `anonymizedAt`).
+// `service` and `createdBy` are optional -> ON DELETE SET NULL: losing the
+// service link or the staff attribution must never destroy the visit itself.
+// -----------------------------------------------------------------------------
+
+model Visit {
+  id          String   @id @default(cuid())
+  patientId   String
+  patient     Patient  @relation(fields: [patientId], references: [id])
+
+  date        DateTime // UTC, like every timestamp in this schema
+
+  // Optional: a walk-in treatment may match no catalogue service.
+  serviceId   String?
+  service     Service? @relation(fields: [serviceId], references: [id])
+
+  /** CONSULTATION | TRAITEMENT | CONTROLE | URGENCE | AUTRE. Kept as String,
+   *  not a Prisma enum, so adding a category later needs no migration. */
+  type        String
+  /** Free-text clinical note — confidential. */
+  notes       String?
+  /** Free-text description of the treatment given — confidential. */
+  treatment   String?
+
+  // Staff attribution. Nullable: rows imported from the paper records have no
+  // author; the AuditLog (VISIT_CREATED) remains the authoritative trail.
+  createdById String?
+  createdBy   User?    @relation(fields: [createdById], references: [id])
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // The timeline query is always "this patient's visits, most recent first".
+  @@index([patientId, date])
 }
 
 // -----------------------------------------------------------------------------
@@ -405,6 +459,7 @@ enum AuditAction {
   PATIENT_CREATED
   PATIENT_UPDATED
   PATIENT_ANONYMIZED
+  VISIT_CREATED
   SMS_SENT
   PATIENT_DOCUMENT_UPLOADED
   PATIENT_DOCUMENT_DELETED
