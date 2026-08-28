@@ -113,7 +113,12 @@ describe("Authorization matrix — every /api/admin/* route × every actor", () 
       const absolute = path.join(adminDir, file);
       const routeModule = await import(pathToFileURL(absolute).href);
       // src/app/api/admin/audit/route.ts -> /api/admin/audit
-      const routePath = "/api/admin/" + file.replace(/\/route\.ts$/, "").replace(/\\/g, "/");
+      // On Windows, readdir(..., { recursive: true }) returns entries with
+      // backslash separators (e.g. "audit\route.ts"), so the backslash-to-
+      // slash normalization must run BEFORE stripping the "/route.ts"
+      // suffix — otherwise the suffix regex (which expects a leading slash)
+      // never matches and the segment is left dangling.
+      const routePath = "/api/admin/" + file.replace(/\\/g, "/").replace(/\/route\.ts$/, "");
       for (const method of HTTP_METHODS) {
         if (typeof routeModule[method] === "function") {
           if (!matrixPairs.has(`${method} ${routePath}`)) {
