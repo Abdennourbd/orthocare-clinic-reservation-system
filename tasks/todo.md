@@ -261,19 +261,19 @@ Task details + rationale live in `tasks/plan.md`. This is the working checklist.
 ## Task 12: Auth + RBAC + audit helper + dashboard shell
 **Description:** Staff login (email/password, signed session cookie with tokenVersion), middleware-protected `/admin`, dashboard shell (FR only), role-gated nav (ADMIN vs RECEPTIONIST), **`logAction(actor, action, entityType, entityId, detail)`** helper + `AuditLog` model (3c schema), and an ADMIN-only audit viewer. Every later staff action calls `logAction`. Includes login throttling with temporary lockout, CSRF origin checks on state-changing requests, cookie hardening (`HttpOnly`, `Secure`, `SameSite=Lax`, `__Host-` prefix, idle + absolute expiry), argon2id password hashing with a 12-character minimum, and the forced password change flow (`mustChangePassword`).
 **Acceptance criteria:**
-- [ ] Unauthenticated users redirected from `/admin`
-- [ ] Login validates; roles gate views (receptionist cannot see team/settings routes)
-- [ ] Deactivated staff (active=false) cannot log in; existing sessions revoked via tokenVersion bump
-- [ ] `logAction()` writes to AuditLog with enum action + JSON detail, and accepts **actor `STAFF` | `SYSTEM` | `PATIENT`** (⚠ signature change from v2 — Tasks 8, 9 and 17 have no staff user to pass; fixing it later means touching nine call sites)
-- [ ] Login success, failure and lockout are audited; AuditLog is append-only and ADMIN-only to read; reading it logs `AUDIT_VIEWED`
-- [ ] Repeated failed logins throttle and then lock the account temporarily
-- [ ] State-changing requests reject a mismatched `Origin`/`Referer`
-- [ ] Session expires on idle (2h) and absolutely (12h)
-- [ ] **Authorization matrix test exists**: every `/api/admin/*` route × {anonymous, receptionist, admin, deactivated} → expected status. This table is updated by every later task that adds a route
-- [ ] Unit tests: auth gating per role, tokenVersion revocation, password policy
-- [ ] Admin shell keyboard-navigable with visible focus states — the a11y baseline every screen built after it (Tasks 13–21) copies
-- [ ] Admin layout sets `dir="ltr"` explicitly (FR-only dashboard; RTL never leaks in if public locales change later)
-**Verification:** Manual auth flow; `npm test -- auth`; `npm test -- authz-matrix`; security review of session handling; keyboard-only pass through the shell.
+- [x] Unauthenticated users redirected from `/admin`
+- [x] Login validates; roles gate views (receptionist cannot see team/settings routes)
+- [x] Deactivated staff (active=false) cannot log in; existing sessions revoked via tokenVersion bump
+- [x] `logAction()` writes to AuditLog with enum action + JSON detail, and accepts **actor `STAFF` | `SYSTEM` | `PATIENT`** (⚠ signature change from v2 — Tasks 8, 9 and 17 have no staff user to pass; fixing it later means touching nine call sites)
+- [x] Login success, failure and lockout are audited; AuditLog is append-only and ADMIN-only to read; reading it logs `AUDIT_VIEWED`
+- [x] Repeated failed logins throttle and then lock the account temporarily
+- [x] State-changing requests reject a mismatched `Origin`/`Referer`
+- [x] Session expires on idle (2h) and absolutely (12h)
+- [x] **Authorization matrix test exists**: every `/api/admin/*` route × {anonymous, receptionist, admin, deactivated} → expected status. This table is updated by every later task that adds a route
+- [x] Unit tests: auth gating per role, tokenVersion revocation, password policy
+- [x] Admin shell keyboard-navigable with visible focus states — the a11y baseline every screen built after it (Tasks 13–21) copies
+- [x] Admin layout sets `dir="ltr"` explicitly (FR-only dashboard; RTL never leaks in if public locales change later)
+**Verification:** Manual auth flow; `npm test -- auth`; `npm test -- authz-matrix`; security review of session handling; keyboard-only pass through the shell. ✅ passed — see `tasks/task12-summary.md`.
 **Dependencies:** Task 3a (User schema) — **NOT** Task 7
 **Estimated scope:** Large (4–5 days)
 **Skill:** An **auth / RBAC / session-security** skill **plus** a **security-review or threat-modeling** skill. Together these are the single most valuable install on the project: this task defines who can reach patient data, and every task after it inherits the decision. The **frontend-ui-engineering** skill applies to the dashboard shell itself: it sets the page scaffold, nav hierarchy, density and focus/keyboard patterns that every later admin screen (Tasks 13–21) inherits — getting it right here is what keeps the rest of the dashboard consistent instead of generic. **ui-ux-pro-max** is useful for targeted UX-guideline searches (dashboard layout, accessible navigation) during the build.
