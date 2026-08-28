@@ -3,6 +3,8 @@ import { NextRequest } from "next/server";
 import { getPrisma } from "@/lib/db";
 import { AuditAction, AuditActorType, Role } from "@/generated/prisma/client";
 import { createSessionToken, SESSION_COOKIE_NAME } from "@/lib/auth/session";
+import { requireStaff } from "@/lib/auth/guard";
+import { ok, errorResponse } from "@/lib/api/http";
 import { GET as auditRoute } from "@/app/api/admin/audit/route";
 
 // Task 12 — the authorization matrix (plan.md §Testing strategy):
@@ -11,6 +13,33 @@ import { GET as auditRoute } from "@/app/api/admin/audit/route";
 //   status. Every later task that adds an admin route adds a row here — in an
 //   RBAC system this is simultaneously the most likely and most damaging bug,
 //   and it is usually introduced by an unrelated later task.
+//
+// Task 13 step 2 — this file is the ONLY automatic safety net against
+// unauthorized access to patient data. Whoever edits this file next: it is
+// forbidden to (a) narrow the route-file scan filter below, (b) remove a
+// method from HTTP_METHODS, (c) weaken or remove
+// `expect(missing).toEqual([])`, or (d) touch tests/setup.ts. Only WIDENING
+// the detection (more extensions, more methods) is allowed — see the
+// route.tsx/.js/.jsx and OPTIONS additions below, both deliberate widenings,
+// never narrowings.
+//
+// Task 13 step 2, tour 2 — also forbidden: (e) setting `okStatus` to 401 or
+// 403, which collapses an "authorized" row onto the "forbidden" row and
+// makes it prove nothing (see AuthorizedOkStatus and the runtime invariant
+// test below — both exist specifically to catch this).
+//
+// Task 13 step 2, tour 3 — also forbidden: (f) shrinking the actor list a
+// row/test is run against. The coverage loop below iterates
+// `Object.keys(EXPECTED) as ActorKind[]`, never a hand-written array literal
+// — removing an actor from `EXPECTED` (a `Record<ActorKind, …>`) fails
+// `npm run typecheck`, and removing it from `ActorKind` itself breaks every
+// `kind === "..."` comparison. Do not reintroduce a literal actor array here.
+// Also forbidden: (g) a `RouteRow.handler` that is not provably the function
+// the route file actually exports for that method — see the
+// `row.handler !== routeModule[method]` check in the coverage test below. A
+// row can satisfy scanPath coverage while silently running a different
+// route's handler (e.g. a copy-pasted row whose `handler:` was never
+// updated); that check exists specifically to catch that.
 
 beforeAll(() => {
   vi.stubEnv("SESSION_SECRET", "test-session-secret-for-vitest-only");
@@ -19,14 +48,55 @@ beforeAll(() => {
 
 type ActorKind = "anonymous" | "receptionist" | "admin" | "deactivated";
 
+/**
+ * Task 13 step 2, tour 2 (MAJEUR-1) — the closed set of statuses an
+ * AUTHORIZED actor may legitimately receive from `RouteRow.okStatus`,
+ * deliberately excluding 401 and 403 (see the comment on `okStatus` below).
+ * Add a concrete status here when a future step needs one; never replace
+ * this union with `number`.
+ */
+type AuthorizedOkStatus = 200 | 201 | 204 | 400 | 404 | 409 | 422;
+
 interface RouteRow {
   method: string;
-  path: string;
+  /**
+   * The literal path as produced by the filesystem scan below (e.g.
+   * `/api/admin/patients/[id]`). This is the key compared against
+   * `matrixPairs` in the coverage test — it is NOT necessarily a requestable
+   * URL for dynamic routes.
+   */
+  scanPath: string;
+  /**
+   * The URL actually requested (e.g. `/api/admin/patients/does-not-exist`).
+   * Defaults to `scanPath` for static routes, where the two coincide.
+   */
+  requestPath?: string;
+  /** Route params for dynamic routes (Next 16 passes `params` as a Promise). */
+  params?: Record<string, string>;
   /** Roles allowed through (403 for the others). */
   allowed: Role[];
-  /** Status an ADMIN should get (200 by default, overridden for query errors). */
-  adminStatus?: number;
-  handler: (request: NextRequest) => Promise<Response>;
+  /**
+   * Status an authorized actor should get (200 by default). Overridden when
+   * the guard passes but a later step legitimately 4xx's (query validation,
+   * missing body, id not found) — this still proves the guard runs first.
+   *
+   * Task 13 step 2, tour 2 (MAJEUR-1, ortho-security) — this is restricted to
+   * `AuthorizedOkStatus`, NOT `number`. 401 and 403 are exactly the two
+   * statuses `EXPECTED[kind].forbidden` can produce (see EXPECTED below). If
+   * `okStatus` could hold either value, an `allowed:[ADMIN]` row with
+   * `okStatus: 403` would make EVERY cell of that row green — admin "passes"
+   * by being refused same as everyone else — and the row would silently stop
+   * proving anything about that route's authorization. Do not widen this
+   * union to `number` to make a new value fit; add the concrete status here
+   * instead. The runtime invariant test below (`okStatus may never equal a
+   * forbidden-branch status`) is the second, unbypassable layer — it is what
+   * catches an `as any`/`as AuthorizedOkStatus` cast around this type.
+   */
+  okStatus?: AuthorizedOkStatus;
+  handler: (
+    request: NextRequest,
+    context: { params: Promise<Record<string, string>> },
+  ) => Promise<Response>;
 }
 
 async function makeUser(kind: ActorKind): Promise<{ id: string; role: Role; tokenVersion: number; active: boolean } | null> {
@@ -55,16 +125,30 @@ async function requestAs(kind: ActorKind, row: RouteRow): Promise<Response> {
     });
     headers.cookie = `${SESSION_COOKIE_NAME}=${token}`;
   }
-  const url = new URL(row.path, "http://localhost:3000");
-  return row.handler(new NextRequest(url, { method: row.method, headers }));
+  const url = new URL(row.requestPath ?? row.scanPath, "http://localhost:3000");
+  return row.handler(new NextRequest(url, { method: row.method, headers }), {
+    params: Promise.resolve(row.params ?? {}),
+  });
 }
 
 const ROUTES: RouteRow[] = [
   {
     method: "GET",
-    path: "/api/admin/audit",
+    scanPath: "/api/admin/audit",
     allowed: [Role.ADMIN],
-    handler: (r) => auditRoute(r),
+    // Not dynamic — the handler ignores the second (context) argument, and
+    // its behavior must stay byte-for-byte identical to before this step.
+    //
+    // Task 13 step 2, tour 3 (MAJEUR-1) — the exported function itself, NOT
+    // an arrow-wrapped `(r) => auditRoute(r)`. TypeScript accepts this
+    // directly (a 1-parameter function is assignable to the 2-parameter
+    // RouteRow.handler type), and using the export as-is is what lets the
+    // coverage test below assert `row.handler === routeModule[method]` — a
+    // wrapper closure would never be `===` the module's export, so this row
+    // would fail that assertion even though it is correct. Every future row
+    // must reference its route module's export the same way, never a
+    // wrapper.
+    handler: auditRoute,
   },
 ];
 
@@ -77,17 +161,22 @@ const EXPECTED: Record<ActorKind, { ok: number; forbidden: number }> = {
 
 describe("Authorization matrix — every /api/admin/* route × every actor", () => {
   for (const row of ROUTES) {
-    for (const kind of ["anonymous", "deactivated", "receptionist", "admin"] as ActorKind[]) {
-      it(`${row.method} ${row.path} as ${kind}`, async () => {
+    // Task 13 step 2, tour 3 (MAJEUR-2, ortho-security) — iterate the keys of
+    // EXPECTED (a Record<ActorKind, …>), never a hand-written literal array.
+    // A literal array can be silently shortened by one diff line, switching
+    // off that actor's whole column on every row with nothing to catch it.
+    // Dropping a key from EXPECTED fails `npm run typecheck`; dropping the
+    // member from ActorKind itself breaks the `kind === "..."` comparisons
+    // below — the guarantee is compile-time, not a convention.
+    for (const kind of Object.keys(EXPECTED) as ActorKind[]) {
+      const label = `${row.method} ${row.requestPath ?? row.scanPath} as ${kind}`;
+      it(label, async () => {
         const response = await requestAs(kind, row);
         const allowed =
           kind === "admin" ||
           (kind === "receptionist" && row.allowed.includes(Role.RECEPTIONIST));
-        const expected = allowed ? EXPECTED[kind].ok : EXPECTED[kind].forbidden;
-        expect([response.status, `${row.method} ${row.path} as ${kind}`]).toEqual([
-          expected,
-          `${row.method} ${row.path} as ${kind}`,
-        ]);
+        const expected = allowed ? (row.okStatus ?? EXPECTED[kind].ok) : EXPECTED[kind].forbidden;
+        expect([response.status, label]).toEqual([expected, label]);
       });
     }
   }
@@ -95,19 +184,35 @@ describe("Authorization matrix — every /api/admin/* route × every actor", () 
   it("matrix covers every exported HTTP method of every admin route file", async () => {
     // Guard against routes/methods being added without a matrix row. This is
     // METHOD-level, not file-level: adding a POST export to an existing
-    // route.ts must fail here too. If this fails, add the new
-    // (method, path) pair to ROUTES above.
+    // route.ts must fail here too. If `missing` fails, add the new
+    // (method, scanPath) pair to ROUTES above. If `mismatched` fails, the
+    // row's `handler` points at the wrong route's exported function — fix
+    // `handler:` to reference this file's own export (see MAJEUR-1 comments
+    // below).
     const { readdir } = await import("node:fs/promises");
     const path = await import("node:path");
     const { pathToFileURL } = await import("node:url");
     const adminDir = path.resolve("src/app/api/admin");
     const entries = await readdir(adminDir, { recursive: true });
-    const routeFiles = entries.filter((e) => e.endsWith("route.ts"));
+    // Widened (never narrowed — see header comment) to also catch
+    // route.tsx/.js/.jsx: `pageExtensions` is not restricted in
+    // next.config.ts, so a route.tsx would be a real, Next-served admin
+    // route that this guard would otherwise never see. Anchored on the path
+    // separator (not a bare endsWith) so "myroute.ts" cannot false-match.
+    const routeFiles = entries.filter((e) => /(^|[\\/])route\.(ts|tsx|js|jsx)$/.test(e));
     expect(routeFiles.length).toBeGreaterThan(0);
 
-    const HTTP_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"] as const;
-    const matrixPairs = new Set(ROUTES.map((r) => `${r.method} ${r.path}`));
+    // Widened (never narrowed) to include OPTIONS, previously missing.
+    const HTTP_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"] as const;
+    // Task 13 step 2, tour 3 (MAJEUR-1, ortho-security) — a Map keyed by
+    // "method scanPath" pointing at the actual ROUTES row, not just a Set of
+    // strings. `matrixPairs.has(...)` alone only proves a row with the right
+    // (method, scanPath) LABEL exists; it says nothing about whether that
+    // row's `handler` is really the function this file exports for that
+    // method. See the `row.handler !== routeModule[method]` check below.
+    const routeByPair = new Map(ROUTES.map((r) => [`${r.method} ${r.scanPath}`, r]));
     const missing: string[] = [];
+    const mismatched: string[] = [];
 
     for (const file of routeFiles) {
       const absolute = path.join(adminDir, file);
@@ -115,25 +220,198 @@ describe("Authorization matrix — every /api/admin/* route × every actor", () 
       // src/app/api/admin/audit/route.ts -> /api/admin/audit
       // On Windows, readdir(..., { recursive: true }) returns entries with
       // backslash separators (e.g. "audit\route.ts"), so the backslash-to-
-      // slash normalization must run BEFORE stripping the "/route.ts"
+      // slash normalization must run BEFORE stripping the "/route.(ts|tsx|js|jsx)"
       // suffix — otherwise the suffix regex (which expects a leading slash)
       // never matches and the segment is left dangling.
-      const routePath = "/api/admin/" + file.replace(/\\/g, "/").replace(/\/route\.ts$/, "");
+      const routePath =
+        "/api/admin/" + file.replace(/\\/g, "/").replace(/\/route\.(ts|tsx|js|jsx)$/, "");
       for (const method of HTTP_METHODS) {
         if (typeof routeModule[method] === "function") {
-          if (!matrixPairs.has(`${method} ${routePath}`)) {
-            missing.push(`${method} ${routePath}`);
+          const pair = `${method} ${routePath}`;
+          const row = routeByPair.get(pair);
+          if (!row) {
+            missing.push(pair);
+            continue;
+          }
+          // Task 13 step 2, tour 3 (MAJEUR-1) — the row exists for this
+          // (method, scanPath), but does its `handler` actually run THIS
+          // file's exported function, or a copy-pasted handler from a
+          // different route? A row that satisfies the label check above
+          // while running e.g. the `audit` handler on a patients-only row
+          // would still produce 401/401/403/200 for an ADMIN-only row —
+          // exactly what the matrix loop expects — and the row would go
+          // green having never executed the real route at all. Route
+          // modules must export their handler function directly (see the
+          // comment on the `audit` row's `handler: auditRoute` above) for
+          // this `===` comparison to mean anything.
+          if (row.handler !== routeModule[method]) {
+            mismatched.push(
+              `${pair} — this row's handler is not the ${method} exported by ` +
+                `${file}; it is testing a different route than the one it ` +
+                `claims to cover (e.g. a copy-pasted row whose handler: was ` +
+                `never updated to the real route's export)`,
+            );
           }
         }
       }
     }
     expect(missing).toEqual([]);
+    expect(mismatched).toEqual([]);
   });
 
   it("admin root layout pins dir=ltr explicitly (RTL never leaks into the FR dashboard)", async () => {
     const { readFile } = await import("node:fs/promises");
     const source = await readFile("src/app/admin/layout.tsx", "utf8");
     expect(source).toContain('dir="ltr"');
+  });
+
+  // Task 13 step 2, tour 2 (MAJEUR-1, ortho-security) — the runtime half of
+  // the okStatus protection. AuthorizedOkStatus (the type) stops a literal
+  // `okStatus: 403` at compile time, but does nothing against `okStatus: 403
+  // as AuthorizedOkStatus` or `as any` — a shortcut a future agent racing to
+  // make a red row go green might reach for. This test makes that shortcut
+  // fail anyway, with a message that explains why it is forbidden rather than
+  // just that it is. It sweeps every row actually registered in ROUTES, so it
+  // grows automatically as steps 4-8 add rows.
+  it("invariant: no ROUTES row's okStatus equals a forbidden-branch status (401 or 403)", () => {
+    const forbiddenBranchStatuses = new Set([401, 403]);
+    const offenders = ROUTES.filter(
+      (r) => r.okStatus !== undefined && forbiddenBranchStatuses.has(r.okStatus),
+    ).map((r) => `${r.method} ${r.scanPath} (okStatus: ${r.okStatus})`);
+    expect(
+      offenders,
+      "okStatus must never be 401 or 403 — those are the only two statuses the " +
+        "forbidden branch of the matrix ternary can produce. Setting okStatus to " +
+        "one of them makes an authorized actor's expected status collide with an " +
+        "unauthorized actor's expected status, so the row passes whether or not " +
+        "the route actually checks the role — it stops proving anything. Fix the " +
+        "route (or the row's real okStatus), do not silence this check.",
+    ).toEqual([]);
+  });
+});
+
+// Task 13 step 2 — harness non-regression: the two-argument handler
+// signature and the scanPath/requestPath split must not change the observed
+// behavior of the one static route that existed before this step.
+describe("harness non-regression — GET /api/admin/audit is unaffected by the dynamic-route changes", () => {
+  const auditRow = ROUTES.find((r) => r.scanPath === "/api/admin/audit")!;
+
+  it("anonymous -> 401, receptionist -> 403, admin -> 200, same as before this step", async () => {
+    expect((await requestAs("anonymous", auditRow)).status).toBe(401);
+    expect((await requestAs("receptionist", auditRow)).status).toBe(403);
+    expect((await requestAs("admin", auditRow)).status).toBe(200);
+  });
+});
+
+// Task 13 step 2 — anti-IDOR / non-disclosure proof for dynamic routes.
+// This handler is FICTITIOUS, defined only in this test file: it stands in
+// for the shape a future /api/admin/patients/[id] handler will take
+// (params is a Promise, per Next 16), so the harness's dynamic-route support
+// can be proven before any real dynamic route exists. It is deliberately not
+// added to ROUTES — it is not a real file the coverage scan would find.
+async function fakeDynamicPatientRoute(
+  request: NextRequest,
+  context: { params: Promise<Record<string, string>> },
+): Promise<Response> {
+  const guard = await requireStaff(request, { roles: ["ADMIN", "RECEPTIONIST"] });
+  if (!guard.ok) return guard.response;
+  // A real handler would look the patient up here. The point of the test
+  // below is that an anonymous caller never reaches this line.
+  const { id } = await context.params;
+  return ok({ id });
+}
+
+describe("anti-IDOR — dynamic route rejects anonymous callers before any DB read", () => {
+  it("401s on an arbitrary params.id, with no leak of the id or of existence", async () => {
+    const arbitraryId = "cljxyz-arbitrary-patient-id-does-not-exist";
+    const url = new URL(`/api/admin/patients/${arbitraryId}`, "http://localhost:3000");
+    const response = await fakeDynamicPatientRoute(new NextRequest(url, { method: "GET" }), {
+      params: Promise.resolve({ id: arbitraryId }),
+    });
+    expect(response.status).toBe(401);
+    const bodyText = await response.text();
+    expect(bodyText).not.toContain(arbitraryId);
+    expect(JSON.parse(bodyText)).toEqual({
+      error: { code: "UNAUTHENTICATED", message: "Session invalide ou expirée." },
+    });
+  });
+});
+
+// Task 13 step 2 — okStatus must never leak past the guard. okStatus lets an
+// AUTHORIZED actor legitimately get a non-200 (e.g. 404 when a future
+// /api/admin/patients/[id] can't find the id, or 400 on a missing body).
+// The risk this row exists to disprove: if the ternary in the matrix loop
+// (`allowed ? (row.okStatus ?? ...) : EXPECTED[kind].forbidden`) were ever
+// inverted or short-circuited, an UNAUTHORIZED caller could receive that same
+// 404 instead of 401/403 — which leaks "this id exists" to someone who was
+// never let in. This row is FICTITIOUS (not in ROUTES, invisible to the
+// coverage scan) and reuses requireStaff, exercised directly via requestAs()
+// exactly as a real matrix row would be.
+describe("okStatus never overrides the forbidden branch for an unauthorized actor", () => {
+  const okStatusProbe: RouteRow = {
+    method: "GET",
+    scanPath: "/api/admin/__fictitious-ok-status-probe",
+    allowed: [Role.ADMIN],
+    okStatus: 404, // simulates "authorized admin, resource not found"
+    handler: async (request) => {
+      const guard = await requireStaff(request, { roles: ["ADMIN"] });
+      if (!guard.ok) return guard.response;
+      return errorResponse(404, "NOT_FOUND", "Ressource introuvable.");
+    },
+  };
+
+  it("admin (allowed) gets okStatus 404, but anonymous/receptionist never see 404 — only 401/403", async () => {
+    expect((await requestAs("admin", okStatusProbe)).status).toBe(404);
+    expect((await requestAs("anonymous", okStatusProbe)).status).toBe(401);
+    expect((await requestAs("receptionist", okStatusProbe)).status).toBe(403);
+    expect((await requestAs("deactivated", okStatusProbe)).status).toBe(401);
+  });
+});
+
+// Task 13 step 2, tour 2 (MAJEUR-2, ortho-security + ortho-reviewer) — the
+// two other Task 13 step 2 tests that exercise a dynamic-route shape each
+// take a shortcut around one part of the chain the step was actually meant to
+// deliver:
+//   - the anti-IDOR test above calls fakeDynamicPatientRoute() directly,
+//     bypassing requestAs() entirely;
+//   - the okStatus test's row has a scanPath with no brackets and the default
+//     (empty) params.
+// Neither one proves that requestAs() correctly substitutes requestPath for a
+// bracketed scanPath, or correctly threads a non-empty params map through to
+// the handler's `context.params` Promise — which is the actual new plumbing
+// this step added to RouteRow/requestAs(). This row is FICTITIOUS (not in
+// ROUTES, invisible to the coverage scan) and is requested exclusively
+// through requestAs(), exactly like a real matrix row would be.
+async function fakeDynamicIdEchoRoute(
+  request: NextRequest,
+  context: { params: Promise<Record<string, string>> },
+): Promise<Response> {
+  const guard = await requireStaff(request, { roles: ["ADMIN"] });
+  if (!guard.ok) return guard.response;
+  const params = await context.params;
+  return ok({ requestedPathname: new URL(request.url).pathname, params });
+}
+
+describe("requestAs() end-to-end: bracketed scanPath + substituted requestPath + non-empty params", () => {
+  const echoProbe: RouteRow = {
+    method: "GET",
+    scanPath: "/api/admin/__fictitious/[id]",
+    requestPath: "/api/admin/__fictitious/abc123",
+    params: { id: "abc123" },
+    allowed: [Role.ADMIN],
+    handler: fakeDynamicIdEchoRoute,
+  };
+
+  it("requests requestPath (not the literal [id] scanPath) and delivers params to the handler's context.params", async () => {
+    const response = await requestAs("admin", echoProbe);
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { requestedPathname: string; params: Record<string, string> };
+    // Proves requestAs() built the request against requestPath, never the
+    // bracketed scanPath literal (which is not a requestable URL).
+    expect(body.requestedPathname).toBe("/api/admin/__fictitious/abc123");
+    // Proves params was threaded through to `context.params` (a Promise, per
+    // Next 16) untouched.
+    expect(body.params).toEqual({ id: "abc123" });
   });
 });
 
