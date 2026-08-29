@@ -1,0 +1,16 @@
+- [RBAC coverage guard: authz-matrix file scan](guard_authz_matrix_file_scan.md) — the one test that fails CI when a new admin route is untested; how to prove it is not blind
+- [Blind spots of the authz matrix](boundaries_authz_matrix_harness.md) — no Origin header, admin pages unscanned, never requests an existing id; plus the field-by-field method that finds the next tautology
+- [Windows readdir returns backslashes](reference_windows_readdir_backslash.md) — cause of CI-green/local-red divergence in path-derived guards; normalize before regex
+- [Audit detail is echoed verbatim](invariant_audit_detail_no_patient_identity.md) — minimum disclosure of /api/admin/audit depends on every logAction() call site
+- [TRUNCATE coverage is FK-derived](guard_test_truncate_fk_coverage.md) — a new table is only cleaned between tests if it has an FK to the 15 named in tests/setup.ts; the SQL to prove it
+- [The 422 INVALID_PHONE gate](guard_phone_e164_gate.md) — route-level, not Zod; every new Patient write path must mirror it or dedupe and messaging die silently
+- [Minimum disclosure has two halves](invariant_minimum_disclosure_read_vs_return.md) — the Prisma select vs the response literal; Object.keys() tests only ever guard the second
+- [Rejection paths disclose too](pattern_unaudited_read_on_rejection_path.md) — a 409 carrying patient identity is an unaudited read and an id-discovery oracle
+- [Patient write-path parity](reference_patient_write_path_parity.md) — diff every new Patient create/update against appointments route + upsertPatient: consent, non-unique phoneE164, E.164 gate
+- [Reads get rate-limited here too](guard_rate_limit_read_surfaces.md) — /api/slots is throttled; compute ceil(rows/page_size) for any new list route and check the limiter key
+- [Booking resolves on phone+name](guard_upsert_patient_phone_name.md) — the only guard against mixing two family members' records; never revert to phone-only, never force `active: true`
+- [createdAt ties are the norm](trap_createdat_tie_ordering.md) — 49/59 back-to-back inserts share a millisecond; `orderBy: createdAt` alone picks an arbitrary row, and order-based regression tests are coin flips
+- [normalizeName: what it folds and what it doesn't](boundaries_normalize_name_coverage.md) — alef-hamza and ZWJ/ZWNJ diverge; every divergence fails toward record fragmentation, not disclosure
+- [Edit-route gate parity](method_edit_route_gate_parity.md) — PATCH gates keyed on "which field changed" diverge from POST gates keyed on "what the result collides with"
+- [Merged-timeline ordering](guard_merged_timeline_ordering.md) — two findMany merged in TS need orderBy + a tiebreak on both, or a paged union skips and duplicates rows
+- [Patients rate-limit pools](reference_patients_rate_limit_pools.md) — patients-read 60/5min vs patients-write 30/5min; pool membership is re-declared per file, never implied

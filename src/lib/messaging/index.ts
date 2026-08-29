@@ -80,13 +80,19 @@ export async function sendMessage(
 ): Promise<SmsMessage | null> {
   const prisma = getPrisma();
 
-  // 1. Opt-out gate (non-transactional only).
+  // 1. Opt-out gate (non-transactional only). Task 13 étape 5 (§Contraintes
+  // point 6): a soft-deleted record (`active: false`) must stop receiving
+  // NON-transactional messages too, same as an explicit opt-out — before
+  // this, deactivating a patient (the dashboard's only "delete") left them
+  // still reachable by every marketing/reminder-class send. Transactional
+  // messages (e.g. a booking confirmation the patient is actively waiting
+  // on) still always send, same as an opt-out.
   if (!isTransactional(input.type)) {
     const patient = await prisma.patient.findUnique({
       where: { id: input.patientId },
-      select: { messagingOptOut: true },
+      select: { messagingOptOut: true, active: true },
     });
-    if (patient?.messagingOptOut) return null;
+    if (patient?.messagingOptOut || patient?.active === false) return null;
   }
 
   // 2. Render the body from the (admin-editable) template.
@@ -134,9 +140,9 @@ export async function sendMessage(
         if (!isTransactional(input.type)) {
           const patient = await prisma.patient.findUnique({
             where: { id: input.patientId },
-            select: { messagingOptOut: true },
+            select: { messagingOptOut: true, active: true },
           });
-          if (patient?.messagingOptOut) return null;
+          if (patient?.messagingOptOut || patient?.active === false) return null;
         }
         const retryResult = await deliver(provider, existing.to, existing.body);
         return prisma.smsMessage.update({

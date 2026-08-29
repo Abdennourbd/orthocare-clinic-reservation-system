@@ -25,7 +25,16 @@ export const patientCreateSchema = z.object({
   preferredLocale: z.enum(["fr", "ar", "en"]).optional(),
   // Set by the client after the user has seen the duplicate-candidate
   // warning and chosen to proceed anyway (§Décisions d'architecture 1).
+  // Covers NAME matches only — see phoneSharingAcknowledged below.
   duplicateAcknowledged: z.boolean().optional().default(false),
+  // Task 13 étape 4 tour 2 — separate, explicit acknowledgement for a
+  // PHONE-only match (no name overlap). Algerian families legitimately
+  // share one phone, so sharing is never forbidden (no @unique on
+  // phoneE164 — prisma/schema.prisma), but it must be a conscious staff
+  // gesture, not the side-effect of dismissing an unrelated homonym
+  // warning. Kept distinct from duplicateAcknowledged on purpose: a
+  // request can trip one gate without the other.
+  phoneSharingAcknowledged: z.boolean().optional().default(false),
 });
 
 export const patientUpdateSchema = patientCreateSchema.partial().extend({

@@ -13,15 +13,19 @@ import {
 } from "@/lib/booking/releaseSlot";
 import { rescheduleSlot } from "@/lib/booking/rescheduleSlot";
 import { onSlotFreed } from "@/lib/booking/events";
-
-// Build a clinic-local start time for a given local date/time (UTC+1, no DST).
-// Returns the UTC instant that corresponds to `localDateT` + `hh:mm` local.
-function localStart(localDate: string, hhmm: string): Date {
-  return new Date(`${localDate}T${hhmm}:00.000+01:00`);
-}
+import {
+  localStart,
+  nextOpenLocalDate,
+  nextClosedLocalDate,
+} from "./helpers/testDates";
 
 let patientId: string;
 let serviceId: string;
+// Computed fresh each test from the workingHours fixture just inserted below
+// — see tests/integration/helpers/testDates.ts for why these aren't literal
+// "2026-08-29" strings.
+let openDate: string;
+let closedDate: string;
 
 beforeEach(async () => {
   const prisma = getPrisma();
@@ -75,22 +79,24 @@ beforeEach(async () => {
       },
     ],
   });
+
+  openDate = await nextOpenLocalDate();
+  closedDate = await nextClosedLocalDate();
 });
 
 describe("bookSlot", () => {
   it("creates a PENDING appointment with endTime derived from service duration", async () => {
-    // Friday 2026-08-28 is closed; use a Saturday 2026-08-29.
     const appt = await bookSlot({
       patientId,
       serviceId,
-      startUTC: localStart("2026-08-29", "11:00"), // 10:00 UTC
+      startUTC: localStart(openDate, "11:00"), // 10:00 UTC
     });
 
     expect(appt.status).toBe(AppointmentStatus.PENDING);
     expect(appt.source).toBe(AppointmentSource.ONLINE);
-    expect(appt.startTime.toISOString()).toBe("2026-08-29T10:00:00.000Z");
+    expect(appt.startTime.toISOString()).toBe(`${openDate}T10:00:00.000Z`);
     // 30-min service -> end = 11:30 local = 10:30 UTC
-    expect(appt.endTime.toISOString()).toBe("2026-08-29T10:30:00.000Z");
+    expect(appt.endTime.toISOString()).toBe(`${openDate}T10:30:00.000Z`);
     expect(appt.resourceId).toBeNull();
   });
 
@@ -100,7 +106,7 @@ describe("bookSlot", () => {
       bookSlot({
         patientId,
         serviceId,
-        startUTC: localStart("2026-08-29", "09:00"),
+        startUTC: localStart(openDate, "09:00"),
       }),
     ).rejects.toBeInstanceOf(SlotConflictError);
   });
@@ -110,14 +116,14 @@ describe("bookSlot", () => {
       bookSlot({
         patientId,
         serviceId,
-        startUTC: localStart("2026-08-28", "11:00"), // Friday, closed
+        startUTC: localStart(closedDate, "11:00"), // Friday, closed
       }),
     ).rejects.toBeInstanceOf(SlotConflictError);
   });
 
   it("enforces lead time against the real clock (stale client can't bypass)", async () => {
     // bookSlot re-checks with `new Date()`, not a client-provided time. Set a
-    // huge lead time so even this future slot (2026-08-29) is inside the lead
+    // huge lead time so even this near-future slot is inside the lead
     // window and must be rejected.
     await getPrisma().setting.update({
       where: { key: "bookingPolicy" },
@@ -128,13 +134,13 @@ describe("bookSlot", () => {
       bookSlot({
         patientId,
         serviceId,
-        startUTC: localStart("2026-08-29", "11:00"),
+        startUTC: localStart(openDate, "11:00"),
       }),
     ).rejects.toBeInstanceOf(SlotConflictError);
   });
 
   it("allows exactly one of two concurrent bookings of the same slot", async () => {
-    const startUTC = localStart("2026-08-29", "11:00");
+    const startUTC = localStart(openDate, "11:00");
     const results = await Promise.allSettled([
       bookSlot({ patientId, serviceId, startUTC }),
       bookSlot({ patientId, serviceId, startUTC }),
@@ -154,7 +160,7 @@ describe("bookSlot", () => {
   });
 
   it("rejects a second booking that overlaps the first (with buffer)", async () => {
-    const startUTC = localStart("2026-08-29", "11:00");
+    const startUTC = localStart(openDate, "11:00");
     await bookSlot({ patientId, serviceId, startUTC });
 
     // 30-min service; next candidate at 11:15 local would overlap the
@@ -163,7 +169,7 @@ describe("bookSlot", () => {
       bookSlot({
         patientId,
         serviceId,
-        startUTC: localStart("2026-08-29", "11:15"),
+        startUTC: localStart(openDate, "11:15"),
       }),
     ).rejects.toBeInstanceOf(SlotConflictError);
   });
@@ -171,7 +177,7 @@ describe("bookSlot", () => {
 
 describe("releaseSlot", () => {
   it("cancels the appointment, records the reason, and frees the slot", async () => {
-    const startUTC = localStart("2026-08-29", "11:00");
+    const startUTC = localStart(openDate, "11:00");
     const appt = await bookSlot({ patientId, serviceId, startUTC });
 
     const freed: unknown[] = [];
@@ -210,7 +216,7 @@ describe("releaseSlot", () => {
     const appt = await bookSlot({
       patientId,
       serviceId,
-      startUTC: localStart("2026-08-29", "12:00"),
+      startUTC: localStart(openDate, "12:00"),
     });
     await releaseSlot(appt.id, CancelReason.PATIENT_SELF_SERVICE);
 
@@ -222,8 +228,8 @@ describe("releaseSlot", () => {
 
 describe("rescheduleSlot", () => {
   it("atomically releases the old slot, books the new one, and emits slot-freed", async () => {
-    const oldStart = localStart("2026-08-29", "11:00");
-    const newStart = localStart("2026-08-29", "14:00");
+    const oldStart = localStart(openDate, "11:00");
+    const newStart = localStart(openDate, "14:00");
     const appt = await bookSlot({ patientId, serviceId, startUTC: oldStart });
 
     const freed: unknown[] = [];
@@ -258,8 +264,8 @@ describe("rescheduleSlot", () => {
   });
 
   it("rolls back the old appointment when the new slot is taken", async () => {
-    const oldStart = localStart("2026-08-29", "11:00");
-    const newStart = localStart("2026-08-29", "14:00");
+    const oldStart = localStart(openDate, "11:00");
+    const newStart = localStart(openDate, "14:00");
     const appt = await bookSlot({ patientId, serviceId, startUTC: oldStart });
     // Occupy the target slot.
     await bookSlot({ patientId, serviceId, startUTC: newStart });

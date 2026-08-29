@@ -1,0 +1,8 @@
+- [Profil utilisateur](user_profile.md) — non-développeur, francophone, teste et commite lui-même ; parler simple et donner les commandes exactes.
+- [Terminal PowerShell](feedback_terminal.md) — ⚠️ commandes PowerShell-safe obligatoires : jamais de message de commit multi-ligne.
+- [Vérification manuelle avant décision](feedback_workflow.md) — il a souvent déjà vu le rendu ; proposer l'action corrective, pas une étape de vérification.
+- [Comportement des agents ortho-*](agents_behaviour.md) — ortho-docs invente des vérifs manuelles ; toujours re-vérifier une case à cocher proposée.
+- [PostgreSQL local opérationnel](project_infra.md) — installé le 2026-08-28 ; 348/349 tests passent ; les commits « tested » antérieurs ne le sont pas.
+- [Piège Windows : antislashs dans les tests](bug_windows_chemins_tests.md) — rouge en local, vert en CI ; suspecter le séparateur de chemin en premier.
+- [Dette du garde-fou authz-matrix](project_authz_matrix_dette.md) — 4 angles morts ; 2 à inscrire au relais de la Tâche 13.
+- [Normalisation des noms arabes](project_noms_arabes.md) — couvrir harakat et tatweel, pas seulement les accents latins ; clinique à Alger.

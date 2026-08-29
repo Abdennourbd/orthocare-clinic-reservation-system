@@ -1,0 +1,4 @@
+- [Task 13 debt: authz-matrix harness has no dynamic-route support](project_authz_matrix_dynamic_routes.md) — check when reviewing Task 13's diff to that test
+- [Windows readdir recursive backslash trap](reference_windows_readdir_recursive_separators.md) — CI (Linux) can't catch it; suggest separator-agnostic regex over reordering
+- [plan.md lags behind task-relay arbitrages](project_plan_md_lags_task_relay_decisions.md) — grep plan.md for a step's "user arbitrage" before approving; relay files are ephemeral
+- [`take` removed but replaced by an in-memory `break`](reference_take_vs_in_memory_break.md) — output cap ≠ query cost cap; check Prisma findMany diffs for this

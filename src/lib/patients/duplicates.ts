@@ -59,7 +59,12 @@ const DIACRITIC_MARKS_REGEX =
  * fuzzy matching, not phonetic matching, not transliteration — "Mohamed" vs
  * "Mohammed" is deliberately out of scope.
  */
-function normalizeName(value: string): string {
+// Exported (task-13.md étape 4 tour 2, user-authorized fix for the
+// ortho-security BLOCKING finding): `upsertPatient()`
+// (src/lib/booking/createBooking.ts) needs the exact same normalization to
+// resolve a booking on phone+name instead of phone alone, and the fiche
+// relais is explicit — reuse this, never re-implement it.
+export function normalizeName(value: string): string {
   return value
     .normalize("NFD")
     .replace(DIACRITIC_MARKS_REGEX, "")

@@ -43,3 +43,6 @@ next-env.d.ts
 
 # prisma generated client (regenerated via `prisma generate`)
 /src/generated/
+# Agent memory written by Claude Code subagents (local, not shared)
+.claude/agent-memory-local/
+.claude/settings.local.json

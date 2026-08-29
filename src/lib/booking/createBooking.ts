@@ -11,6 +11,7 @@ import {
 import { bookSlotInTx } from "./bookSlot";
 import { PendingLimitError } from "./errors";
 import { toClinicLocalDateString, getClinicDayBoundsUTC } from "@/lib/time/clinicTime";
+import { normalizeName } from "@/lib/patients/duplicates";
 
 export type CreateBookingPatientInput = {
   firstName: string;
@@ -120,14 +121,56 @@ export async function createBooking(
   });
 }
 
+/**
+ * Task 13 étape 4 tour 2 — resolves on phone AND normalized name, never phone
+ * alone (ortho-security BLOCKING finding, user-authorized fix to this Task 6
+ * file: task-13.md étape 4 §"La décision de l'utilisateur : option B"). Phone
+ * sharing is legitimate — Algerian families commonly share one phone, which
+ * is exactly why `phoneE164` is indexed but deliberately NOT `@unique`
+ * (prisma/schema.prisma:97) — so this must not (and cannot) forbid it. The
+ * defect it closes: resolving `findFirst({ phoneE164 }, orderBy: createdAt
+ * desc)` picked whichever record shared the number was created MOST
+ * RECENTLY, regardless of whose identity was actually booking, and then
+ * overwrote that record's firstName/lastName/etc — silently relabeling one
+ * family member's clinical history with another's name, with no warning and
+ * no audit trail. Matching on phone+name means a booking only ever updates
+ * the record that is actually that person; an unrecognized name on a known,
+ * shared phone creates a new record instead of overwriting a stranger's.
+ */
 async function upsertPatient(
   tx: Prisma.TransactionClient,
   input: CreateBookingPatientInput,
 ): Promise<Patient> {
-  const existing = await tx.patient.findFirst({
-    where: { phoneE164: input.phoneE164 },
-    orderBy: { createdAt: "desc" },
+  const candidates = await tx.patient.findMany({
+    // `anonymizedAt: null` (task-13.md étape 5, §Contraintes point 7 — prepares
+    // étape 6's erasure): without this, a public booking could resolve onto an
+    // already-anonymized record sharing this phone and silently re-write a
+    // real name/email/birthDate over a fiche whose whole point is to no
+    // longer carry identifying data — undoing a right-to-be-forgotten request
+    // with zero warning. A phone/name match on an anonymized record now
+    // always falls through to `create`, same as no match at all.
+    where: { phoneE164: input.phoneE164, anonymizedAt: null },
+    // Task 13 étape 4 tour 3 (ortho-security counter-check): `createdAt` alone
+    // has no tiebreaker. Two rows can share the same millisecond (`timestamp(3)`
+    // column), and Postgres then returns them in physical row order, NOT
+    // insertion order — an `UPDATE` on one of them (exactly what this function
+    // does below) can flip that physical order on the next query. `id` is the
+    // deterministic tiebreak already used elsewhere in this repo
+    // (src/app/api/admin/audit/route.ts, src/app/api/admin/patients/route.ts).
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
   });
+  const normalizedFirst = normalizeName(input.firstName);
+  const normalizedLast = normalizeName(input.lastName);
+  // `candidates` is deterministically ordered (createdAt desc, id desc as
+  // tiebreak), so `.find()` picks the same record every time among any that
+  // happen to share both phone and name. It does NOT reliably mean "most
+  // recently created" when several candidates tie on `createdAt` — the
+  // tiebreak on `id` is a stable, arbitrary order, not a recency guarantee.
+  const existing = candidates.find(
+    (c) =>
+      normalizeName(c.firstName) === normalizedFirst &&
+      normalizeName(c.lastName) === normalizedLast,
+  );
 
   const shared = {
     firstName: input.firstName,
@@ -139,7 +182,14 @@ async function upsertPatient(
     // preference, so re-booking in a different language updates it.
     preferredLocale: input.preferredLocale,
     whatsappOptIn: input.whatsappOptIn,
-    active: true,
+    // `active` is deliberately NOT forced true here anymore (ortho-security
+    // BLOCKING finding, task-13.md étape 4 tour 2): étape 5 gives ADMIN a
+    // soft-delete (`active: false`). A public booking must never silently
+    // reverse that — if the record's real owner books again, staff must
+    // reactivate them as a conscious act, not as a side-effect of Task 6
+    // code they never touch. A brand-new record still defaults to
+    // `active: true` (prisma/schema.prisma `@default(true)`), unaffected by
+    // this change.
   };
 
   if (existing) {

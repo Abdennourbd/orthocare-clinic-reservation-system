@@ -13,13 +13,14 @@ import { notifyBookingCreated } from "@/lib/messaging/notifyBookingCreated";
 import { sendAppointmentRescheduled } from "@/lib/messaging/appointmentChanges";
 import { AppointmentNotConfirmedError } from "@/lib/selfservice/errors";
 import { POST as postAppointments } from "@/app/api/appointments/route";
+import { localStart, nextOpenLocalDate } from "./helpers/testDates";
 
 let serviceId: string;
 let activeStaffIds: string[];
-
-function localStart(localDate: string, hhmm: string): Date {
-  return new Date(`${localDate}T${hhmm}:00.000+01:00`);
-}
+// Computed fresh each test from the workingHours fixture inserted in
+// beforeEach below — see tests/integration/helpers/testDates.ts for why this
+// isn't a literal "2026-08-29" string.
+let openDate: string;
 
 afterEach(() => vi.unstubAllEnvs());
 
@@ -96,6 +97,8 @@ beforeEach(async () => {
       { key: "consentVersion", value: "1.0" },
     ],
   });
+
+  openDate = await nextOpenLocalDate();
 });
 
 async function makePatient(overrides: Record<string, unknown> = {}) {
@@ -115,16 +118,23 @@ async function makeAppointment(patientId: string) {
     data: {
       patientId,
       serviceId,
-      startTime: localStart("2026-08-29", "11:00"),
-      endTime: localStart("2026-08-29", "11:30"),
+      startTime: localStart(openDate, "11:00"),
+      endTime: localStart(openDate, "11:30"),
     },
   });
 }
 
+// `date` is a getter, not a literal, so it stays in sync with the openDate
+// computed fresh per test in beforeEach (no test asserts on its exact value —
+// it only feeds the message template — but it must still describe the same
+// appointment `makeAppointment()` creates below).
 const vars = {
   firstName: "Yasmine",
   serviceName: "Consultation",
-  date: "29/08/2026",
+  get date() {
+    const [y, m, d] = openDate.split("-");
+    return `${d}/${m}/${y}`;
+  },
   time: "11:00",
   phone: "0551122334",
 };
@@ -431,7 +441,7 @@ describe("POST /api/appointments end-to-end", () => {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           serviceId,
-          startTime: localStart("2026-08-29", "11:00").toISOString(),
+          startTime: localStart(openDate, "11:00").toISOString(),
           patient: { firstName: "Yasmine", lastName: "Khelifi", phone: "0551122334" },
           consent: true,
           consentVersion: "1.0",
@@ -469,7 +479,7 @@ describe("POST /api/appointments end-to-end", () => {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           serviceId,
-          startTime: localStart("2026-08-29", "11:00").toISOString(),
+          startTime: localStart(openDate, "11:00").toISOString(),
           patient: { firstName: "X", lastName: "Y", phone: "abcdefgh" },
           consent: true,
           consentVersion: "1.0",
@@ -495,8 +505,8 @@ describe("sendAppointmentRescheduled — CONFIRMED requirement", () => {
       data: {
         patientId: patient.id,
         serviceId,
-        startTime: localStart("2026-08-29", "12:00"),
-        endTime: localStart("2026-08-29", "12:30"),
+        startTime: localStart(openDate, "12:00"),
+        endTime: localStart(openDate, "12:30"),
         status: AppointmentStatus.PENDING,
       },
     });

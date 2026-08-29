@@ -1,0 +1,2 @@
+- [vitest expect() message arg](vitest_expect_message.md) — `expect(actual, "why")` is supported here, use it for invariant tests in security harnesses
+- [authz-matrix double-layer fix pattern](authz_matrix_double_layer_protection.md) — "value not constrained" gaps get a TS literal union AND a swept runtime invariant test, both proven failing-then-passing before reporting done

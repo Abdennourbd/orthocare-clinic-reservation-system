@@ -1,0 +1,2 @@
+- [Global DB requirement for all vitest tests](project_test_infra_global_db_requirement.md) — even pure unit tests fail without local Postgres (tests/setup.ts is a global setupFile)
+- [Reporting ROUGE vs. still doing the work](feedback_report_rouge_distinction.md) — write/extract code & tests + typecheck/lint even when npm test is infra-blocked; report the two facts separately

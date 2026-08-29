@@ -5,9 +5,17 @@ import { GET as getServices } from "@/app/api/services/route";
 import { GET as getServiceDetail } from "@/app/api/services/[slug]/route";
 import { GET as getSlots } from "@/app/api/slots/route";
 import { POST as postAppointments } from "@/app/api/appointments/route";
+import { addClinicDays } from "@/lib/time/clinicTime";
+import {
+  localStart as localStartDate,
+  nextOpenLocalDate,
+  nextClosedLocalDate,
+} from "./helpers/testDates";
 
+// Wraps the shared Date-returning helper as an ISO string, matching this
+// file's existing call sites (request bodies/query params want strings).
 function localStart(localDate: string, hhmm: string): string {
-  return new Date(`${localDate}T${hhmm}:00.000+01:00`).toISOString();
+  return localStartDate(localDate, hhmm).toISOString();
 }
 
 function postBooking(
@@ -38,6 +46,11 @@ function getSlotsRequest(
 
 let serviceId: string;
 let serviceSlug: string;
+// Computed fresh each test from the workingHours fixture just inserted below
+// — see tests/integration/helpers/testDates.ts for why these aren't literal
+// "2026-08-29" strings.
+let openDate: string;
+let closedDate: string;
 
 beforeEach(async () => {
   const prisma = getPrisma();
@@ -83,12 +96,15 @@ beforeEach(async () => {
       { key: "consentVersion", value: "1.0" },
     ],
   });
+
+  openDate = await nextOpenLocalDate();
+  closedDate = await nextClosedLocalDate();
 });
 
 function bookingBody(overrides: Record<string, unknown> = {}) {
   return {
     serviceId,
-    startTime: localStart("2026-08-29", "11:00"),
+    startTime: localStart(openDate, "11:00"),
     patient: {
       firstName: "Yasmine",
       lastName: "Khelifi",
@@ -143,45 +159,46 @@ describe("GET /api/slots", () => {
     const booked = await postBooking(bookingBody());
     expect(booked.status).toBe(201);
 
-    const res = await getSlotsRequest(serviceId, "2026-08-29");
+    const res = await getSlotsRequest(serviceId, openDate);
     expect(res.status).toBe(200);
     const body = await res.json();
 
+    const expectedStartUTC = `${openDate}T10:00:00.000Z`;
     const occupiedUTC = body.occupied.map((s: { startUTC: string }) => s.startUTC);
-    expect(occupiedUTC).toContain("2026-08-29T10:00:00.000Z"); // 11:00 local
-    expect(body.available.some((s: { startUTC: string }) => s.startUTC === "2026-08-29T10:00:00.000Z")).toBe(false);
+    expect(occupiedUTC).toContain(expectedStartUTC); // 11:00 local
+    expect(body.available.some((s: { startUTC: string }) => s.startUTC === expectedStartUTC)).toBe(false);
 
     // Slots carry clinic-local times for display.
     const eleven = body.occupied.find(
-      (s: { startUTC: string }) => s.startUTC === "2026-08-29T10:00:00.000Z",
+      (s: { startUTC: string }) => s.startUTC === expectedStartUTC,
     );
     expect(eleven.localTime).toBe("11:00");
   });
 
   it("returns empty lists on a closed day (Friday)", async () => {
-    const res = await getSlotsRequest(serviceId, "2026-08-28");
+    const res = await getSlotsRequest(serviceId, closedDate);
     const body = await res.json();
     expect(body.available).toHaveLength(0);
     expect(body.occupied).toHaveLength(0);
   });
 
   it("returns 400 for a missing serviceId or malformed date", async () => {
-    expect((await getSlots(new Request("http://localhost/api/slots?date=2026-08-29"))).status).toBe(400);
+    expect((await getSlots(new Request(`http://localhost/api/slots?date=${openDate}`))).status).toBe(400);
     expect((await getSlots(new Request("http://localhost/api/slots?serviceId=x&date=bad"))).status).toBe(400);
   });
 
   it("returns 404 for an unknown service", async () => {
-    const res = await getSlots(new Request("http://localhost/api/slots?serviceId=nope&date=2026-08-29"));
+    const res = await getSlots(new Request(`http://localhost/api/slots?serviceId=nope&date=${openDate}`));
     expect(res.status).toBe(404);
   });
 
   it("rate-limits GET /api/slots per IP (120/min)", async () => {
     const headers = { "x-real-ip": "9.9.9.9" };
     for (let i = 0; i < 120; i++) {
-      const res = await getSlotsRequest(serviceId, "2026-08-29", headers);
+      const res = await getSlotsRequest(serviceId, openDate, headers);
       expect(res.status).toBe(200);
     }
-    const overflow = await getSlotsRequest(serviceId, "2026-08-29", headers);
+    const overflow = await getSlotsRequest(serviceId, openDate, headers);
     expect(overflow.status).toBe(429);
     const body = await overflow.json();
     expect(body.error.code).toBe("RATE_LIMITED");
@@ -210,7 +227,7 @@ describe("POST /api/appointments", () => {
     });
     expect(appt!.status).toBe(AppointmentStatus.PENDING);
     expect(appt!.source).toBe("ONLINE");
-    expect(appt!.startTime.toISOString()).toBe("2026-08-29T10:00:00.000Z");
+    expect(appt!.startTime.toISOString()).toBe(`${openDate}T10:00:00.000Z`);
   });
 
   it("creates a PENDING booking with a filled birth date", async () => {
@@ -288,7 +305,9 @@ describe("POST /api/appointments", () => {
 
   it("creates a PATIENT-source waitlist entry on the cancellation-watch opt-in", async () => {
     const res = await postBooking(
-      bookingBody({ watchDates: ["2026-08-30", "2026-08-31"] }),
+      bookingBody({
+        watchDates: [addClinicDays(openDate, 1), addClinicDays(openDate, 2)],
+      }),
     );
     expect(res.status).toBe(201);
     const body = await res.json();
@@ -313,7 +332,7 @@ describe("POST /api/appointments", () => {
   it("rejects a cross-origin booking when APP_URL is configured", async () => {
     vi.stubEnv("APP_URL", "https://orthocare-clinic.example.com");
     const res = await postBooking(
-      bookingBody({ startTime: localStart("2026-08-29", "10:00") }),
+      bookingBody({ startTime: localStart(openDate, "10:00") }),
       { origin: "https://evil.example.com" },
     );
     expect(res.status).toBe(403);
@@ -326,7 +345,7 @@ describe("POST /api/appointments", () => {
   it("accepts a same-site origin when APP_URL is configured", async () => {
     vi.stubEnv("APP_URL", "https://orthocare-clinic.example.com");
     const res = await postBooking(
-      bookingBody({ startTime: localStart("2026-08-29", "10:00") }),
+      bookingBody({ startTime: localStart(openDate, "10:00") }),
       { origin: "https://orthocare-clinic.example.com" },
     );
     expect(res.status).toBe(201);
@@ -348,11 +367,11 @@ describe("POST /api/appointments", () => {
   it("caps simultaneously active PENDING bookings per phone", async () => {
     const times = ["10:00", "10:45", "11:30"];
     for (const t of times) {
-      const res = await postBooking(bookingBody({ startTime: localStart("2026-08-29", t) }));
+      const res = await postBooking(bookingBody({ startTime: localStart(openDate, t) }));
       expect(res.status).toBe(201);
     }
     const fourth = await postBooking(
-      bookingBody({ startTime: localStart("2026-08-29", "12:15") }),
+      bookingBody({ startTime: localStart(openDate, "12:15") }),
     );
     expect(fourth.status).toBe(429);
     const body = await fourth.json();

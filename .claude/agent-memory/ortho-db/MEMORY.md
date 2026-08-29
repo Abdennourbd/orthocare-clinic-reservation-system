@@ -1,0 +1,4 @@
+- [Database targets in .env](env_database_targets.md) — DATABASE_URL = shared Neon, TEST_DATABASE_URL = localhost; check host before any write command.
+- [CRLF working copy](repo_crlf_working_copy.md) — core.autocrlf=true; script edits must preserve CRLF or the whole file shows as changed.
+- [Gallery seed data](project_gallery_seed.md) — zero-padded keys g01..g12, consecutive before/after pairs, heavy images on purpose; legacy g1..g6 cleanup already in seed.
+- [Test DB truncation](test_truncate_cascade.md) — setup.ts TRUNCATE is CASCADE: a new model with an FK to Patient/Appointment is cleaned without editing it.

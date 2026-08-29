@@ -6,6 +6,16 @@ import { createSessionToken, SESSION_COOKIE_NAME } from "@/lib/auth/session";
 import { requireStaff } from "@/lib/auth/guard";
 import { ok, errorResponse } from "@/lib/api/http";
 import { GET as auditRoute } from "@/app/api/admin/audit/route";
+import {
+  GET as patientsListRoute,
+  POST as patientsCreateRoute,
+} from "@/app/api/admin/patients/route";
+import {
+  GET as patientRecordRoute,
+  PATCH as patientPatchRoute,
+} from "@/app/api/admin/patients/[id]/route";
+import { GET as patientHistoryRoute } from "@/app/api/admin/patients/[id]/history/route";
+import { POST as patientVisitsRoute } from "@/app/api/admin/patients/[id]/visits/route";
 
 // Task 12 — the authorization matrix (plan.md §Testing strategy):
 //   one table-driven test walking EVERY /api/admin/* route ×
@@ -149,6 +159,62 @@ const ROUTES: RouteRow[] = [
     // must reference its route module's export the same way, never a
     // wrapper.
     handler: auditRoute,
+  },
+  {
+    method: "GET",
+    scanPath: "/api/admin/patients",
+    allowed: [Role.ADMIN, Role.RECEPTIONIST],
+    handler: patientsListRoute,
+  },
+  {
+    method: "POST",
+    scanPath: "/api/admin/patients",
+    allowed: [Role.ADMIN, Role.RECEPTIONIST],
+    // requestAs() sends no body — an authorized actor's request fails Zod
+    // validation (empty body), proving the guard runs BEFORE parsing, not
+    // that the route is otherwise broken.
+    okStatus: 400,
+    handler: patientsCreateRoute,
+  },
+  {
+    method: "GET",
+    scanPath: "/api/admin/patients/[id]",
+    requestPath: "/api/admin/patients/does-not-exist",
+    params: { id: "does-not-exist" },
+    allowed: [Role.ADMIN, Role.RECEPTIONIST],
+    // An authorized actor requesting an unknown id gets 404 — proves the
+    // guard runs before the DB lookup, not that the route is broken.
+    okStatus: 404,
+    handler: patientRecordRoute,
+  },
+  {
+    method: "PATCH",
+    scanPath: "/api/admin/patients/[id]",
+    requestPath: "/api/admin/patients/does-not-exist",
+    params: { id: "does-not-exist" },
+    allowed: [Role.ADMIN, Role.RECEPTIONIST],
+    // requestAs() sends no body — Zod fails after the guard, same reasoning
+    // as POST /api/admin/patients.
+    okStatus: 400,
+    handler: patientPatchRoute,
+  },
+  {
+    method: "GET",
+    scanPath: "/api/admin/patients/[id]/history",
+    requestPath: "/api/admin/patients/does-not-exist/history",
+    params: { id: "does-not-exist" },
+    allowed: [Role.ADMIN, Role.RECEPTIONIST],
+    okStatus: 404,
+    handler: patientHistoryRoute,
+  },
+  {
+    method: "POST",
+    scanPath: "/api/admin/patients/[id]/visits",
+    requestPath: "/api/admin/patients/does-not-exist/visits",
+    params: { id: "does-not-exist" },
+    allowed: [Role.ADMIN, Role.RECEPTIONIST],
+    okStatus: 400,
+    handler: patientVisitsRoute,
   },
 ];
 
