@@ -426,9 +426,16 @@ describe("notifyBookingCreated", () => {
     for (const n of notifications) {
       expect(n.type).toBe(NotificationType.NEW_BOOKING);
       expect(activeStaffIds).toContain(n.userId);
-      expect((n.payload as { patientName: string }).patientName).toBe(
-        "Yasmine Khelifi",
-      );
+      // task-13.md étape 6, TOUR 2 [CRITIQUE]: payload must carry NO
+      // patient-identifying field — anonymize.ts has no FK-driven way to
+      // reach Notification rows, so a name baked in here would survive an
+      // erasure request forever. appointmentId is enough for the future
+      // dashboard to resolve the name by join at render time.
+      const payload = n.payload as { appointmentId: string };
+      expect(payload.appointmentId).toBe(appointment.id);
+      expect(JSON.stringify(payload)).not.toContain("Yasmine");
+      expect(JSON.stringify(payload)).not.toContain("Khelifi");
+      expect(payload).not.toHaveProperty("patientName");
     }
   });
 });

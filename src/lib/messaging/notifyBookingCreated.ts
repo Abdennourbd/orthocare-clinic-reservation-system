@@ -46,8 +46,6 @@ export async function notifyBookingCreated(appointmentId: string): Promise<void>
 
   await notifyNewBooking({
     appointmentId: appointment.id,
-    patientName:
-      `${appointment.patient.firstName} ${appointment.patient.lastName}`.trim(),
     serviceId: appointment.serviceId,
     serviceName: appointment.service.name as unknown as Record<string, string>,
     startTime: start.toISOString(),

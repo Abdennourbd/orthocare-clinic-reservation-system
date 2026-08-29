@@ -33,6 +33,23 @@ check whether the fiche for that step already accounts for
 `phoneSharingAcknowledged` or only mentions `duplicateAcknowledged`, and flag
 the gap if not (it wasn't written yet as of this fix).
 
+**Update (étape 7, 2026-08-30) — correction, the "BOTH flags" line above is
+no longer accurate for `POST`.** Étape 5 tour 2 gave `PATCH /[id]` a THIRD,
+dedicated 409 code — `INDISTINGUISHABLE_RECORDS` (`dualMatches`, candidates
+matching name AND phone at once, required because `PATCH`'s guards are
+conditioned on `nameChanged`/`phoneChanged` and a single-field edit could
+otherwise slip through with only one flag acknowledged). **`POST
+/api/admin/patients` was never given this third code** — its two guards
+(`nameMatches`/`phoneMatches`) are unconditional and evaluated in the same
+fixed order every time, so a candidate matching both is still caught, just
+via two sequential 409s (`DUPLICATE_CANDIDATES` first, then
+`PHONE_ALREADY_REGISTERED` once acknowledged) rather than one combined
+response. If you build anything that reads a duplicate-warning UI's 409
+`code` and assumes `INDISTINGUISHABLE_RECORDS` can come from `POST`, it
+cannot — verified by reading `src/app/api/admin/patients/route.ts` directly
+(2026-08-30), not by relying on this memory or on task-13.md's étape 7 card
+text (which describes it as if `POST` had it too).
+
 See `.claude/tasks/task-13.md` étape 4 tour-2 Journal entry for full detail,
 including proof methodology (git stash to demonstrate the bug on unfixed
 code, then restore).

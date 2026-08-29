@@ -14,3 +14,6 @@
 - [Edit-route gate parity](method_edit_route_gate_parity.md) — PATCH gates keyed on "which field changed" diverge from POST gates keyed on "what the result collides with"
 - [Merged-timeline ordering](guard_merged_timeline_ordering.md) — two findMany merged in TS need orderBy + a tiebreak on both, or a paged union skips and duplicates rows
 - [Patients rate-limit pools](reference_patients_rate_limit_pools.md) — patients-read 60/5min vs patients-write 30/5min; pool membership is re-declared per file, never implied
+- [Self-service token choke point](guard_selfservice_token_chokepoint.md) — used/revoked/expired live in one verifier; one revokedAt closes lookup + cancel + reschedule
+- [Removed fields survive in tests](pattern_removed_field_survives_in_tests.md) — raw-Prisma schema round-trip tests keep a deleted payload shape alive; grep tests/ too
+- [Other agents edit this memory](feedback_other_agents_edit_this_memory.md) — a "Fixed" here is a self-attestation by the audited agent; re-prove at a file:line

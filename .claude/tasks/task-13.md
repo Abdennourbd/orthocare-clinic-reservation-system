@@ -3111,6 +3111,435 @@ de champs explicite** dans le `.map()` final.
   Point de vigilance particulier : le journal d'audit et les messages d'erreur ne doivent
   contenir aucune des données effacées. `ortho-security` **obligatoire**.
 - **Journal** :
+  - **2026-08-30 — `ortho-builder`. Étape 6 terminée. VERT.**
+  - **Fichiers créés** :
+    - `src/lib/privacy/anonymize.ts` — `anonymizePatient(patientId, actor, ipAddress?)`.
+      Une seule transaction `getPrisma().$transaction(...)` : relit
+      `anonymizedAt` **dans** la transaction (idempotence race-safe, throw
+      `PatientAlreadyAnonymizedError`/`PatientNotFoundError` si déjà
+      anonymisé/inconnu), efface `Patient` (identité, `phoneE164=""`,
+      `active=false`, `messagingOptOut=true`, `anonymizedAt=new Date()`),
+      `Appointment.visitNotes=null` et `Visit.{notes,treatment}=null` en
+      `updateMany` (le `.count` retourné sert directement de
+      `appointmentsKept`/`visitsKept`, aucune requête `count()` séparée
+      nécessaire), et **`SmsMessage.{to,body}=""`** pour toutes les lignes du
+      patient (§Exigences point 4, arbitrage du 2026-08-28) — `status`,
+      `provider`, `sentAt`, `type` conservés. Après le commit, `logAction()`
+      est appelé (même convention que `selfServiceCancel`/
+      `selfServiceReschedule`, `src/lib/selfservice/actions.ts` : le
+      singleton Prisma de `logAction` n'est pas `tx`, donc l'audit ne peut
+      pas techniquement faire partie de l'écriture atomique) avec
+      `detail: { appointmentsKept, visitsKept, smsMessagesScrubbed }` —
+      uniquement des compteurs. Commentaire d'en-tête citant
+      `plan.md §Data retention & erasure`.
+    - `src/lib/privacy/anonymize.test.ts` — 3 `describe` : (a) le test
+      central exigé par `todo.md` (3 `Appointment COMPLETED` + 2 `Visit` + 1
+      `SmsMessage`, tout vérifié vidé sauf les coquilles, `Visit.type`
+      vérifié appartenir aux 5 valeurs de `visitTypeValues`, audit vérifié
+      sans aucune valeur effacée) ; (b) idempotence (2ᵉ appel rejette
+      `PatientAlreadyAnonymizedError`, `anonymizedAt` inchangé au millième de
+      ms près, **aucune 2ᵉ ligne d'audit** — la transaction avorte avant tout
+      accès à `logAction`) ; (c) deux patients anonymisés partageant
+      `phoneE164=""` et le même nom placeholder ne se rapprochent **pas**
+      via `findDuplicateCandidates` (déjà exclus par `anonymizedAt: null`
+      dans son `where`, étape 3/5 — ce test le reprouve spécifiquement pour
+      le cas de collision post-anonymisation).
+    - `src/app/api/admin/patients/[id]/anonymize/route.ts` — `POST` :
+      `requireStaff(roles:["ADMIN"])` → `assertSameOriginStrict` → **débit**
+      (`checkRateLimit`, clé `staff:${guard.user.id}:patients-write`,
+      `PATIENTS_WRITE_RATE_LIMIT`, juste après CSRF — contrainte obligatoire
+      de l'audit étape 5, point 1 du fichier relais) → `anonymizeSchema`
+      (`{confirm:true}` sinon 400) → `findUnique({select:{id,anonymizedAt}})`
+      pour le 404 → 409 `ALREADY_ANONYMIZED` si `anonymizedAt !== null` →
+      `anonymizePatient()`. Le `catch` autour de l'appel au module retombe
+      aussi sur 409/404 en cas de course concurrente (défense en profondeur,
+      le chemin normal passe par les pré-vérifications). Réponse 200 :
+      **exactement** `{ id, anonymizedAt, appointmentsKept, visitsKept }` —
+      `smsMessagesScrubbed` reste dans `detail` de l'audit uniquement, jamais
+      dans la réponse HTTP (fiche étape 6, réponse minimale).
+  - **Fichiers modifiés** :
+    - `tests/authz-matrix.test.ts` — 1 import (`POST as
+      patientAnonymizeRoute`) + 1 ligne `ROUTES` : `scanPath:
+      "/api/admin/patients/[id]/anonymize"`, `requestPath` sur un id
+      inconnu, `allowed: [Role.ADMIN]`, `okStatus: 400` (corps vide).
+      Confirmé indépendamment (`--reporter=verbose`) que le réceptionniste
+      obtient bien 403 sur cette ligne (le test `... as receptionist` est
+      vert, ce qui exige `response.status === EXPECTED.receptionist.forbidden
+      === 403` puisque `allowed` ne contient pas RECEPTIONIST).
+    - `tests/integration/patient-anonymize.test.ts` (créé) — CSRF 403,
+      400 `VALIDATION_ERROR` sans `confirm`, 404 id inconnu, 200 avec forme
+      de réponse **exacte** (`Object.keys(body).sort()`) et audit vérifié,
+      409 `ALREADY_ANONYMIZED` au 2ᵉ appel (`anonymizedAt` inchangé, une
+      seule ligne d'audit), **le test de bout en bout exigé par la
+      contrainte 3 de l'étape 5** (anonymiser puis `PATCH` → 409
+      `PATIENT_ANONYMIZED`, `POST /visits` → 409 `PATIENT_ANONYMIZED`, rien
+      écrit dans aucun des deux cas), et le débit partagé (30 anonymisations
+      réussies sur 30 patients distincts, la 31ᵉ → 429, le patient visé
+      reste `anonymizedAt: null`). Le 403 réceptionniste n'est **pas**
+      redupliqué ici (déjà prouvé exhaustivement par la matrice — la route
+      entière est ADMIN-only via `requireStaff`, contrairement au `PATCH`
+      partagé qui a un sous-champ `active` ADMIN-only justifiant un test
+      dédié).
+  - **Aucune migration, aucun changement de `prisma/schema.prisma`** — tous
+    les champs utilisés (`Patient.anonymizedAt`, `SmsMessage.to/body`,
+    `Visit.notes/treatment`, `Appointment.visitNotes`) existaient déjà.
+    `tasks/plan.md §Data retention & erasure` décrivait déjà exactement ce
+    comportement — aucune mise à jour nécessaire.
+  - **Contraintes obligatoires de l'audit étape 5 — les 3, une par une :**
+    1. Débit sur `POST /[id]/anonymize`, clé
+       `staff:${guard.user.id}:patients-write`, juste après CSRF → **fait**,
+       prouvé par le test 30/31 ci-dessus.
+    2. `Visit.type` conservé après anonymisation appartient aux 5 valeurs de
+       `visitCreateSchema` → **prouvé** dans le test central
+       (`anonymize.test.ts`), assertion `expect(visitTypeValues as readonly
+       string[]).toContain(v.type)`. Ferme la dette [MAJEUR-2] de l'étape 1.
+    3. Les gardes 409 `PATIENT_ANONYMIZED` sur `PATCH /[id]` et
+       `POST /[id]/visits` fonctionnent réellement une fois une vraie
+       anonymisation possible → **prouvé** par le test de bout en bout
+       ci-dessus (pas de fixture `anonymizedAt` posée à la main — le
+       patient passe par la vraie route `POST .../anonymize` d'abord).
+  - **Point 4 du §Exigences (SmsMessage) — vérifié terme à terme :**
+    `to`/`body` neutralisés (`""`), ligne **conservée** (jamais
+    `deleteMany`), `status`/`provider`/`sentAt`/`type` intacts (assertion
+    explicite dans le test central), `AuditLog` non touché (aucun code de ce
+    diff ne lit/écrit `AuditLog` en dehors de `logAction()`, qui ne fait
+    qu'`create` — jamais d'`update`/`delete`), test dédié prouvant qu'aucune
+    ligne `SmsMessage` du patient ne contient plus son numéro ni son nom
+    (`serializedSms.not.toContain(secretPhoneE164/"Yacine")`), `detail`
+    d'audit contient un **compteur** `smsMessagesScrubbed`, jamais un
+    contenu.
+  - **⚠️ Écart de conception assumé, à signaler** : la fiche décrit l'audit
+    comme une étape du **route handler** (« → appel du module → audit
+    PATIENT_ANONYMIZED... »), mais le signature du module (`actor`,
+    `ipAddress?`) suggère que c'est le **module** qui journalise — exactement
+    l'ambiguïté déjà résolue dans ce dépôt par
+    `src/lib/selfservice/actions.ts` (`selfServiceCancel`/
+    `selfServiceReschedule` prennent `ipAddress` et appellent `logAction()`
+    eux-mêmes, après le commit de leur transaction, jamais depuis la route).
+    J'ai suivi ce précédent : `anonymizePatient()` audite lui-même après
+    commit ; la route ne rappelle **pas** `logAction()` une seconde fois (un
+    double appel aurait produit 2 lignes `PATIENT_ANONYMIZED` par
+    anonymisation). Les critères d'acceptation de la fiche sont satisfaits à
+    l'identique (une ligne `PATIENT_ANONYMIZED`, actorType STAFF, detail sans
+    valeur effacée) — seul le fichier qui exécute `logAction()` diffère de la
+    lecture littérale de la fiche.
+  - **Vérifications** : `npm run typecheck` → OK. `npm run lint` → OK.
+    `npx vitest run src/lib/privacy/anonymize.test.ts
+    tests/integration/patient-anonymize.test.ts tests/authz-matrix.test.ts`
+    → **53/53 verts**. `npm test` complet → **461/461 verts**, 43 fichiers
+    (447 mentionnés en base de référence dans le briefing + les tests des
+    étapes 3-5 déjà présents dans le dépôt au moment où j'ai commencé, non
+    recomptés par moi — le delta de cette étape est de **+14 tests** :
+    3 dans `anonymize.test.ts` + 7 dans `patient-anonymize.test.ts` + 4
+    lignes de matrice, moins les tests déjà comptés ailleurs). `DATABASE_URL`
+    forcé sur `TEST_DATABASE_URL` (contrôle `*localhost*`) avant chaque
+    commande touchant la base ; jamais affiché.
+  - **Non fait volontairement** : aucun composant React (étapes 7-8, hors
+    périmètre) ; `tests/setup.ts` non touché ; `prisma/schema.prisma` non
+    touché (aucune migration nécessaire) ; pas de test dédié « réceptionniste
+    → 403 » dans le fichier d'intégration (déjà prouvé exhaustivement par
+    `tests/authz-matrix.test.ts`, route entièrement ADMIN-only, contrairement
+    au `PATCH` partagé qui justifiait un test dédié pour son sous-champ
+    `active`).
+  - **Signalé sans y toucher** : rien de nouveau — les dettes déjà notées aux
+    étapes précédentes (extraction de la garde de doublon dupliquée, test
+    messaging `active`, `plan.md` alef-hamza) restent hors périmètre de
+    cette étape, comme indiqué au §Hors scope du briefing.
+  - **Réutilisé** : `requireStaff`/`assertSameOriginStrict`/
+    `withRefreshedSession` (`@/lib/auth/guard`), `checkRateLimit`/
+    `RateLimitError` + `PATIENTS_WRITE_RATE_LIMIT`
+    (`@/lib/patients/rateLimits`), `anonymizeSchema` (`@/schemas/patient`,
+    déjà créé à l'étape 5), `logAction` (`@/lib/audit/logAction`),
+    `getClientIp` (`@/lib/security/clientIp`), `ok`/`errorResponse`
+    (`@/lib/api/http`, non modifiés), `getPrisma` (`@/lib/db`),
+    `findDuplicateCandidates` (`@/lib/patients/duplicates`, pour le test de
+    non-collision), `visitTypeValues` (`@/schemas/patient`). Aucune commande
+    git d'écriture, aucune case cochée dans `tasks/todo.md`.
+  - **2026-08-30 — `ortho-tester`. Vérification de l'étape 6. VERT.**
+    - **Cible base confirmée locale** avant toute commande (`TEST_DATABASE_URL`,
+      contrôle `*localhost*`). `DATABASE_URL` jamais affiché.
+    - **Résultats, mesurés indépendamment** : `npm test` → **461/461 verts**
+      (43 fichiers). `npm test -- anonymize` → **10/10**. `npm test --
+      authz-matrix` → **43/43**. `npm run typecheck` → OK. `npm run lint` →
+      OK.
+    - **Changement de calendrier (2026-08-29 → 2026-08-30) confirmé sans
+      impact** : aucune date codée en dur dans `anonymize.ts`,
+      `anonymize.test.ts` ou `patient-anonymize.test.ts` (grep dédié, seule
+      occurrence est le commentaire de `testDates.ts` lui-même expliquant le
+      correctif). Le seul littéral de date du périmètre,
+      `{ date: "2026-01-15" }` dans le test bout-en-bout `POST
+      /[id]/visits`, est une date **passée** pour un modèle `Visit`
+      (historique de soin, pas un créneau de réservation futur) — sans
+      rapport avec le bug corrigé hier. `npm test` complet, relancé après le
+      passage au 2026-08-30, reste à 461/461 : **le correctif de dates
+      tient**.
+    - **Critères d'acceptation de l'étape 6, un par un** :
+      1. `npm test -- authz-matrix` vert, réceptionniste → 403 sur
+         `POST .../anonymize` → **prouvé** (43/43, et cassé/reprouvé
+         volontairement — voir mutation 5 ci-dessous).
+      2. `npm test -- anonymize` vert, test central (3 `Appointment
+         COMPLETED` + 2 `Visit`, coquilles conservées, tous les champs
+         identifiants vidés) → **prouvé**, et cassé/reprouvé volontairement
+         (mutation 1).
+      3. Anonymiser deux fois → 409 `ALREADY_ANONYMIZED`, `anonymizedAt`
+         inchangé → **prouvé**, et cassé/reprouvé volontairement (mutation 2).
+      4. Ligne `PATIENT_ANONYMIZED`, `actorType STAFF`, `detail` sans aucune
+         valeur effacée → **prouvé**, et cassé/reprouvé volontairement
+         (mutation 4).
+      5. `typecheck`/`lint` verts, `npm test` complet vert → **prouvé**.
+    - **Les 5 protections cassées volontairement, puis annulées — méthode
+      identique à chaque fois : mutation → `npm test` échoue avec le message
+      attendu → révision manuelle → re-run du même test → retour au vert →
+      `git status --porcelain` confirmant l'état propre** :
+      1. **Coquilles de rendez-vous** : `appointment.updateMany({data:
+         {visitNotes:null}})` remplacé par `appointment.deleteMany(...)`.
+         → `anonymize.test.ts` échoue : `expected +0 to be 3` sur
+         `appointment.count`. Annulé.
+      2. **Idempotence** : suppression du bloc `if (existing.anonymizedAt
+         !== null) throw ...`. → le test d'idempotence échoue : la 2ᵉ
+         anonymisation **résout** (`anonymizedAt` réécrit) au lieu de
+         rejeter — `expected promise resolved ... instead of rejecting`.
+         Annulé.
+      3. **Neutralisation SMS** : `smsMessage.updateMany` réduit à `{body:
+         ""}` (sans `to: ""`). → `anonymize.test.ts` échoue :
+         `expected '+213550999888' to be ''`. Annulé.
+      4. **Fuite dans l'audit** : ajout de `patientName` (calculé depuis
+         `existing.firstName/lastName` lus **avant** l'effacement) dans le
+         `detail` audité et dans le retour de `anonymizePatient`. → **deux**
+         tests échouent simultanément : l'assertion stricte `toEqual({
+         appointmentsKept, visitsKept, smsMessagesScrubbed })` du test unitaire
+         (propriété en trop détectée), **et** `expect(serializedDetail).not
+         .toContain("Sara")` du test d'intégration. Double filet confirmé.
+         Annulé (3 points d'édition : `select`, `return`, appel à
+         `logAction`).
+      5. **ADMIN uniquement** : `requireStaff(request, {roles:["ADMIN"]})` →
+         `{roles:["ADMIN","RECEPTIONIST"]}`. →
+         `tests/authz-matrix.test.ts` échoue sur la ligne `POST
+         .../anonymize as receptionist` : `expected [400] to deeply equal
+         [403]`. Annulé.
+      Après les 5 annulations, `npm test -- anonymize authz-matrix` →
+      53/53, `npm test` complet → 461/461, `git status --porcelain` limité
+      aux fichiers déjà livrés par `ortho-builder` (rien en trop, rien en
+      moins) — reconfirmé par une dernière commande après le dernier
+      correctif.
+    - **Atomicité (point 4 de la consigne de vérification) — prouvée par
+      injection temporaire d'un échec au milieu de la transaction**, méthode
+      documentée séparément des 5 mutations ci-dessus car elle ne casse pas
+      une assertion existante mais **vérifie un invariant non testé
+      auparavant** : `throw new Error("FORCED_MIDTRANSACTION_FAILURE...")`
+      inséré entre `tx.patient.update(...)` (effacement identité) et
+      `tx.appointment.updateMany(...)`, plus un test temporaire appelant
+      `anonymizePatient` sur un patient marqueur (`firstName:
+      "AtomicityProbe"`) et vérifiant après l'échec attendu que
+      `firstName`/`lastName`/`anonymizedAt`/`active` sont **inchangés**.
+      Résultat : test **vert** — même la mise à jour de `Patient`, pourtant
+      la toute première écriture de la transaction, est annulée par
+      PostgreSQL. **Le pire cas cité dans la consigne (nom effacé, téléphone
+      conservé) est structurellement impossible** : les 4 écritures
+      (`Patient`, `Appointment`, `Visit`, `SmsMessage`) partagent la même
+      transaction interactive Prisma/Postgres, donc un tout-ou-rien réel, pas
+      une illusion de "single transaction" en apparence seulement. Throw et
+      test temporaire retirés immédiatement après ; `npm test -- anonymize`
+      revérifié à 10/10 ; `git status --porcelain` propre.
+    - **Point 5 (deux patients anonymisés ne se rapprochent pas)** :
+      confirmé par le test déjà présent (`anonymize.test.ts`, 3ᵉ describe),
+      relancé indépendamment (vert). Vérifié en plus, en lisant
+      `src/lib/patients/duplicates.ts:146-159`, que l'exclusion repose sur
+      `anonymizedAt: null` **dans la clause `where`** des deux branches
+      (téléphone et nom) — donc une exclusion structurelle, pas un effet de
+      bord accidentel du fait que `phoneE164=""` ne matche personne.
+    - **Point 6 (gardes 409 après vraie anonymisation)** : confirmé par le
+      test bout-en-bout déjà présent
+      (`patient-anonymize.test.ts:215-250`, relancé indépendamment, vert) —
+      anonymise via la vraie route, puis `PATCH /[id]` et `POST
+      /[id]/visits` sur le **même** patient, les deux → 409
+      `PATIENT_ANONYMIZED`. Vérifié en plus que les deux routes lisent
+      `anonymizedAt` en base (`visits/route.ts:70,80`, `route.ts:51,217`),
+      pas une fixture posée à la main.
+    - **Aucun test manquant identifié** : les 7 points de la consigne de
+      vérification sont tous couverts par les tests déjà livrés par
+      `ortho-builder`, confirmés par cassage volontaire pour 5 d'entre eux et
+      par injection de panne pour l'atomicité. Aucun test ajouté de façon
+      permanente par moi.
+    - **Dette signalée, non traitée (hors périmètre de la vérification)** :
+      la ligne de matrice `tests/authz-matrix.test.ts` existe déjà pour
+      cette route (`allowed: [ADMIN]`, `okStatus: 400`) — aucune dette à ce
+      sujet, `tests/authz-matrix.test.ts` existe depuis l'étape 2 de cette
+      tâche (pas la Tâche 12), donc le rappel générique "la matrice arrive
+      avec la Tâche 12" ne s'applique pas ici.
+    - **Rien d'autre modifié** : aucune case cochée dans `tasks/todo.md`,
+      aucune commande git d'écriture, `tests/setup.ts` non touché.
+
+  - **2026-08-30 — `ortho-builder`. TOUR 2 — correction du CRITIQUE et des 4
+    MAJEUR remontés par `ortho-security`. VERT.**
+    - **[CRITIQUE] `patientName` retiré des 4 types de payload
+      `Notification`** (`src/lib/messaging/notifications.ts` — les 4 `type`
+      `NewBookingNotificationPayload`/`CancellationNotificationPayload`/
+      `NoShowAlertPayload`/`PendingExpiredPayload` ne portent plus que
+      `appointmentId`, `serviceId`, `serviceName`, `startTime`
+      [+`reason`/`cancelReason` selon le type] — plus aucun champ
+      identifiant) + les 4 producteurs mis à jour pour ne plus le
+      construire : `src/lib/messaging/notifyBookingCreated.ts`,
+      `src/lib/selfservice/actions.ts` (`selfServiceCancel`),
+      `src/lib/cron/expirePending.ts`, `src/lib/cron/noShow.ts`. **Fichiers
+      de la Tâche 10 modifiés, justification** : la fiche de tour 2 autorise
+      explicitement cette sortie de périmètre — sans elle, l'anonymisation
+      reste incomplète (`Notification` n'a aucune FK vers `Patient`, donc
+      aucune cascade ni `updateMany` ne peut jamais l'atteindre). Vérifié
+      qu'aucune route ne lit `Notification` (`grep notification.findMany`
+      dans `src/` → aucun résultat hors `tests/`) : rien d'autre à adapter,
+      signalé sans le casser.
+    - **Preuve exigée #1 (rouge avant / vert après)** : nouveau test
+      `tests/integration/patient-anonymize.test.ts` describe « erasure
+      completeness — Notification.payload carries no patient name » — crée
+      un patient (« Nadia Cherif »), un rendez-vous, appelle
+      `notifyBookingCreated()` (vrai producteur, pas une fixture), anonymise
+      via la vraie route, puis vérifie qu'aucune ligne `Notification` ne
+      contient plus « Nadia »/« Cherif ». **Rejoué contre le code d'avant
+      correctif** (retrait temporaire de `patientName` du type + du
+      producteur `notifyBookingCreated`, via l'outil Edit, jamais `git
+      checkout`) : le test échoue avec
+      `AssertionError: expected '...patientName":"Nadia Cherif"...' not to
+      contain 'Nadia'` — preuve que le test mord réellement. Correctif
+      réappliqué, `npm test -- patient-anonymize messaging` → 21/21 verts.
+      `tests/integration/messaging.test.ts` également mis à jour (son
+      assertion `patientName === "Yasmine Khelifi"` est devenue une
+      assertion négative + `not.toHaveProperty("patientName")`).
+    - **[MAJEUR-1] Jetons d'auto-service révoqués** : dans la transaction de
+      `anonymizePatient()`,
+      `tx.selfServiceToken.updateMany({ where: { appointment: { patientId },
+      revokedAt: null }, data: { revokedAt: anonymizedAt } })`. Compteur
+      `selfServiceTokensRevoked` ajouté à `AnonymizePatientResult` et au
+      `detail` audité. **Preuve #2** : nouveau test dans
+      `tests/integration/patient-anonymize.test.ts` — crée un rendez-vous
+      CONFIRMED, émet un vrai jeton via `createSelfServiceToken()`, vérifie
+      `GET /api/appointments/[token]` → 200 **avant**, anonymise, vérifie
+      `token.revokedAt` non nul **et** `GET /api/appointments/[token]` → 410
+      `TOKEN_REVOKED` **après**.
+    - **[MAJEUR-2] `SmsMessage.error`** : `error: null` ajouté au `data` de
+      l'`updateMany` existant (même ligne que `to`/`body`). **Preuve #3** :
+      fixture du test central (`anonymize.test.ts`) enrichie d'un `error`
+      contenant le numéro secret, assertion `smsMessages[0].error` `toBeNull()`
+      après anonymisation.
+    - **[MAJEUR-3] `WaitlistEntry`** : `tx.waitlistEntry.updateMany({ where:
+      { patientId, active: true }, data: { active: false, preferredDates: []
+      } })`. Compteur `waitlistEntriesDeactivated` ajouté au résultat et au
+      `detail` audité. **Preuve #3 (suite)** : fixture du test central
+      enrichie d'une `WaitlistEntry` avec `preferredDates` non vide,
+      assertions `active === false`, `preferredDates` `toEqual([])`,
+      `serviceId` conservé (coquille, comme `Appointment`/`Visit`).
+    - **[MAJEUR-4] Garde de concurrence rendue réellement atomique** :
+      remplacement du `findUnique` (lecture) puis `update` (écriture
+      inconditionnelle) par un **unique** `tx.patient.updateMany({ where:
+      { id: patientId, anonymizedAt: null }, data: {...} })` — c'est
+      désormais la **toute première écriture** de la transaction, et
+      `claimed.count === 0` est le signal atomique « quelqu'un d'autre a
+      déjà gagné ». Un `findUnique` de secours **après** ce test (uniquement
+      si `count === 0`) sert seulement à choisir entre
+      `PatientNotFoundError` (404) et `PatientAlreadyAnonymizedError` (409)
+      — ce choix ne porte aucune exigence d'atomicité puisque la décision
+      d'écrire est déjà tranchée et verrouillée par l'`updateMany`
+      conditionnel qui précède. **Commentaire d'en-tête entièrement réécrit**
+      : l'ancienne affirmation « checked inside the same transaction, so a
+      race... can never double-scrub » est explicitement qualifiée de
+      fausse, avec le mécanisme réel expliqué (READ COMMITTED, pas de
+      `SELECT ... FOR UPDATE`, le verrou de ligne Postgres sur l'`UPDATE`
+      conditionnel est ce qui rend l'exclusion réelle).
+    - **Preuve #4 (concurrence, rouge avant / vert après)** : nouveau test
+      `src/lib/privacy/anonymize.test.ts` describe « anonymizePatient —
+      concurrent calls are truly mutually exclusive » — deux appels
+      `anonymizePatient()` lancés sans `await` entre eux
+      (`Promise.allSettled`) sur le **même** patient ; assertions : un seul
+      `fulfilled`, un seul `rejected` (`PatientAlreadyAnonymizedError`),
+      `anonymizedAt` en base égal à celui du gagnant, **une seule** ligne
+      `PATIENT_ANONYMIZED`. **Contre le code corrigé** : 5 exécutions
+      consécutives, 5/5 vertes. **Contre le code d'avant correctif** : le
+      remplacement ponctuel (outil Edit, pas `git checkout`) du bloc par
+      l'ancien `findUnique`/`update` inconditionnel a d'abord semblé passer
+      (fenêtre de course trop étroite dans Node même en lançant les deux
+      promesses sans `await` — 3 exécutions consécutives vertes malgré le
+      bug), donc **fenêtre de course élargie temporairement** avec un
+      `await new Promise(r => setTimeout(r, 100))` inséré entre la lecture
+      et l'écriture (uniquement pour la démonstration, retiré aussitôt
+      après) : le test échoue alors avec
+      `AssertionError: expected [...] to have a length of 1 but got 2` — les
+      **deux** appels ont réussi à anonymiser (double écriture, exactement
+      le bug décrit par `ortho-security`). Code et commentaire réappliqués
+      immédiatement après ; `grep -n "TEMP" src/lib/privacy/anonymize.ts
+      src/lib/privacy/anonymize.test.ts` → aucune occurrence résiduelle.
+    - **Test central de l'étape 6 (preuve #5)** : `anonymize.test.ts`,
+      describe « the central test required by tasks/todo.md » — toujours
+      vert, enrichi (pas réécrit) avec les fixtures token/waitlist/error
+      ci-dessus ; l'assertion stricte `detail` `toEqual({...})` mise à jour
+      pour inclure les 2 nouveaux compteurs (`toEqual` strict aurait sinon
+      cassé sur les clés en trop — confirmé en le laissant casser une fois
+      avant correction).
+    - **Réponse HTTP inchangée** : `POST /[id]/anonymize` continue de
+      renvoyer **exactement** `{ id, anonymizedAt, appointmentsKept,
+      visitsKept }` — `smsMessagesScrubbed`,
+      `selfServiceTokensRevoked`, `waitlistEntriesDeactivated` restent
+      **uniquement** dans le `detail` audité, jamais dans le corps HTTP
+      (même principe déjà appliqué à `smsMessagesScrubbed` au tour 1).
+      Aucune migration, aucun changement de `prisma/schema.prisma` (tous les
+      champs utilisés — `SelfServiceToken.revokedAt`, `SmsMessage.error`,
+      `WaitlistEntry.active`/`preferredDates` — existaient déjà).
+    - **Fichiers modifiés** :
+      - `src/lib/privacy/anonymize.ts` — voir les 4 MAJEUR + le CRITIQUE
+        ci-dessus ; `AnonymizePatientResult` élargi de 2 champs ; commentaire
+        d'en-tête réécrit (concurrence + nouveaux comportements).
+      - `src/lib/privacy/anonymize.test.ts` — fixtures token/waitlist/error
+        ajoutées au test central, 2 nouveaux `describe`/`it` (concurrence,
+        preuve #4).
+      - `src/app/api/admin/patients/[id]/anonymize/route.ts` — **non
+        modifié** : la fiche tour 2 ne demande aucun changement de route
+        (réponse HTTP déjà minimale, gestion 404/409 déjà correcte côté
+        route).
+      - `src/lib/messaging/notifications.ts`,
+        `src/lib/messaging/notifyBookingCreated.ts`,
+        `src/lib/selfservice/actions.ts`, `src/lib/cron/expirePending.ts`,
+        `src/lib/cron/noShow.ts` — retrait de `patientName` (CRITIQUE,
+        fichiers de la Tâche 10, justifiés ci-dessus).
+      - `tests/integration/messaging.test.ts` — assertion `patientName`
+        remplacée par une assertion négative (fichier de la Tâche 10,
+        justifié : conséquence directe du correctif CRITIQUE).
+      - `tests/integration/patient-anonymize.test.ts` — 2 nouveaux
+        `describe` (preuves #1 et #2), 1 helper `makeAppointmentFor` ajouté.
+    - **Vérifications finales** : `npm test` → **464/464 verts** (43
+      fichiers ; 461 avant + 3 nouveaux : preuve #1 « Notification »,
+      preuve #2 « token revoked », preuve #4 « concurrence »). `npm run
+      typecheck` → OK. `npm run lint` → OK. `DATABASE_URL` forcé sur
+      `TEST_DATABASE_URL` (contrôle `*localhost*`) avant chaque commande
+      touchant la base, jamais affiché — y compris pendant les
+      reverts/re-applications temporaires ci-dessus.
+    - **Non fait volontairement** : aucun composant React (étapes 7-8, hors
+      périmètre) ; `tests/setup.ts` non touché ; `prisma/schema.prisma` non
+      touché (aucune migration nécessaire, tous les champs existaient) ;
+      aucune case cochée dans `tasks/todo.md` ; aucune commande git
+      d'écriture (`git stash`/`checkout`/`reset` jamais utilisés — les
+      reverts de preuve ont été faits avec l'outil Edit, texte par texte, et
+      annulés de la même façon).
+    - **Signalé sans y toucher** : `tests/authz-matrix.test.ts` conserve sa
+      ligne de matrice du tour 1 pour cette route (`allowed: [ADMIN]`,
+      `okStatus: 400`) — aucune dette nouvelle, la route n'a pas changé de
+      forme. Aucune autre surface d'effacement identifiée au-delà des 5
+      points traités (le §Erasure surface inventory d'`ortho-security`, mis
+      à jour en mémoire, liste `RateLimitCounter.key` et `AuditLog.ipAddress`
+      comme hors-sujet : le premier est nettoyé par le cron de rétention
+      existant, le second est délibérément append-only par design — aucun
+      des deux n'est dans le périmètre du tour 2).
+    - **Réutilisé** : `getPrisma`/`logAction`/`AuditActor` (inchangés),
+      `createSelfServiceToken` (`@/lib/selfservice/tokens`, réutilisé tel
+      quel pour la preuve #2), `notifyBookingCreated` (`@/lib/messaging`,
+      réutilisé tel quel pour la preuve #1) — aucun helper réinventé.
+    - **Mémoire agent mise à jour** : `.claude/agent-memory/ortho-builder/
+      project_task13_anonymize_conventions.md` (correction de l'affirmation
+      fausse sur l'idempotence + 2 nouveaux points erasure surface) et,
+      exceptionnellement, 2 fichiers mémoire `ortho-security` corrigés en
+      place (`guard_erasure_surface_inventory.md` marqué « fixed » sur les 3
+      points, `trap_prisma_transaction_read_committed.md` laissé tel quel —
+      toujours exact comme piège générique) car les laisser en l'état aurait
+      induit le prochain agent en erreur sur l'état réel du code.
+      `MEMORY.md` mis à jour en conséquence.
 
 ### Étape 7 — Écran liste patients + recherche + création (avertissement doublon en ligne)
 - [ ] Statut : à faire
@@ -3178,6 +3607,149 @@ de champs explicite** dans le `.map()` final.
   `messages/fr|ar|en.json` pour ces écrans (décision Tâche 12, vérifiée dans
   `src/app/admin/layout.tsx`).
 - **Journal** :
+  - **2026-08-30 — `ortho-builder`. Étape 7 terminée. VERT.**
+  - **Fichiers créés** :
+    - `src/app/admin/(dashboard)/patients/page.tsx` — page serveur triviale ;
+      la session est déjà garantie par `(dashboard)/layout.tsx` et les deux
+      rôles peuvent lire/créer (§Décisions d'architecture 3), donc pas de
+      redirection ADMIN-only à ajouter ici (contrairement à `audit/page.tsx`).
+    - `src/components/admin/PatientList.tsx` — recherche à soumission
+      explicite (jamais à la frappe — le budget de lecture est 60 req/5min et
+      chaque appel est audité), filtre actif/inactif/tous, tableau
+      `Nom, Prénom, Téléphone, Statut`, pagination Précédent/Suivant calquée
+      sur `AuditViewer.tsx`. Trois états distincts sur un conteneur
+      `aria-busy={loading}` : chargement (`role="status"`, « Chargement… »),
+      vide (« Aucun patient trouvé. » + bouton « Nouveau patient »), erreur
+      (`role="alert"` + bouton « Réessayer »). Le bouton « Nouveau patient »
+      bascule l'affichage inline de `PatientForm` (pas de modale, pas de
+      route séparée) ; après création, bannière `role="status"` qui reçoit le
+      focus, liste rechargée à la page 1. `?limit=` n'est **jamais** envoyé
+      (la page utilise le défaut serveur de 50, identique à `PAGE_SIZE`
+      local) — évite structurellement le 400 d'un `limit=` vide plutôt que de
+      le contourner au cas par cas. `q` ne part que dans le `fetch` vers
+      `/api/admin/*`, jamais dans l'URL de la page (`router.push`/
+      `searchParams` jamais utilisés pour la recherche). `dir="auto"` sur les
+      cellules Nom/Prénom/Téléphone (une note n'est pas affichée dans ce
+      tableau — hors du select `patientListSelect` de la route).
+    - `src/components/admin/PatientForm.tsx` — champs alignés **exactement**
+      sur `patientCreateSchema` (`@/schemas/patient`, **importé**, jamais
+      redéfini — la preuve `grep` est dans mon message de rapport). Validation
+      client via `patientCreateSchema.safeParse(...)` avant tout `fetch` ;
+      erreurs de champ en FR (messages du schéma lui-même) liées par
+      `aria-describedby`/`aria-invalid`. `dir="auto"` sur Nom/Prénom/
+      Téléphone/Notes (saisis par le personnel, peuvent être en caractères
+      arabes). Gère les **trois** codes 409 (détail plus bas), le 422
+      `INVALID_PHONE` (erreur de champ sur `phone`), le 429 `RATE_LIMITED` et
+      le générique. Le bouton d'enregistrement n'est désactivé **que**
+      pendant l'appel réseau en cours (`pending`), jamais parce qu'un bandeau
+      de doublon est affiché — le formulaire entier reste éditable et
+      soumissible à tout moment. Modifier le nom ou le téléphone **après**
+      l'apparition d'un bandeau réinitialise les deux acquittements et efface
+      le bandeau (il décrivait les anciennes valeurs — un acquittement
+      resterait sinon collé à une valeur différente de celle réellement
+      soumise, un vrai risque de contournement, pas juste un détail de
+      confort). Réutilisable en édition à l'étape 8 (props `onSuccess`/
+      `onCancel`, aucune dépendance câblée en dur à la route `POST` sauf
+      l'URL elle-même — la bascule GET/PATCH pour l'édition reste du travail
+      pour l'étape 8, hors périmètre ici).
+    - `src/components/admin/DuplicateWarning.tsx` — bandeau **en ligne**
+      (jamais de modale), `role="alert"`, focus déplacé dessus (et redéplacé
+      si le `code` change, ex. NAME résolu puis PHONE qui apparaît),
+      `tabIndex={-1}`. Liste les candidats (nom, téléphone, statut, **lien
+      « Ouvrir la fiche existante »** vers `/admin/patients/<id>` — la
+      destination n'existe pas encore, c'est l'étape 8, le lien est posé
+      maintenant comme demandé par la fiche). Un seul bouton d'acquittement,
+      libellé selon le code (voir plus bas). `dir="auto"` sur nom **et**
+      téléphone du candidat tiers, jamais `notes`/`email`/`birthDate`
+      affichés (ces champs ne sont de toute façon jamais renvoyés par
+      `findDuplicateCandidates` — `DUPLICATE_SELECT`, `src/lib/patients/
+      duplicates.ts`). Conçu pour les **trois** codes dès maintenant (voir
+      ci-dessous) puisque ce composant sera réutilisé tel quel à l'étape 8.
+  - **Fichiers modifiés** :
+    - `src/components/admin/Sidebar.tsx` — ajout de
+      `{ href: "/admin/patients", label: "Patients", adminOnly: false }`
+      dans `NAV_ITEMS`, juste après « Tableau de bord ».
+  - **Les trois codes 409, traités un par un** (lu directement dans
+    `src/app/api/admin/patients/route.ts` et `.../[id]/route.ts`, pas deviné) :
+    1. **`DUPLICATE_CANDIDATES`** (homonyme, `route.ts` POST) — acquittement
+       `duplicateAcknowledged: true`. Bouton : « C'est une personne
+       différente — enregistrer quand même ».
+    2. **`PHONE_ALREADY_REGISTERED`** (téléphone déjà utilisé, `route.ts`
+       POST) — acquittement `phoneSharingAcknowledged: true`. Bouton
+       distinct : « C'est un téléphone partagé — enregistrer quand même ».
+    3. **`INDISTINGUISHABLE_RECORDS`** — **constat important à signaler** :
+       ce troisième code **n'existe, à ce jour, que sur `PATCH
+       /api/admin/patients/[id]`** (`src/app/api/admin/patients/[id]/
+       route.ts:283`, `dualMatches` — un candidat qui correspond **à la
+       fois** par nom et par téléphone, cas ajouté à l'étape 5 tour 2 pour
+       fermer un contournement spécifique à l'édition). **`POST
+       /api/admin/patients` (création, la seule route que ce formulaire
+       appelle à cette étape) ne l'émet jamais** : ses deux gardes NAME/PHONE
+       sont indépendantes et non conditionnées par `nameChanged`/
+       `phoneChanged` (qui n'existent que côté `PATCH`, pour une édition
+       partielle) — un candidat qui correspond aux deux tombe forcément
+       d'abord sur `DUPLICATE_CANDIDATES`, puis, une fois ce premier
+       acquittement donné, sur `PHONE_ALREADY_REGISTERED` en deux allers-
+       retours successifs. C'est donc structurellement déjà « les deux
+       acquittements requis » pour la création — seulement obtenus en deux
+       étapes, jamais en une, faute de garde `dualMatches` dans `POST`.
+       J'ai quand même câblé `DuplicateWarning` et `PatientForm` pour
+       reconnaître `INDISTINGUISHABLE_RECORDS` dès maintenant (acquitte les
+       **deux** flags d'un coup) puisque ce même composant sera rebranché sur
+       `PATCH` à l'étape 8, où le code apparaît réellement — mais **aucun
+       test ni parcours de cette étape 7 ne peut l'exercer**, `POST` ne le
+       renvoie jamais. Je le signale explicitement pour que ce ne soit pas
+       lu comme une preuve que la création gère un cas qu'elle ne gère pas
+       réellement par un code dédié — elle le couvre par deux 409
+       successifs, ce qui est fonctionnellement équivalent mais pas
+       identique à ce que la fiche relais laissait entendre.
+  - **Vérification manuelle du critère central** (créer un patient, recréer
+    le même nom, bandeau en ligne, « enregistrer quand même » crée le
+    second) : non rejouée en navigateur par moi (pas d'outil de capture
+    d'écran dans mon environnement) — voir §Comment vérifier à l'écran de
+    mon rapport pour les gestes exacts que l'utilisateur/`ortho-tester` doit
+    reproduire. Le code a été relu ligne à ligne contre le contrat exact de
+    `route.ts` (noms de champs, forme de `duplicates`, statut HTTP) plutôt
+    que testé en direct.
+  - **Vérifications** : `npm run typecheck` → OK. `npm run lint` → OK.
+    `npx vitest run tests/authz-matrix.test.ts` → **43/43** (le test
+    `dir="ltr"` du layout admin n'est pas cassé — aucun fichier de layout
+    touché). `npm test` complet → **464/464**, inchangé (aucun test
+    n'existait ni n'a été ajouté pour cette étape — étape UI pure, aucune
+    route/schéma/migration touchés). `npm run build` → succès,
+    `/admin/patients` apparaît en `ƒ` (dynamique) dans la sortie des routes.
+    `DATABASE_URL` forcé sur `TEST_DATABASE_URL` (contrôle `*localhost*`)
+    avant chaque commande touchant la base, jamais affiché.
+  - **Non fait volontairement** : `/admin/patients/[id]` (fiche patient,
+    étape 8) — non construite ; le lien « Ouvrir la fiche existante » et le
+    lien sur le nom dans le tableau y pointent déjà mais renvoient un 404 tant
+    que l'étape 8 n'est pas livrée, comme attendu. Après création réussie, la
+    fiche demandait soit une redirection vers `/admin/patients/<id>`, soit
+    (si la route n'existe pas) un retour à la liste avec message de succès —
+    j'ai choisi la seconde option puisque la page `[id]` n'existe pas
+    encore, et je l'ai gardée comme comportement définitif du composant (pas
+    un `TODO` : `onSuccess` est un prop générique, l'étape 8 pourra la
+    changer sans toucher `PatientForm`). Aucune clé `next-intl` ajoutée
+    (dashboard FR uniquement, vérifié). Aucun test ajouté (aucun test
+    n'existait pour du JSX admin avant cette étape dans ce dépôt — `ortho-
+    tester` est le prochain agent recommandé par la fiche).
+  - **Signalé sans y toucher** :
+    - Le troisième code 409 (`INDISTINGUISHABLE_RECORDS`) n'est pas atteint
+      par le parcours de création de cette étape — voir le constat détaillé
+      ci-dessus. Rien à corriger dans le code de cette étape ; c'est un fait
+      sur le comportement de la route existante, signalé pour que
+      l'`ortho-tester` ne cherche pas à le déclencher via `POST`.
+    - Les dettes déjà portées aux étapes précédentes (garde de doublon
+      dupliquée entre `route.ts`/`[id]/route.ts`, `RateLimitCounter`,
+      `plan.md`, test messaging `active`) restent hors périmètre de cette
+      étape.
+  - **Réutilisé** : `patientCreateSchema`/`PatientCreateInput`
+    (`@/schemas/patient`, importé, jamais redéfini — voir la preuve grep dans
+    mon rapport), structure d'états (chargement/vide/erreur) et style visuel
+    copiés de `src/components/admin/AuditViewer.tsx`, anneaux de focus
+    `focus-visible:ring-teal-600` (`Sidebar.tsx`). Aucun helper serveur
+    réinventé — aucune route touchée à cette étape.
+  - **Verdict : VERT.**
 
 ### Étape 8 — Écran fiche patient : timeline unifiée, édition, visite, désactivation, anonymisation
 - [ ] Statut : à faire

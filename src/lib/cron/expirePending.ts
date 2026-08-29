@@ -84,7 +84,6 @@ export async function expirePendingBookings(nowUTC: Date = new Date()): Promise<
 
     await notifyPendingExpired({
       appointmentId: a.id,
-      patientName: `${a.patient.firstName} ${a.patient.lastName}`.trim(),
       serviceId: a.serviceId,
       serviceName: a.service.name as unknown as Record<string, string>,
       startTime: a.startTime.toISOString(),

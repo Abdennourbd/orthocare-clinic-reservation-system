@@ -77,8 +77,6 @@ export async function selfServiceCancel(
   await safe(() =>
     notifyCancellation({
       appointmentId: appointment.id,
-      patientName:
-        `${appointment.patient.firstName} ${appointment.patient.lastName}`.trim(),
       serviceId: appointment.serviceId,
       serviceName: appointment.service.name as Record<string, string>,
       startTime: appointment.startTime.toISOString(),

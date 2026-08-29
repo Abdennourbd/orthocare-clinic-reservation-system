@@ -4,6 +4,17 @@ import { NotificationType, type Prisma } from "@/generated/prisma/client";
 // Staff in-app notification feed (plan.md §Domain model — `Notification`).
 // Fan-out rule: one row per ACTIVE staff user, so nothing depends on a
 // particular person being logged in.
+//
+// task-13.md étape 6, TOUR 2 [CRITIQUE]: payloads carry NO patient-identifying
+// field (no `patientName`) — only `appointmentId` plus non-identifying
+// scheduling data. `Notification` has no FK to `Patient` (createMany writes
+// a plain JSON blob), so neither the anonymize.ts cascade nor any future
+// hard-delete could ever reach a name baked into this table. Keeping the
+// payload name-free makes erasure automatically effective here instead of
+// relying on someone remembering to scrub Notification rows too. The screen
+// that will eventually list these notifications must resolve the patient's
+// name by joining on `appointmentId` at render time, not by reading it back
+// out of `payload`.
 
 /** Fan out one notification row to every active staff user. Returns the
  * number of rows created (0 when there are no active staff). */
@@ -30,7 +41,6 @@ async function fanOut<T extends object>(
 
 export type NewBookingNotificationPayload = {
   appointmentId: string;
-  patientName: string;
   serviceId: string;
   /** Full per-locale service name, so the dashboard can render any language. */
   serviceName: Record<string, string>;
@@ -47,7 +57,6 @@ export function notifyNewBooking(
 
 export type CancellationNotificationPayload = {
   appointmentId: string;
-  patientName: string;
   serviceId: string;
   /** Full per-locale service name, so the dashboard can render any language. */
   serviceName: Record<string, string>;
@@ -68,7 +77,6 @@ export function notifyCancellation(
 
 export type NoShowAlertPayload = {
   appointmentId: string;
-  patientName: string;
   serviceId: string;
   /** Full per-locale service name, so the dashboard can render any language. */
   serviceName: Record<string, string>;
@@ -86,7 +94,6 @@ export function notifyNoShowAlert(
 
 export type PendingExpiredPayload = {
   appointmentId: string;
-  patientName: string;
   serviceId: string;
   /** Full per-locale service name, so the dashboard can render any language. */
   serviceName: Record<string, string>;

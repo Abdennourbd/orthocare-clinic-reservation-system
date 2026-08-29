@@ -16,6 +16,7 @@ import {
 } from "@/app/api/admin/patients/[id]/route";
 import { GET as patientHistoryRoute } from "@/app/api/admin/patients/[id]/history/route";
 import { POST as patientVisitsRoute } from "@/app/api/admin/patients/[id]/visits/route";
+import { POST as patientAnonymizeRoute } from "@/app/api/admin/patients/[id]/anonymize/route";
 
 // Task 12 — the authorization matrix (plan.md §Testing strategy):
 //   one table-driven test walking EVERY /api/admin/* route ×
@@ -215,6 +216,18 @@ const ROUTES: RouteRow[] = [
     allowed: [Role.ADMIN, Role.RECEPTIONIST],
     okStatus: 400,
     handler: patientVisitsRoute,
+  },
+  {
+    method: "POST",
+    scanPath: "/api/admin/patients/[id]/anonymize",
+    requestPath: "/api/admin/patients/does-not-exist/anonymize",
+    params: { id: "does-not-exist" },
+    // task-13.md étape 6 spec — ADMIN only, the receptionist must get 403.
+    allowed: [Role.ADMIN],
+    // requestAs() sends no body — Zod fails after the guard, same reasoning
+    // as POST /api/admin/patients.
+    okStatus: 400,
+    handler: patientAnonymizeRoute,
   },
 ];
 

@@ -59,7 +59,6 @@ export async function markNoShows(nowUTC: Date = new Date()): Promise<number> {
 
     await notifyNoShowAlert({
       appointmentId: a.id,
-      patientName: `${a.patient.firstName} ${a.patient.lastName}`.trim(),
       serviceId: a.serviceId,
       serviceName: a.service.name as unknown as Record<string, string>,
       startTime: a.startTime.toISOString(),
