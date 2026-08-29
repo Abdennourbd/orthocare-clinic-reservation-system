@@ -46,3 +46,7 @@ next-env.d.ts
 # Agent memory written by Claude Code subagents (local, not shared)
 .claude/agent-memory-local/
 .claude/settings.local.json
+.claude/
+AGENTS.md
+CLAUDE.md
+MEMORY.md
