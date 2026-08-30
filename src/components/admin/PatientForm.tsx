@@ -23,10 +23,26 @@ import DuplicateWarning, { type DuplicateWarningState } from "./DuplicateWarning
 // anyway" across an edited name/phone would be exactly the kind of gate a
 // receptionist could trip through without meaning to (task-13.md
 // §Décisions d'architecture 1, and the two-gate split of étape 4 tour 2).
+//
+// Task 13 step 8 — this same component is now also the edit form on
+// /admin/patients/[id], switched into that mode by the presence of
+// `patientId` (see the component's prop comments below): the URL/method
+// become PATCH /api/admin/patients/[id], and only the fields that actually
+// changed from `initialValues` are sent (see `buildEditPatch` below) so a
+// save that touches no identity field can never re-trigger the PATCH
+// route's own nameChanged/phoneChanged duplicate re-check
+// (src/app/api/admin/patients/[id]/route.ts) on unrelated fields.
+//
+// Correction étape 8 (audit ortho-security, point 7) — `autoComplete="off"`
+// on the identity fields (name/phone/email). Not a leak that was observed
+// (there is no `name` attribute here, and submission is `fetch`, never a
+// navigating form post), only defense in depth: on a shared front-desk
+// workstation, a browser-profile autofill suggestion could otherwise offer
+// to fill a patient's chart with the receptionist's OWN saved contact info.
 
 type DuplicateFieldName = "firstName" | "lastName" | "phone";
 
-interface FormValues {
+export interface FormValues {
   firstName: string;
   lastName: string;
   phone: string;
@@ -69,11 +85,28 @@ const labelClass = "block text-sm font-medium text-slate-700";
 export default function PatientForm({
   onSuccess,
   onCancel,
+  patientId,
+  initialValues,
+  readOnly = false,
+  submitLabel,
 }: {
   onSuccess: (patient: PatientFormSuccess) => void;
   onCancel?: () => void;
+  // Task 13 step 8 — presence of `patientId` switches this form from
+  // POST /api/admin/patients (create) to PATCH /api/admin/patients/[id]
+  // (edit). `initialValues` seeds the fields from the record PatientDetail
+  // already fetched — this component never fetches a patient itself.
+  patientId?: string;
+  initialValues?: FormValues;
+  // Set once `anonymizedAt` is present: every field is disabled via a
+  // <fieldset>, and the submit/cancel buttons are not rendered at all. This
+  // is a UX mirror of the PATCH route's own 409 PATIENT_ANONYMIZED guard —
+  // the API remains the sole authority; disabling inputs here is not a
+  // security control (task-13.md §Points de vigilance non négociables).
+  readOnly?: boolean;
+  submitLabel?: string;
 }) {
-  const [values, setValues] = useState<FormValues>(EMPTY_VALUES);
+  const [values, setValues] = useState<FormValues>(initialValues ?? EMPTY_VALUES);
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof FormValues, string>>>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [duplicateWarning, setDuplicateWarning] = useState<DuplicateWarningState | null>(null);
@@ -94,6 +127,42 @@ export default function PatientForm({
     setValues((prev) => ({ ...prev, [field]: value }));
   }
 
+  // Task 13 step 8 — edit mode sends only the fields that actually changed
+  // from `initialValues`. Resending every field on every save (as create
+  // mode necessarily does, having no "initial" state to diff against) would
+  // make PATCH's own `nameChanged`/`phoneChanged` detection
+  // (src/app/api/admin/patients/[id]/route.ts) true on EVERY save regardless
+  // of what was actually edited — re-running the duplicate-candidate check
+  // even when only, say, a checkbox changed, producing a false "similar
+  // patient" warning on a save that touched no identity field.
+  function buildEditPatch(): Record<string, unknown> {
+    if (!initialValues) return {};
+    const patch: Record<string, unknown> = {};
+    if (values.firstName !== initialValues.firstName) patch.firstName = values.firstName;
+    if (values.lastName !== initialValues.lastName) patch.lastName = values.lastName;
+    if (values.phone !== initialValues.phone) patch.phone = values.phone;
+    if (values.email !== initialValues.email) patch.email = values.email;
+    if (values.birthDate !== initialValues.birthDate) {
+      patch.birthDate = values.birthDate ? values.birthDate : null;
+    }
+    if (values.notes !== initialValues.notes) patch.notes = values.notes;
+    if (values.messagingOptOut !== initialValues.messagingOptOut) {
+      patch.messagingOptOut = values.messagingOptOut;
+    }
+    if (values.whatsappOptIn !== initialValues.whatsappOptIn) {
+      patch.whatsappOptIn = values.whatsappOptIn;
+    }
+    // patientUpdateSchema's `preferredLocale` stays a bare enum, exactly
+    // like the create schema — it has no way to express "clear it back to
+    // unset". Resetting the dropdown to "Non précisée" is therefore not
+    // sent; this is a pre-existing limitation of the shared schema
+    // (@/schemas/patient), not something invented or fixable from this form.
+    if (values.preferredLocale && values.preferredLocale !== initialValues.preferredLocale) {
+      patch.preferredLocale = values.preferredLocale;
+    }
+    return patch;
+  }
+
   async function submit(overrides?: { ackName?: boolean; ackPhone?: boolean }) {
     const nextAckName = overrides?.ackName ?? ackName;
     const nextAckPhone = overrides?.ackPhone ?? ackPhone;
@@ -112,6 +181,9 @@ export default function PatientForm({
       phoneSharingAcknowledged: nextAckPhone,
     };
 
+    // Validated against the FULL current values either way — an edit must
+    // still reject a blanked-out required field, even though only the diff
+    // computed below is actually sent over the wire.
     const parsed = patientCreateSchema.safeParse(candidate);
     if (!parsed.success) {
       const nextFieldErrors: Partial<Record<keyof FormValues, string>> = {};
@@ -131,12 +203,25 @@ export default function PatientForm({
     setAckPhone(nextAckPhone);
     setPending(true);
     setFormError(null);
+
+    const isEdit = Boolean(patientId);
+    const requestBody: Record<string, unknown> = isEdit
+      ? {
+          ...buildEditPatch(),
+          duplicateAcknowledged: nextAckName,
+          phoneSharingAcknowledged: nextAckPhone,
+        }
+      : parsed.data;
+
     try {
-      const response = await fetch("/api/admin/patients", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(parsed.data),
-      });
+      const response = await fetch(
+        isEdit ? `/api/admin/patients/${patientId}` : "/api/admin/patients",
+        {
+          method: isEdit ? "PATCH" : "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(requestBody),
+        },
+      );
       const body = await response.json().catch(() => null);
 
       if (response.ok) {
@@ -218,6 +303,13 @@ export default function PatientForm({
           form stays on screen and fully editable regardless of the banner
           above (tasks/todo.md acceptance criterion for this step). */}
       <form className="space-y-4" onSubmit={handleSubmit} noValidate>
+        {/* Task 13 step 8 — `disabled` on a <fieldset> disables every
+            descendant control in one shot for the anonymized read-only
+            case; the two default browser affordances (border, padding) are
+            zeroed out so it stays visually identical to the editable
+            layout. See the `readOnly` prop comment above the component for
+            what this is (a UX mirror) and is not (an access control). */}
+        <fieldset disabled={readOnly} className="m-0 min-w-0 space-y-4 border-0 p-0">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="space-y-1">
             <label htmlFor="patient-lastName" className={labelClass}>
@@ -230,6 +322,7 @@ export default function PatientForm({
                 handleDuplicateFieldChange("lastName", e.target.value)
               }
               dir="auto"
+              autoComplete="off"
               aria-describedby={fieldErrors.lastName ? "patient-lastName-error" : undefined}
               aria-invalid={Boolean(fieldErrors.lastName)}
               className={inputClass}
@@ -252,6 +345,7 @@ export default function PatientForm({
                 handleDuplicateFieldChange("firstName", e.target.value)
               }
               dir="auto"
+              autoComplete="off"
               aria-describedby={fieldErrors.firstName ? "patient-firstName-error" : undefined}
               aria-invalid={Boolean(fieldErrors.firstName)}
               className={inputClass}
@@ -274,6 +368,7 @@ export default function PatientForm({
                 handleDuplicateFieldChange("phone", e.target.value)
               }
               dir="auto"
+              autoComplete="off"
               aria-describedby={fieldErrors.phone ? "patient-phone-error" : undefined}
               aria-invalid={Boolean(fieldErrors.phone)}
               className={inputClass}
@@ -294,6 +389,7 @@ export default function PatientForm({
               type="email"
               value={values.email}
               onChange={(e: ChangeEvent<HTMLInputElement>) => handleChange("email", e.target.value)}
+              autoComplete="off"
               aria-describedby={fieldErrors.email ? "patient-email-error" : undefined}
               aria-invalid={Boolean(fieldErrors.email)}
               className={inputClass}
@@ -388,32 +484,35 @@ export default function PatientForm({
             Accepte les messages WhatsApp
           </label>
         </div>
+        </fieldset>
 
-        <div className="flex gap-3 pt-2">
-          <button
-            type="submit"
-            disabled={pending}
-            className="rounded-md bg-teal-700 px-4 py-2 text-sm font-medium text-white
-              hover:bg-teal-800 focus-visible:outline-none focus-visible:ring-2
-              focus-visible:ring-teal-600 focus-visible:ring-offset-2
-              disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {pending ? "Enregistrement…" : "Enregistrer le patient"}
-          </button>
-          {onCancel && (
+        {!readOnly && (
+          <div className="flex gap-3 pt-2">
             <button
-              type="button"
-              onClick={onCancel}
+              type="submit"
               disabled={pending}
-              className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700
-                hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2
+              className="rounded-md bg-teal-700 px-4 py-2 text-sm font-medium text-white
+                hover:bg-teal-800 focus-visible:outline-none focus-visible:ring-2
                 focus-visible:ring-teal-600 focus-visible:ring-offset-2
                 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              Annuler
+              {pending ? "Enregistrement…" : (submitLabel ?? "Enregistrer le patient")}
             </button>
-          )}
-        </div>
+            {onCancel && (
+              <button
+                type="button"
+                onClick={onCancel}
+                disabled={pending}
+                className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700
+                  hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2
+                  focus-visible:ring-teal-600 focus-visible:ring-offset-2
+                  disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Annuler
+              </button>
+            )}
+          </div>
+        )}
       </form>
     </div>
   );

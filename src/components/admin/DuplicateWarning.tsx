@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import Link from "next/link";
 
 // Task 13 step 7 — inline (never blocking) duplicate-candidate banner, shared
 // by the create form (this step) and, from step 8, the edit form. This is the
@@ -96,14 +97,17 @@ export default function DuplicateWarning({
             </span>
             <span dir="auto">{candidate.phone}</span>
             <span>{candidate.active ? "Actif" : "Inactif"}</span>
-            <a
+            {/* Correction étape 8 (audit ortho-reviewer, point 2) —
+                `next/link`, see PatientList.tsx for the same fix and why
+                lint did not catch the raw `<a>`. */}
+            <Link
               href={`/admin/patients/${candidate.id}`}
               className="ml-auto rounded-md px-2 py-1 text-teal-800 underline
                 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600
                 focus-visible:ring-offset-2"
             >
               Ouvrir la fiche existante
-            </a>
+            </Link>
           </li>
         ))}
       </ul>

@@ -9,7 +9,8 @@ import {
 } from "@/generated/prisma/client";
 import { createSessionToken, SESSION_COOKIE_NAME } from "@/lib/auth/session";
 import { POST as anonymizeRoute } from "@/app/api/admin/patients/[id]/anonymize/route";
-import { PATCH as patientPatchRoute } from "@/app/api/admin/patients/[id]/route";
+import { GET as patientRecordRoute, PATCH as patientPatchRoute } from "@/app/api/admin/patients/[id]/route";
+import { GET as patientHistoryRoute } from "@/app/api/admin/patients/[id]/history/route";
 import { POST as patientVisitsRoute } from "@/app/api/admin/patients/[id]/visits/route";
 import { notifyBookingCreated } from "@/lib/messaging/notifyBookingCreated";
 import { createSelfServiceToken } from "@/lib/selfservice/tokens";
@@ -49,6 +50,12 @@ async function cookieFor(user: { id: string; role: Role }) {
     tokenVersion: 0,
   });
   return `${SESSION_COOKIE_NAME}=${token}`;
+}
+
+function getRequest(path: string, cookie?: string) {
+  return new NextRequest(`http://localhost:3000${path}`, {
+    headers: cookie ? { cookie } : {},
+  });
 }
 
 function bodyRequest(
@@ -396,5 +403,79 @@ describe("erasure completeness — self-service tokens are revoked, not left act
     expect(after.status).toBe(410);
     const afterBody = (await after.json()) as { error: { code: string } };
     expect(afterBody.error.code).toBe("TOKEN_REVOKED");
+  });
+});
+
+// Task 13 étape 8 (ortho-tester) — the screen-level acceptance criterion
+// "anonymiser en ADMIN : ... le nombre d'éléments de la timeline est
+// inchangé" (task-13.md étape 8, critère #4). GET .../history already has
+// its own ordering/exclusion coverage (tests/integration/patient-record.test.ts);
+// this proves the one thing specific to anonymization — that erasing the
+// chart never drops or duplicates a COMPLETED appointment / Visit row from
+// the unified timeline the PatientTimeline component renders — and that the
+// record GET the edit screen reads has lost its identifiers.
+describe("anonymization leaves the unified timeline count exactly unchanged", () => {
+  it("history has the same item count before and after anonymization, and the record GET loses its identifiers", async () => {
+    const staff = await createStaff();
+    const cookie = await cookieFor(staff);
+    const patient = await createPatient({ firstName: "Yasmine", lastName: "Chaouch" });
+
+    // One COMPLETED appointment (counts in the timeline) and one CANCELLED
+    // one (must never count, before or after — proven already at the route
+    // level, reused here only as a control value that must stay excluded).
+    const completed = await makeAppointmentFor(patient.id, AppointmentStatus.COMPLETED);
+    await getPrisma().appointment.update({
+      where: { id: completed.id },
+      data: { completedAt: new Date() },
+    });
+    await makeAppointmentFor(patient.id, AppointmentStatus.CANCELLED);
+    await getPrisma().visit.create({
+      data: {
+        patientId: patient.id,
+        date: new Date(),
+        type: "CONTROLE",
+        notes: "Contrôle de routine",
+        treatment: "Détartrage",
+      },
+    });
+
+    const before = await patientHistoryRoute(
+      getRequest(`/api/admin/patients/${patient.id}/history`, cookie),
+      ctx(patient.id),
+    );
+    expect(before.status).toBe(200);
+    const beforeBody = (await before.json()) as { items: unknown[]; total: number };
+    expect(beforeBody.total).toBe(2); // COMPLETED appointment + Visit, CANCELLED excluded
+
+    const anonymizeResponse = await anonymizeRoute(
+      bodyRequest("POST", `/api/admin/patients/${patient.id}/anonymize`, { confirm: true }, cookie),
+      ctx(patient.id),
+    );
+    expect(anonymizeResponse.status).toBe(200);
+
+    const after = await patientHistoryRoute(
+      getRequest(`/api/admin/patients/${patient.id}/history`, cookie),
+      ctx(patient.id),
+    );
+    expect(after.status).toBe(200);
+    const afterBody = (await after.json()) as { items: unknown[]; total: number };
+    expect(afterBody.total).toBe(beforeBody.total);
+    expect(afterBody.items).toHaveLength(beforeBody.items.length);
+
+    // The record itself has lost its identifiers — this is what
+    // PatientDetail's "Dossier anonymisé" banner and read-only PatientForm
+    // are rendering the *consequence* of.
+    const record = await patientRecordRoute(
+      getRequest(`/api/admin/patients/${patient.id}`, cookie),
+      ctx(patient.id),
+    );
+    expect(record.status).toBe(200);
+    const recordBody = (await record.json()) as Record<string, unknown>;
+    expect(recordBody.anonymizedAt).not.toBeNull();
+    const serializedRecord = JSON.stringify(recordBody);
+    expect(serializedRecord).not.toContain("Yasmine");
+    expect(serializedRecord).not.toContain("Chaouch");
+    expect(serializedRecord).not.toContain(patient.phone);
+    expect(serializedRecord).not.toContain(patient.phoneE164);
   });
 });

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import Link from "next/link";
 import PatientForm, { type PatientFormSuccess } from "./PatientForm";
 
 // Task 13 step 7 — patient directory: explicit-submit search, active/inactive
@@ -159,6 +160,7 @@ export default function PatientList() {
             value={qInput}
             onChange={(e) => setQInput(e.target.value)}
             dir="auto"
+            autoComplete="off"
             placeholder="ex. Benali ou 0550…"
             className={inputClass}
           />
@@ -235,13 +237,18 @@ export default function PatientList() {
                 {patients.map((patient) => (
                   <tr key={patient.id}>
                     <td className="px-4 py-2 font-medium text-slate-900" dir="auto">
-                      <a
+                      {/* Correction étape 8 (audit ortho-reviewer, point 2) —
+                          `next/link`, not a raw `<a>`: `no-html-link-for-pages`
+                          does not flag a template-literal `href`, so this had
+                          been slipping past `npm run lint` for an internal
+                          route. */}
+                      <Link
                         href={`/admin/patients/${patient.id}`}
                         className="rounded-sm focus-visible:outline-none focus-visible:ring-2
                           focus-visible:ring-teal-600 focus-visible:ring-offset-2"
                       >
                         {patient.lastName}
-                      </a>
+                      </Link>
                     </td>
                     <td className="px-4 py-2 text-slate-700" dir="auto">
                       {patient.firstName}
