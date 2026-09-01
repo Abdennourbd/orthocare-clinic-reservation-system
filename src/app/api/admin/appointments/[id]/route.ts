@@ -204,6 +204,10 @@ export async function PATCH(
       where: { id },
       select: appointmentDetailSelect,
     });
+    // Vanished between reads (concurrent release) — never answer 200 + null.
+    if (!current) {
+      return errorResponse(404, "NOT_FOUND", "Rendez-vous introuvable.");
+    }
     return withRefreshedSession(ok(current), guard);
   }
 
@@ -303,6 +307,11 @@ export async function PATCH(
     where: { id },
     select: appointmentDetailSelect,
   });
+  // Vanished between the write and this read (concurrent release) — never
+  // answer 200 with an empty body.
+  if (!appointment) {
+    return errorResponse(404, "NOT_FOUND", "Rendez-vous introuvable.");
+  }
 
   return withRefreshedSession(ok(appointment), guard);
 }

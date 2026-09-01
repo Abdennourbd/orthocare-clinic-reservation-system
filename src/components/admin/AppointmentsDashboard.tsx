@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import AppointmentDayView from "./AppointmentDayView";
 import AppointmentCallQueue from "./AppointmentCallQueue";
 import AppointmentSearch from "./AppointmentSearch";
@@ -31,7 +31,6 @@ export default function AppointmentsDashboard() {
   const [showBookingForm, setShowBookingForm] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
-  const successRef = useRef<HTMLParagraphElement>(null);
 
   const bumpReload = useCallback(() => setReloadToken((t) => t + 1), []);
 
@@ -70,11 +69,9 @@ export default function AppointmentsDashboard() {
 
       {successMessage && (
         <p
-          ref={successRef}
           role="status"
-          tabIndex={-1}
           className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm
-            text-emerald-800 focus:outline-none"
+            text-emerald-800"
         >
           {successMessage}
         </p>

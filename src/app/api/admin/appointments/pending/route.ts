@@ -63,10 +63,17 @@ export async function GET(request: NextRequest) {
     const expiresAt = new Date(
       a.createdAt.getTime() + policy.pendingExpiryHours * 3600_000,
     );
+    // Named fields only, never a spread — same discipline as the rest of the
+    // route family. expiresAt is derived, not stored. msRemaining can be
+    // negative (cron overdue).
     return {
-      ...a,
-      // Serialized Date -> ISO by Response.json; expiry is derived, not
-      // stored. msRemaining can be negative (cron overdue).
+      id: a.id,
+      createdAt: a.createdAt,
+      startTime: a.startTime,
+      endTime: a.endTime,
+      source: a.source,
+      patient: a.patient,
+      service: a.service,
       expiresAt: expiresAt.toISOString(),
       msRemaining: expiresAt.getTime() - now.getTime(),
     };
