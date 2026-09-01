@@ -4,6 +4,7 @@ import { getPrisma } from "@/lib/db";
 import { AuditAction, AuditActorType, Role } from "@/generated/prisma/client";
 import { createSessionToken, SESSION_COOKIE_NAME } from "@/lib/auth/session";
 import { GET as patientsListRoute, POST as patientsCreateRoute } from "@/app/api/admin/patients/route";
+import { normalizeName } from "@/lib/patients/duplicates";
 
 // Task 13 step 4 — GET (list/search, audited) + POST (create with duplicate
 // acknowledgement, also audited on the 409 path) /api/admin/patients.
@@ -163,50 +164,235 @@ describe("GET /api/admin/patients", () => {
     expect(byPhoneBody.patients.map((p) => p.lastName)).toEqual(["Boudiaf"]);
   });
 
-  it("documents an HONEST limitation: q search does NOT fold Arabic diacritics (vocalization/tatweel) — unlike findDuplicateCandidates, it is a raw Postgres ILIKE `contains`", async () => {
+  // Task 13 étape 9b — this test REPLACES the old "documents an HONEST
+  // limitation" test, which proved the opposite of what is true today. That
+  // old test's fixture created its patient with a bare `patient.create()`
+  // that never populated firstNameNormalized/lastNameNormalized, so the two
+  // new `contains` clauses this step adds always matched NULL columns and
+  // never fired — the assertions `total === 0` kept passing after the route
+  // changed, but for the wrong reason (degrading gracefully on an
+  // unmigrated row, task-13.md étape 9a MAJEUR-2), not because the
+  // limitation still existed (task-13.md étape 9b Journal, ortho-builder).
+  // Every patient below populates both normalized columns explicitly —
+  // same precedent this file already uses for phoneE164 — so these
+  // assertions actually exercise src/app/api/admin/patients/route.ts's new
+  // `firstNameNormalized`/`lastNameNormalized` `contains` clauses.
+  it("q search folds Latin accents AND Arabic diacritics/tatweel — bilingual search, task-13.md étape 9b", async () => {
     const staff = await createStaff();
     const cookie = await cookieFor(staff);
-    // Stored unvocalized, as a receptionist would normally type it.
-    await getPrisma().patient.create({
+
+    // Case 1 — typing "benali" (plain, lowercase) finds a patient whose
+    // firstName is stored ACCENTED as "Bénali".
+    const accentedStored = await getPrisma().patient.create({
+      data: {
+        firstName: "Bénali",
+        lastName: "Latin1",
+        phone: "0550100090",
+        phoneE164: "+213550100090",
+        firstNameNormalized: normalizeName("Bénali"),
+        lastNameNormalized: normalizeName("Latin1"),
+      },
+    });
+    const byPlainQuery = await patientsListRoute(
+      getRequest(`/api/admin/patients?q=${encodeURIComponent("benali")}`, cookie),
+    );
+    const byPlainBody = (await byPlainQuery.json()) as { patients: Array<{ id: string }> };
+    expect(byPlainBody.patients.some((p) => p.id === accentedStored.id)).toBe(true);
+
+    // Case 2 — the reverse: typing "Bénali" (accented, capitalized) finds a
+    // patient whose firstName is stored PLAIN as "benali".
+    const plainStored = await getPrisma().patient.create({
+      data: {
+        firstName: "benali",
+        lastName: "Latin2",
+        phone: "0550100091",
+        phoneE164: "+213550100091",
+        firstNameNormalized: normalizeName("benali"),
+        lastNameNormalized: normalizeName("Latin2"),
+      },
+    });
+    const byAccentedQuery = await patientsListRoute(
+      getRequest(`/api/admin/patients?q=${encodeURIComponent("Bénali")}`, cookie),
+    );
+    const byAccentedBody = (await byAccentedQuery.json()) as { patients: Array<{ id: string }> };
+    expect(byAccentedBody.patients.some((p) => p.id === plainStored.id)).toBe(true);
+
+    // Cases 3 & 4 — an Arabic name stored unvocalized/without tatweel, as a
+    // receptionist would normally type it, found by BOTH a fully vocalized
+    // query (harakat: fatha/damma/shadda) AND a tatweel/kashida-elongated
+    // query.
+    const arabicStored = await getPrisma().patient.create({
       data: {
         firstName: "أحمد",
         lastName: "محمد",
-        phone: "0550100098",
-        phoneE164: "+213550100098",
+        phone: "0550100092",
+        phoneE164: "+213550100092",
+        firstNameNormalized: normalizeName("أحمد"),
+        lastNameNormalized: normalizeName("محمد"),
       },
     });
 
-    // Exact substring, case-insensitive — this DOES work (ILIKE folds case
-    // only, and the stored value is byte-identical to the query here).
-    const exactMatch = await patientsListRoute(
-      getRequest(`/api/admin/patients?q=${encodeURIComponent("محمد")}`, cookie),
-    );
-    const exactBody = (await exactMatch.json()) as { patients: Array<{ lastName: string }> };
-    expect(exactBody.patients.map((p) => p.lastName)).toEqual(["محمد"]);
-
-    // Fully vocalized query (harakat added: fatha/damma/shadda) for the same
-    // name — NOT found. Postgres ILIKE folds case only, never diacritics;
-    // that folding only exists on the write-time duplicate-detection path
-    // (src/lib/patients/duplicates.ts, TypeScript-side NFD normalization),
-    // never on this route's SQL-level `contains`. This is the honest,
-    // verified answer to task-13.md étape 4's question, not an assumption.
     const vocalizedQuery = "مُحَمَّد";
     const vocalizedSearch = await patientsListRoute(
       getRequest(`/api/admin/patients?q=${encodeURIComponent(vocalizedQuery)}`, cookie),
     );
-    const vocalizedBody = (await vocalizedSearch.json()) as { patients: unknown[]; total: number };
-    expect(vocalizedBody.total).toBe(0);
-    expect(vocalizedBody.patients).toEqual([]);
+    const vocalizedBody = (await vocalizedSearch.json()) as { patients: Array<{ id: string }> };
+    expect(vocalizedBody.patients.some((p) => p.id === arabicStored.id)).toBe(true);
 
-    // Tatweel/kashida-elongated query for the same name — also NOT found,
-    // for the same reason.
     const tatweelQuery = "محـمد";
     const tatweelSearch = await patientsListRoute(
       getRequest(`/api/admin/patients?q=${encodeURIComponent(tatweelQuery)}`, cookie),
     );
-    const tatweelBody = (await tatweelSearch.json()) as { patients: unknown[]; total: number };
-    expect(tatweelBody.total).toBe(0);
-    expect(tatweelBody.patients).toEqual([]);
+    const tatweelBody = (await tatweelSearch.json()) as { patients: Array<{ id: string }> };
+    expect(tatweelBody.patients.some((p) => p.id === arabicStored.id)).toBe(true);
+  });
+
+  // Task 13 étape 9b, point 2 — the guard test, kept SEPARATE from the 4
+  // cases above on purpose: a query that normalizes down to an EMPTY string
+  // must never be treated as "no filter" (Prisma `contains: ""` compiles to
+  // Postgres `LIKE '%%'`, which matches every row). A lone tatweel (U+0640)
+  // has no base letter left once diacritics/tatweel are stripped by
+  // normalizeName(), so it is the natural, user-typeable degenerate input.
+  it("a query that normalizes to an EMPTY string (a lone tatweel) NEVER returns the entire patient file — task-13.md étape 9b guard", async () => {
+    const staff = await createStaff();
+    const cookie = await cookieFor(staff);
+    // Three unrelated patients, none containing the literal tatweel
+    // character anywhere in firstName/lastName — the only way this query
+    // could match any of them is the degenerate `contains: ""` bug the
+    // guard exists to prevent.
+    await getPrisma().patient.create({
+      data: {
+        firstName: "Karim",
+        lastName: "Ait",
+        phone: "0550100093",
+        phoneE164: "+213550100093",
+        firstNameNormalized: normalizeName("Karim"),
+        lastNameNormalized: normalizeName("Ait"),
+      },
+    });
+    await getPrisma().patient.create({
+      data: {
+        firstName: "Salima",
+        lastName: "Ziani",
+        phone: "0550100094",
+        phoneE164: "+213550100094",
+        firstNameNormalized: normalizeName("Salima"),
+        lastNameNormalized: normalizeName("Ziani"),
+      },
+    });
+    await getPrisma().patient.create({
+      data: {
+        firstName: "Yanis",
+        lastName: "Brahim",
+        phone: "0550100095",
+        phoneE164: "+213550100095",
+        firstNameNormalized: normalizeName("Yanis"),
+        lastNameNormalized: normalizeName("Brahim"),
+      },
+    });
+    // beforeEach truncates every table, so these 3 are the entire patient
+    // file at this point in the test — a leak here would show up as total
+    // === 3, not just "greater than expected".
+    expect(await getPrisma().patient.count()).toBe(3);
+
+    const degenerateQuery = "ـ"; // a lone tatweel, normalizes to ""
+    const response = await patientsListRoute(
+      getRequest(`/api/admin/patients?q=${encodeURIComponent(degenerateQuery)}`, cookie),
+    );
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { total: number; patients: unknown[] };
+    // None of the 3 fixtures contains a literal tatweel character, so the
+    // old ILIKE clauses (unaffected by this step) also find nothing: the
+    // only correct answer here is 0, never "all 3" / "the whole file".
+    expect(body.total).toBe(0);
+    expect(body.patients).toEqual([]);
+  });
+
+  // Task 13 étape 9b TOUR 2 — ortho-security MAJEUR-1: Prisma 7 compiles
+  // `contains` to Postgres `LIKE ('%' || $1 || '%')` with NO `ESCAPE` clause
+  // and NO escaping of the parameter, so `%` and `_` (Postgres LIKE
+  // metacharacters) pass straight through from `q` and act as wildcards —
+  // measured empirically: before the `likeTerm` fix, `q = "%"` alone matched
+  // every row in this exact fixture shape. Kept SEPARATE from the tatweel
+  // guard test above on purpose: that one proves the "normalizes to empty"
+  // path is closed, this one proves the "LIKE metacharacter" path is closed
+  // — neither guard substitutes for the other (route.ts comment above
+  // `likeTerm`).
+  it("a query built of LIKE metacharacters (%, _, %_%) NEVER returns the entire patient file — task-13.md étape 9b tour 2 guard", async () => {
+    const staff = await createStaff();
+    const cookie = await cookieFor(staff);
+    // Three unrelated patients, none containing a literal %, _ or space in
+    // that position — the only way this query could match any of them is
+    // the LIKE-metacharacter-as-wildcard bug this guard exists to prevent.
+    await getPrisma().patient.create({
+      data: {
+        firstName: "Karim",
+        lastName: "Ait",
+        phone: "0550100096",
+        phoneE164: "+213550100096",
+        firstNameNormalized: normalizeName("Karim"),
+        lastNameNormalized: normalizeName("Ait"),
+      },
+    });
+    await getPrisma().patient.create({
+      data: {
+        firstName: "Salima",
+        lastName: "Ziani",
+        phone: "0550100097",
+        phoneE164: "+213550100097",
+        firstNameNormalized: normalizeName("Salima"),
+        lastNameNormalized: normalizeName("Ziani"),
+      },
+    });
+    await getPrisma().patient.create({
+      data: {
+        firstName: "Yanis",
+        lastName: "Brahim",
+        phone: "0550100098",
+        phoneE164: "+213550100098",
+        firstNameNormalized: normalizeName("Yanis"),
+        lastNameNormalized: normalizeName("Brahim"),
+      },
+    });
+    // beforeEach truncates every table, so these 3 are the entire patient
+    // file at this point in the test — a leak here would show up as total
+    // === 3, not just "greater than expected".
+    expect(await getPrisma().patient.count()).toBe(3);
+
+    for (const degenerateQuery of ["%", "_", "%_%"]) {
+      const response = await patientsListRoute(
+        getRequest(`/api/admin/patients?q=${encodeURIComponent(degenerateQuery)}`, cookie),
+      );
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as { total: number; patients: unknown[] };
+      expect(body.total).toBe(0);
+      expect(body.patients).toEqual([]);
+    }
+  });
+
+  // Task 13 étape 9a, point 10 — the list response never leaks the two new
+  // technical columns; same sensitivity as firstName/lastName, never a
+  // caller-visible field. Fixture writes the columns explicitly (as
+  // upsertPatient/POST/PATCH now do) so an accidental widening of
+  // `patientListSelect` would actually surface something to catch.
+  it("never leaks firstNameNormalized/lastNameNormalized in the list response", async () => {
+    const staff = await createStaff();
+    const cookie = await cookieFor(staff);
+    await getPrisma().patient.create({
+      data: {
+        firstName: "Bénali",
+        lastName: "Test9a",
+        phone: "0550100015",
+        phoneE164: "+213550100015",
+        firstNameNormalized: normalizeName("Bénali"),
+        lastNameNormalized: normalizeName("Test9a"),
+      },
+    });
+
+    const response = await patientsListRoute(getRequest("/api/admin/patients?q=Test9a", cookie));
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(JSON.stringify(body)).not.toContain("Normalized");
   });
 
   it("returns the whitelisted fields only (no notes, email, birthDate)", async () => {
@@ -344,6 +530,26 @@ describe("POST /api/admin/patients", () => {
     expect(dbPatient?.createdById).toBe(staff.id);
     expect(dbPatient?.updatedById).toBe(staff.id);
     expect(dbPatient?.phoneE164).toBe("+213550100008");
+  });
+
+  // Task 13 étape 9a, point 10 (POST path of the 4 confirmed write paths) —
+  // firstNameNormalized/lastNameNormalized are written on create, computed by
+  // the SAME normalizeName() used everywhere else (never a second
+  // implementation), and never echoed back in the 201 response body.
+  it("normalizes firstName/lastName into firstNameNormalized/lastNameNormalized on create, and never echoes them in the response", async () => {
+    const staff = await createStaff();
+    const cookie = await cookieFor(staff);
+    const response = await patientsCreateRoute(
+      postRequest({ firstName: "Bénali", lastName: "Étoile", phone: "0550100014" }, cookie),
+    );
+    expect(response.status).toBe(201);
+    const body = (await response.json()) as { id: string };
+    expect(JSON.stringify(body)).not.toContain("Normalized");
+
+    const dbPatient = await getPrisma().patient.findUnique({ where: { id: body.id } });
+    expect(dbPatient?.firstNameNormalized).toBe(normalizeName("Bénali"));
+    expect(dbPatient?.lastNameNormalized).toBe(normalizeName("Étoile"));
+    expect(dbPatient?.firstNameNormalized).toBe("benali");
   });
 
   // Task 13 étape 5 (§Contraintes obligatoires issues de l'audit de l'étape

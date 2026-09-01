@@ -125,6 +125,12 @@ export async function anonymizePatient(
       data: {
         firstName: "Patient",
         lastName: "anonymisé",
+        // Task 13 étape 9a — empty sentinel, same shell philosophy as
+        // phone/phoneE164 just below, NOT normalizeName("Patient") (which
+        // would resolve to "patient" and stay matchable by any future
+        // bilingual search on that word for no benefit whatsoever).
+        firstNameNormalized: "",
+        lastNameNormalized: "",
         phone: "",
         phoneE164: "",
         email: null,

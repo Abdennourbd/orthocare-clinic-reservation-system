@@ -10,7 +10,7 @@ import { logAction } from "@/lib/audit/logAction";
 import { getClientIp } from "@/lib/security/clientIp";
 import { checkRateLimit, RateLimitError } from "@/lib/security/rateLimit";
 import { normalizePhoneE164 } from "@/lib/phone/normalize";
-import { findDuplicateCandidates } from "@/lib/patients/duplicates";
+import { findDuplicateCandidates, normalizeName } from "@/lib/patients/duplicates";
 import { PATIENTS_WRITE_RATE_LIMIT } from "@/lib/patients/rateLimits";
 import { readConsentVersion } from "@/lib/booking/policy";
 import { patientCreateSchema, patientListQuerySchema } from "@/schemas/patient";
@@ -122,9 +122,19 @@ export async function GET(request: NextRequest) {
   const activeFilter: boolean | undefined =
     active === "all" ? undefined : active === "false" ? false : true;
 
-  // Search matches firstName/lastName (accent-insensitive is out of scope
-  // here — that TS-side normalization lives in findDuplicateCandidates,
-  // called only on write; ILIKE case-folding is enough for a list filter)
+  // Search matches firstName/lastName two ways at once. The plain ILIKE
+  // clauses below cover exact/case-insensitive matches and — critically —
+  // degrade gracefully on any row whose `*Normalized` column is still NULL
+  // (production cannot run the task-13 étape 9a backfill script live, see
+  // that step's Journal MAJEUR-2 debt), so they stay exactly as they were.
+  // Task 13 étape 9b adds `firstNameNormalized`/`lastNameNormalized`
+  // `contains` clauses (task-13.md étape 9a) alongside them: those columns
+  // are kept in sync by every write path and let `contains` match across
+  // Latin accents and Arabic diacritics/tatweel, which plain ILIKE cannot
+  // do. Neither the old nor the new `contains` is indexed — a leading-
+  // wildcard `LIKE '%...%'` has no B-tree to ride without `pg_trgm`, which
+  // the user's 2026-08-28 ruling forbids adding — an already-accepted
+  // performance trade-off for this list, not a regression introduced here.
   // OR the phone, tried first as a full normalized E.164 value and, when
   // that fails (a partial number, or non-digit noise), as a raw-digit
   // substring match — a receptionist may only remember the last few digits.
@@ -132,9 +142,43 @@ export async function GET(request: NextRequest) {
   if (q) {
     const phoneE164Query = normalizePhoneE164(q);
     const digitsOnly = q.replace(/\D/g, "");
+    // TWO independent protections are required on the four name clauses
+    // below, neither one substitutes for the other (task-13.md étape 9b
+    // tour 2, ortho-security MAJEUR-1 — a prior version of this comment
+    // wrongly claimed the length guard alone was sufficient; it is not).
+    //
+    // 1) Prisma's `contains` compiles to Postgres
+    //    `LIKE ('%' || $1 || '%')` with NO `ESCAPE` clause and NO escaping
+    //    of the parameter — so `%` and `_`, Postgres LIKE metacharacters,
+    //    pass straight through from `q` and act as wildcards. `likeTerm`
+    //    strips `\`, `%` and `_` (the three LIKE metacharacters) before `q`
+    //    reaches either an ILIKE clause or `normalizeName()`. Measured:
+    //    without this, `q = "%"` alone matched every patient row.
+    // 2) Stripping metacharacters (or normalizeName() folding diacritics,
+    //    e.g. a lone tatweel U+0640) can reduce a non-empty `q` down to an
+    //    EMPTY string. A Prisma `{ contains: "" }` compiles to Postgres
+    //    `LIKE '%%'`, which matches EVERY row — so ALL FOUR name clauses
+    //    below are gated on their term's `.length > 0`, not just the two
+    //    `*Normalized` ones. Do not remove or "simplify" either guard:
+    //    dropping (1) lets `%`/`_` act as wildcards even with a non-empty
+    //    term; dropping (2) on the ILIKE clauses alone reproduces the
+    //    original bug the moment `likeTerm` empties out (task-13.md étape
+    //    9b, point 2, and tour-2 MAJEUR-1 fix).
+    const likeTerm = q.replace(/[\\%_]/g, "");
+    const normalizedQ = likeTerm ? normalizeName(likeTerm) : "";
     orClauses = [
-      { firstName: { contains: q, mode: "insensitive" } },
-      { lastName: { contains: q, mode: "insensitive" } },
+      ...(likeTerm.length > 0
+        ? [
+            { firstName: { contains: likeTerm, mode: "insensitive" as const } },
+            { lastName: { contains: likeTerm, mode: "insensitive" as const } },
+          ]
+        : []),
+      ...(normalizedQ.length > 0
+        ? [
+            { firstNameNormalized: { contains: normalizedQ } },
+            { lastNameNormalized: { contains: normalizedQ } },
+          ]
+        : []),
       ...(phoneE164Query
         ? [{ phoneE164: { contains: phoneE164Query } }]
         : digitsOnly
@@ -333,6 +377,10 @@ export async function POST(request: NextRequest) {
     data: {
       firstName: patientData.firstName,
       lastName: patientData.lastName,
+      // Task 13 étape 9a — bilingual search columns, reused from
+      // findDuplicateCandidates()'s own normalizer, never reimplemented.
+      firstNameNormalized: normalizeName(patientData.firstName),
+      lastNameNormalized: normalizeName(patientData.lastName),
       phone: patientData.phone,
       phoneE164,
       email: patientData.email ? patientData.email : null,

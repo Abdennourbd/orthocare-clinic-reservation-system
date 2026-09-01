@@ -10,7 +10,7 @@ import { logAction } from "@/lib/audit/logAction";
 import { getClientIp } from "@/lib/security/clientIp";
 import { checkRateLimit, RateLimitError } from "@/lib/security/rateLimit";
 import { normalizePhoneE164 } from "@/lib/phone/normalize";
-import { findDuplicateCandidates } from "@/lib/patients/duplicates";
+import { findDuplicateCandidates, normalizeName } from "@/lib/patients/duplicates";
 import { PATIENTS_WRITE_RATE_LIMIT } from "@/lib/patients/rateLimits";
 import { patientUpdateSchema } from "@/schemas/patient";
 import { AuditAction, AuditActorType, type Prisma } from "@/generated/prisma/client";
@@ -360,8 +360,16 @@ export async function PATCH(
   // Unchecked variant (like POST /api/admin/patients): the scalar FK
   // `updatedById` is set directly, not via a nested `updatedBy: { connect }`.
   const updateData: Prisma.PatientUncheckedUpdateInput = { updatedById: guard.user.id };
-  if (data.firstName !== undefined) updateData.firstName = data.firstName;
-  if (data.lastName !== undefined) updateData.lastName = data.lastName;
+  if (data.firstName !== undefined) {
+    updateData.firstName = data.firstName;
+    // Task 13 étape 9a — keep the bilingual search column in sync with
+    // firstName on every edit path, same normalizer as duplicate detection.
+    updateData.firstNameNormalized = normalizeName(data.firstName);
+  }
+  if (data.lastName !== undefined) {
+    updateData.lastName = data.lastName;
+    updateData.lastNameNormalized = normalizeName(data.lastName);
+  }
   if (data.phone !== undefined && newPhoneE164 !== undefined) {
     updateData.phone = data.phone;
     updateData.phoneE164 = newPhoneE164;

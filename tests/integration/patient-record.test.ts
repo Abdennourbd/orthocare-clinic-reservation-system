@@ -14,6 +14,7 @@ import {
 } from "@/app/api/admin/patients/[id]/route";
 import { GET as patientHistoryRoute } from "@/app/api/admin/patients/[id]/history/route";
 import { POST as patientVisitsRoute } from "@/app/api/admin/patients/[id]/visits/route";
+import { normalizeName } from "@/lib/patients/duplicates";
 
 // Task 13 step 5 — GET/PATCH /api/admin/patients/[id], GET .../history,
 // POST .../visits. tests/authz-matrix.test.ts already proves the role gate
@@ -209,6 +210,31 @@ describe("GET /api/admin/patients/[id]", () => {
     expect(body.createdBy).toBeNull();
     expect(body.updatedBy).toBeNull();
   });
+
+  // Task 13 étape 9a, point 10 — same sensitivity as firstName/lastName,
+  // never a caller-visible field on the single-record view either.
+  it("never leaks firstNameNormalized/lastNameNormalized in the record response", async () => {
+    const staff = await createStaff();
+    const cookie = await cookieFor(staff);
+    const patient = await getPrisma().patient.create({
+      data: {
+        firstName: "Bénali",
+        lastName: "Test9a",
+        phone: `05${Math.floor(10000000 + Math.random() * 89999999)}`,
+        phoneE164: `+2135${Math.floor(1000000 + Math.random() * 8999999)}`,
+        firstNameNormalized: normalizeName("Bénali"),
+        lastNameNormalized: normalizeName("Test9a"),
+      },
+    });
+
+    const response = await patientRecordRoute(
+      getRequest(`/api/admin/patients/${patient.id}`, cookie),
+      ctx(patient.id),
+    );
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(JSON.stringify(body)).not.toContain("Normalized");
+  });
 });
 
 describe("PATCH /api/admin/patients/[id]", () => {
@@ -298,6 +324,33 @@ describe("PATCH /api/admin/patients/[id]", () => {
   // 4, point 3) — the PATCH must replay BOTH duplicate gates with
   // excludeId, otherwise an edit reopens exactly the hole POST's creation
   // gates close.
+  // Task 13 étape 9a, point 10 (PATCH path of the 4 confirmed write paths) —
+  // firstNameNormalized/lastNameNormalized are recomputed on rename, and the
+  // 200 response never echoes them.
+  it("normalizes firstName/lastName into firstNameNormalized/lastNameNormalized on rename, and never echoes them in the response", async () => {
+    const staff = await createStaff();
+    const cookie = await cookieFor(staff);
+    const patient = await createPatient({ firstName: "Test", lastName: "Patient" });
+
+    const response = await patientPatchRoute(
+      bodyRequest(
+        "PATCH",
+        `/api/admin/patients/${patient.id}`,
+        { firstName: "Bénali", lastName: "Été" },
+        cookie,
+      ),
+      ctx(patient.id),
+    );
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(JSON.stringify(body)).not.toContain("Normalized");
+
+    const reloaded = await getPrisma().patient.findUniqueOrThrow({ where: { id: patient.id } });
+    expect(reloaded.firstNameNormalized).toBe(normalizeName("Bénali"));
+    expect(reloaded.lastNameNormalized).toBe(normalizeName("Été"));
+    expect(reloaded.firstNameNormalized).toBe("benali");
+  });
+
   it("replays the NAME duplicate gate: renaming into a homonym without acknowledgement returns 409 and changes nothing", async () => {
     const staff = await createStaff();
     const cookie = await cookieFor(staff);

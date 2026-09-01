@@ -107,9 +107,19 @@ const MAX_CANDIDATES = 10;
  * matches in TypeScript. That is a full scan of the clinic's patient panel
  * on every create/update call, not an indexed lookup: acceptable for a
  * single clinic's realistic patient count (low thousands), called only when
- * staff add or edit a patient — not a search index. Beyond that scale, this
- * needs a normalized column + index, which is a migration and therefore a
- * follow-up ticket, not part of this step.
+ * staff add or edit a patient — not a search index.
+ *
+ * Update, Task 13 étape 9a: `Patient.firstNameNormalized` /
+ * `lastNameNormalized` columns (+ composite index) are now available — the
+ * caveat above about needing "a normalized column + index" no longer
+ * describes reality. They are deliberately NOT plugged into the NAME query
+ * of this function: brancher `findDuplicateCandidates` dessus est un
+ * chantier séparé qui doit d'abord mettre à jour les fixtures de
+ * `patient-duplicates.test.ts` pour renseigner les deux colonnes (même
+ * précédent que `phoneE164`) — non fait ici, décision documentée
+ * task-13.md étape 9a. The user's 2026-08-30 request that motivated the new
+ * columns was about *search* (étape 9b), not duplicate detection — this
+ * function keeps scanning and comparing in TypeScript, unchanged.
  *
  * PHONE, by contrast, needs no diacritic folding at all — E.164 strings are
  * ASCII digits — so it is deliberately its OWN indexed query

@@ -4,6 +4,7 @@ import { Pool } from "pg";
 import * as argon2 from "argon2";
 import dotenv from "dotenv";
 import { CLINIC_IDENTITY } from "../src/lib/settings/clinicIdentity";
+import { normalizeName } from "../src/lib/patients/duplicates";
 
 dotenv.config();
 
@@ -134,6 +135,10 @@ async function main() {
       id: "seed-patient-1",
       firstName: "Amine",
       lastName: "Benali",
+      // Task 13 étape 9a — bilingual search columns, same normalizer as
+      // every other write path.
+      firstNameNormalized: normalizeName("Amine"),
+      lastNameNormalized: normalizeName("Benali"),
       phone: "0550123456",
       phoneE164: "+213550123456",
       email: "amine@example.com",

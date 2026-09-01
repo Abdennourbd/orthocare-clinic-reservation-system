@@ -175,6 +175,11 @@ async function upsertPatient(
   const shared = {
     firstName: input.firstName,
     lastName: input.lastName,
+    // Task 13 étape 9a — kept on both the create and update branch (this
+    // object is spread by both below), reusing the same normalizer already
+    // used above to resolve `existing`.
+    firstNameNormalized: normalizedFirst,
+    lastNameNormalized: normalizedLast,
     phone: input.phone,
     consentAt: input.consentAt,
     consentVersion: input.consentVersion,

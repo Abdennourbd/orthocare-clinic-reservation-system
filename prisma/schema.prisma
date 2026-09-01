@@ -52,10 +52,31 @@ model User {
   auditLogs          AuditLog[]
 }
 
+// -----------------------------------------------------------------------------
+// PATIENT HEALTH DATA. Identity (names, phone, email, birthDate), free-text
+// `notes` and messaging consent. None of it may reach a log, an error message,
+// a URL or an audit `detail` — those carry ids and field names only. Erasure is
+// soft (`anonymizedAt` + `active`): the row survives so history and KPI counts
+// stay exact, every identifying field is blanked in one transaction.
+//
+// `firstNameNormalized` / `lastNameNormalized` (Task 13 step 9) are derived
+// copies of the two name fields, folded by `normalizeName()` (lowercase, Latin
+// accents and Arabic diacritics/tatweel stripped, whitespace collapsed) so the
+// staff search finds a record whether the name was typed in French or in
+// Arabic, whatever the surface spelling. Same motive as `phone`/`phoneE164`
+// just below. Same sensitivity as the names they derive from: never in an API
+// select, and blanked by `anonymizePatient()` like the rest.
+// -----------------------------------------------------------------------------
 model Patient {
   id                 String    @id @default(cuid())
   firstName          String
   lastName           String
+  // Search-only derived copies, maintained by every write path. Nullable on
+  // purpose: no `unaccent` extension exists here to compute them in SQL, so
+  // they are filled in TypeScript (`npm run db:backfill-patient-names` for the
+  // rows that predate Task 13 step 9a).
+  firstNameNormalized String?
+  lastNameNormalized  String?
   phone              String    // as typed
   phoneE164          String    // normalized
   email              String?
@@ -95,6 +116,14 @@ model Patient {
   visits             Visit[]
 
   @@index([phoneE164])
+  // Composite (ONE index on the pair, not two single-column ones), and
+  // deliberately NOT a search accelerator: the step-9b search filters with
+  // `contains` -> `LIKE '%…%'`, and a leading wildcard can never use a B-tree,
+  // with or without this index. Only `pg_trgm` would help there, and no new
+  // Postgres extension is allowed in this project (task-13.md, arbitration of
+  // 2026-08-28). What this index does serve is a future exact-equality lookup
+  // on the normalized (firstName, lastName) pair. Expect nothing more from it.
+  @@index([firstNameNormalized, lastNameNormalized])
 }
 
 model Service {

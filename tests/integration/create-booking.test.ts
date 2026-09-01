@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { getPrisma } from "@/lib/db";
 import { AppointmentStatus, WaitlistSource } from "@/generated/prisma/client";
 import { createBooking } from "@/lib/booking/createBooking";
+import { normalizeName } from "@/lib/patients/duplicates";
 import { SlotConflictError } from "@/lib/booking/bookSlot";
 import { PendingLimitError } from "@/lib/booking/errors";
 import { bookSlot } from "@/lib/booking/bookSlot";
@@ -149,6 +150,70 @@ describe("createBooking", () => {
     expect(second.patient.birthDate?.toISOString()).toBe(
       "1990-05-12T00:00:00.000Z",
     );
+  });
+
+  // Task 13 étape 9a, point 10 — upsertPatient()'s `shared` object is spread
+  // by BOTH the create and the update branch; this proves both actually
+  // write firstNameNormalized/lastNameNormalized, not just create. The
+  // update branch is deliberately proven by tampering the columns with a
+  // stale value first: if a future regression made the update branch skip
+  // these two fields (e.g. dropped from `shared`, or the update's `data`
+  // stopped spreading it), Prisma would silently leave "STALE" in place and
+  // this test would catch it — a create-only fixture could not, because
+  // create and update would coincidentally write the same value here.
+  it("maintains firstNameNormalized/lastNameNormalized on BOTH branches of upsertPatient — create fills them, and update actually overwrites stale values, even when the name's casing/accents change between calls", async () => {
+    const prisma = getPrisma();
+
+    // Branch 1: create — no existing patient for this phone yet.
+    const created = await createBooking({
+      serviceId,
+      startUTC: localStart(openDate, "11:00"),
+      patient: {
+        ...patientInput,
+        phone: "0552233445",
+        phoneE164: "+213552233445",
+        firstName: "Nadia",
+        lastName: "Bénali",
+      },
+    });
+    expect(created.patient.firstNameNormalized).toBe(normalizeName("Nadia"));
+    expect(created.patient.lastNameNormalized).toBe(normalizeName("Bénali"));
+    expect(created.patient.lastNameNormalized).toBe("benali");
+
+    // Simulate a stale/wrong value on the derived columns directly — exactly
+    // what an update branch that forgot to write them would leave behind.
+    await prisma.patient.update({
+      where: { id: created.patient.id },
+      data: { firstNameNormalized: "STALE", lastNameNormalized: "STALE" },
+    });
+
+    // Branch 2: update — same phone, name re-typed with different
+    // casing/accents that still normalizes to the SAME identity
+    // ("nadia"/"benali"), so upsertPatient() resolves onto the SAME record
+    // (matches elsewhere in this file) and takes the update path.
+    const updated = await createBooking({
+      serviceId,
+      startUTC: localStart(openDate, "14:00"),
+      patient: {
+        ...patientInput,
+        phone: "0552233445",
+        phoneE164: "+213552233445",
+        firstName: "NADIA",
+        lastName: "bénali",
+      },
+    });
+
+    expect(updated.patient.id).toBe(created.patient.id);
+    expect(updated.patient.firstNameNormalized).toBe(normalizeName("NADIA"));
+    expect(updated.patient.lastNameNormalized).toBe(normalizeName("bénali"));
+    expect(updated.patient.firstNameNormalized).not.toBe("STALE");
+    expect(updated.patient.lastNameNormalized).not.toBe("STALE");
+
+    const reloaded = await prisma.patient.findUniqueOrThrow({
+      where: { id: created.patient.id },
+    });
+    expect(reloaded.firstNameNormalized).toBe("nadia");
+    expect(reloaded.lastNameNormalized).toBe("benali");
   });
 
   it("creates a PATIENT-source WaitlistEntry in the same transaction when watchDates given", async () => {

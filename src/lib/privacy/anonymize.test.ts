@@ -10,7 +10,7 @@ import {
   WaitlistSource,
 } from "@/generated/prisma/client";
 import { anonymizePatient, PatientAlreadyAnonymizedError } from "./anonymize";
-import { findDuplicateCandidates } from "@/lib/patients/duplicates";
+import { findDuplicateCandidates, normalizeName } from "@/lib/patients/duplicates";
 import { visitTypeValues } from "@/schemas/patient";
 
 // Task 13 step 6 — unit tests for the module directly (no HTTP layer).
@@ -26,10 +26,20 @@ async function createPatient(overrides: Partial<{
   notes: string | null;
   birthDate: Date;
 }> = {}) {
+  const firstName = overrides.firstName ?? "Test";
+  const lastName = overrides.lastName ?? "Patient";
   return getPrisma().patient.create({
     data: {
-      firstName: overrides.firstName ?? "Test",
-      lastName: overrides.lastName ?? "Patient",
+      firstName,
+      lastName,
+      // Task 13 étape 9b (ortho-security MINEUR-1, étape 9a Journal) — every
+      // fixture that creates a Patient directly must populate these two
+      // columns, same precedent as phoneE164 below. Left NULL, the erasure
+      // test's "no trace survives" assertions (JSON.stringify(...).not.toContain)
+      // would pass even if anonymizePatient() never touched the columns at
+      // all — a NULL row already contains no trace of anything.
+      firstNameNormalized: normalizeName(firstName),
+      lastNameNormalized: normalizeName(lastName),
       phone: overrides.phone ?? `05${Math.floor(10000000 + Math.random() * 89999999)}`,
       phoneE164: overrides.phoneE164 ?? `+2135${Math.floor(1000000 + Math.random() * 8999999)}`,
       email: overrides.email,
@@ -308,6 +318,38 @@ describe("anonymizePatient — concurrent calls are truly mutually exclusive", (
       where: { action: AuditAction.PATIENT_ANONYMIZED, entityId: patient.id },
     });
     expect(count).toBe(1);
+  });
+});
+
+// Task 13 étape 9a, point 10 — the most important test of this step: erasure
+// MUST scrub the two derived name-search columns too, or a name that a
+// patient asked to be forgotten survives, hidden, and becomes re-searchable
+// the moment étape 9b wires GET /api/admin/patients?q= onto them.
+describe("anonymizePatient — erases the normalized-name search columns (Task 13 étape 9a)", () => {
+  it("clears firstNameNormalized/lastNameNormalized to the empty sentinel — never normalizeName('Patient') — and no trace of the original normalized name survives anywhere on the row", async () => {
+    const patient = await createPatient({ firstName: "Bénali", lastName: "Zerrouki" });
+    const originalNormalizedFirst = normalizeName("Bénali");
+    const originalNormalizedLast = normalizeName("Zerrouki");
+    expect(originalNormalizedFirst).toBe("benali");
+
+    await anonymizePatient(patient.id, { type: AuditActorType.STAFF });
+
+    const reloaded = await getPrisma().patient.findUniqueOrThrow({ where: { id: patient.id } });
+    expect(reloaded.firstNameNormalized).toBe("");
+    expect(reloaded.lastNameNormalized).toBe("");
+    // Not the normalized form of the placeholder name either — "patient"
+    // must never become a matchable search term as a side effect of erasure.
+    expect(reloaded.firstNameNormalized).not.toBe(normalizeName("Patient"));
+
+    // Same style as the SMS assertions above: the strongest form of the
+    // check is that the original normalized name — and the original raw
+    // name — appear NOWHERE in the reloaded row, not just absent from named
+    // fields.
+    const serialized = JSON.stringify(reloaded);
+    expect(serialized).not.toContain(originalNormalizedFirst);
+    expect(serialized).not.toContain(originalNormalizedLast);
+    expect(serialized).not.toContain("Bénali");
+    expect(serialized).not.toContain("Zerrouki");
   });
 });
 
