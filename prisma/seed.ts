@@ -17,17 +17,18 @@ async function main() {
 
   // 1. Create Admin User
   const adminPassword = process.env.ADMIN_INITIAL_PASSWORD;
+  const adminEmail = process.env.ADMIN_EMAIL ?? "admin@orthocare.com";
   let adminUserId = null;
   if (!adminPassword || adminPassword.length < 12) {
     console.warn("ADMIN_INITIAL_PASSWORD must be at least 12 characters. Skipping admin user creation.");
   } else {
     const passwordHash = await argon2.hash(adminPassword);
     const admin = await prisma.user.upsert({
-      where: { email: "admin@orthocare.com" },
+      where: { email: adminEmail },
       update: {},
       create: {
         name: "Admin User",
-        email: "admin@orthocare.com",
+        email: adminEmail,
         passwordHash,
         role: Role.ADMIN,
         mustChangePassword: true,
