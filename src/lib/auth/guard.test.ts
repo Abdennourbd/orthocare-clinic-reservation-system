@@ -209,6 +209,32 @@ describe("assertSameOriginStrict", () => {
     vi.stubEnv("APP_URL", "http://localhost:3000");
   });
 
+  it("allows an Origin matching the request Host header even when APP_URL is unset (deployments)", () => {
+    vi.stubEnv("APP_URL", "");
+    const request = new NextRequest(url, {
+      method: "POST",
+      headers: {
+        origin: "https://orthocare-clinic.vercel.app",
+        host: "orthocare-clinic.vercel.app",
+      },
+    });
+    expect(assertSameOriginStrict(request)).toBe(true);
+    vi.stubEnv("APP_URL", "http://localhost:3000");
+  });
+
+  it("rejects an Origin differing from BOTH Host header and APP_URL", () => {
+    vi.stubEnv("APP_URL", "");
+    const request = new NextRequest(url, {
+      method: "POST",
+      headers: {
+        origin: "https://evil.example",
+        host: "orthocare-clinic.vercel.app",
+      },
+    });
+    expect(assertSameOriginStrict(request)).toBe(false);
+    vi.stubEnv("APP_URL", "http://localhost:3000");
+  });
+
   it("falls back to Referer when Origin is absent and rejects mismatches", () => {
     vi.stubEnv("APP_URL", "https://orthocare.dz");
     const bad = new NextRequest(url, {

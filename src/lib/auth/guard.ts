@@ -38,7 +38,9 @@ export type StaffGuardResult =
  * session cookie itself cannot be sent cross-site by a browser with
  * SameSite=Lax, so this is defense in depth, not the only line.
  *
- * Localhost is always same-site so local dev and tests are unaffected.
+ * Allowed: Origin matching the request's own Host (same-origin, works on any
+ * deployment), localhost, or the configured `APP_URL`. Anything else fails
+ * closed.
  */
 export function assertSameOriginStrict(request: Request): boolean {
   const value =
@@ -60,8 +62,21 @@ export function assertSameOriginStrict(request: Request): boolean {
   }
 
   const appUrl = process.env.APP_URL;
-  // Fail closed: without a configured origin we cannot distinguish a hostile
-  // cross-site origin from our own, so only the explicit dev exemptions apply.
+  // Deployment-origin match: a request whose Origin equals the Host the server
+  // itself received is same-origin by definition — this is the standard strict
+  // CSRF check and makes any deployment URL (production, preview, custom
+  // domain) work without APP_URL configuration. An attacker page cannot forge
+  // a matching pair: the browser always sends its real Origin while Host
+  // reflects the actual target, so a cross-site POST mismatches here.
+  // (`x-forwarded-host` covers proxies that rewrite Host.)
+  const hostHeader = request.headers.get("host") ?? request.headers.get("x-forwarded-host");
+  if (hostHeader) {
+    const hostHostname = hostHeader.split(":")[0]?.trim().toLowerCase();
+    if (hostHostname && hostHostname === hostname) return true;
+  }
+  // Fail closed: without any way to pin the expected origin we cannot
+  // distinguish a hostile cross-site origin from our own, so only the explicit
+  // dev exemptions apply.
   if (!appUrl) return false;
   try {
     return new URL(appUrl).hostname === hostname;
