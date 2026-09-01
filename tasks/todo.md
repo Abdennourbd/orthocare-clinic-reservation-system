@@ -300,13 +300,14 @@ Task details + rationale live in `tasks/plan.md`. This is the working checklist.
 ## Task 14: Appointment management
 **Description:** Day view of appointments; **call queue** (`GET /api/admin/appointments/pending` — bookings awaiting a confirmation call, oldest first, showing time left before auto-expiry) and **search by phone or name** (`GET /api/admin/appointments/search` — for when a patient is on the line right now); confirm-after-call, cancel, reschedule (re-checks availability via Task 5), mark completed/no-show, manual booking creation (CONFIRMED, blocks slot). All status changes set the matching timestamp (`confirmedAt`/`cancelledAt`/`completedAt`/`noShowAt`), call `logAction`, and fire SMS. Routes: `GET/POST /api/admin/appointments`, `GET/PATCH .../[id]`, `POST .../[id]/reschedule`.
 **Acceptance criteria:**
-- [ ] Receptionist changes status; SMS fires + action audited on each change
-- [ ] Reschedule re-checks slot availability via `bookSlot`
-- [ ] Manual booking creates CONFIRMED appointment that blocks its slot
-- [ ] Cancel/reschedule route through `releaseSlot()` (so waitlist fires later) with the right `cancelReason`
-- [ ] Per-status timestamps set correctly
-- [ ] Call queue lists PENDING bookings oldest-first with time remaining before expiry — this is the receptionist's most frequent daily job and deserves its own screen, not a filtered day view
-- [ ] Appointment findable by phone or name in one search
+- [x] Receptionist changes status; SMS fires + action audited on each change
+- [x] Reschedule re-checks slot availability via `bookSlot`
+- [x] Manual booking creates CONFIRMED appointment that blocks its slot
+- [x] Cancel/reschedule route through `releaseSlot()` (so waitlist fires later) with the right `cancelReason`
+- [x] Per-status timestamps set correctly
+- [x] Call queue lists PENDING bookings oldest-first with time remaining before expiry — this is the receptionist's most frequent daily job and deserves its own screen, not a filtered day view
+- [x] Appointment findable by phone or name in one search
+**Verification:** ✅ Done (2026-09-01): `npm test` 569/569 green, typecheck + lint + production build clean, browser smoke test of all appointment screens (day view, call queue with expiry countdown, search by name/phone, confirm action → CONFIRMATION SMS + audit, manual booking end-to-end) — see `tasks/task14-summary.md`.
 **Verification:** Manual admin flow end-to-end; integration test on status transitions; time a receptionist-style task ("patient calls to cancel") to confirm it takes a few seconds, not a hunt through dates.
 **Dependencies:** Task 13 (manual booking needs patient CRUD), Task 5
 **Estimated scope:** Large (4–5 days)
