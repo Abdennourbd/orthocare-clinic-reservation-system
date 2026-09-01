@@ -17,6 +17,17 @@ import {
 import { GET as patientHistoryRoute } from "@/app/api/admin/patients/[id]/history/route";
 import { POST as patientVisitsRoute } from "@/app/api/admin/patients/[id]/visits/route";
 import { POST as patientAnonymizeRoute } from "@/app/api/admin/patients/[id]/anonymize/route";
+import {
+  GET as appointmentsListRoute,
+  POST as appointmentsCreateRoute,
+} from "@/app/api/admin/appointments/route";
+import {
+  GET as appointmentRecordRoute,
+  PATCH as appointmentPatchRoute,
+} from "@/app/api/admin/appointments/[id]/route";
+import { POST as appointmentRescheduleRoute } from "@/app/api/admin/appointments/[id]/reschedule/route";
+import { GET as appointmentsPendingRoute } from "@/app/api/admin/appointments/pending/route";
+import { GET as appointmentsSearchRoute } from "@/app/api/admin/appointments/search/route";
 
 // Task 12 — the authorization matrix (plan.md §Testing strategy):
 //   one table-driven test walking EVERY /api/admin/* route ×
@@ -228,6 +239,69 @@ const ROUTES: RouteRow[] = [
     // as POST /api/admin/patients.
     okStatus: 400,
     handler: patientAnonymizeRoute,
+  },
+  {
+    method: "GET",
+    scanPath: "/api/admin/appointments",
+    allowed: [Role.ADMIN, Role.RECEPTIONIST],
+    // No query — the route defaults `date` to today's clinic-local date, so
+    // an authorized actor gets 200 with the (empty) day view. Proves the
+    // guard runs before the read.
+    handler: appointmentsListRoute,
+  },
+  {
+    method: "POST",
+    scanPath: "/api/admin/appointments",
+    allowed: [Role.ADMIN, Role.RECEPTIONIST],
+    // requestAs() sends no body — Zod fails after the guard (same reasoning
+    // as POST /api/admin/patients). No Origin header passes
+    // assertSameOriginStrict (non-browser request), so the 400 comes from
+    // Zod, never the CSRF branch.
+    okStatus: 400,
+    handler: appointmentsCreateRoute,
+  },
+  {
+    method: "GET",
+    scanPath: "/api/admin/appointments/[id]",
+    requestPath: "/api/admin/appointments/does-not-exist",
+    params: { id: "does-not-exist" },
+    allowed: [Role.ADMIN, Role.RECEPTIONIST],
+    okStatus: 404,
+    handler: appointmentRecordRoute,
+  },
+  {
+    method: "PATCH",
+    scanPath: "/api/admin/appointments/[id]",
+    requestPath: "/api/admin/appointments/does-not-exist",
+    params: { id: "does-not-exist" },
+    allowed: [Role.ADMIN, Role.RECEPTIONIST],
+    // requestAs() sends no body — Zod fails after the guard, before any DB
+    // lookup of the id.
+    okStatus: 400,
+    handler: appointmentPatchRoute,
+  },
+  {
+    method: "POST",
+    scanPath: "/api/admin/appointments/[id]/reschedule",
+    requestPath: "/api/admin/appointments/does-not-exist/reschedule",
+    params: { id: "does-not-exist" },
+    allowed: [Role.ADMIN, Role.RECEPTIONIST],
+    okStatus: 400,
+    handler: appointmentRescheduleRoute,
+  },
+  {
+    method: "GET",
+    scanPath: "/api/admin/appointments/pending",
+    allowed: [Role.ADMIN, Role.RECEPTIONIST],
+    handler: appointmentsPendingRoute,
+  },
+  {
+    method: "GET",
+    scanPath: "/api/admin/appointments/search",
+    allowed: [Role.ADMIN, Role.RECEPTIONIST],
+    // No `q` in the query — Zod fails after the guard (q is required).
+    okStatus: 400,
+    handler: appointmentsSearchRoute,
   },
 ];
 
