@@ -71,6 +71,24 @@ export function formatClinicLocalTime(utcDate: Date): string {
   return formatter.format(utcDate);
 }
 
+/**
+ * Converts a clinic-local date (YYYY-MM-DD) + time of day (HH:mm) into the
+ * corresponding UTC instant, or null when either input is malformed. Used by
+ * the front-desk forms (manual booking, reschedule) so a wall-clock time the
+ * receptionist picks in clinic-local terms lands on the correct UTC instant —
+ * this module stays the only place that knows the timezone.
+ */
+export function clinicLocalToUTC(
+  localDateString: string,
+  timeHHmm: string,
+): Date | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(localDateString)) return null;
+  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(timeHHmm)) return null;
+  const offset = formatOffsetHHmm(CLINIC_UTC_OFFSET_MINUTES);
+  const date = new Date(`${localDateString}T${timeHHmm}:00.000${offset}`);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
 const WEEKDAYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
 
 /**
