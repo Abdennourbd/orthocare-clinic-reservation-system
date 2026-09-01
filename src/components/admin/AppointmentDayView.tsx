@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { formatClinicLocalTime, toClinicLocalDateString } from "@/lib/time/clinicTime";
+import { localized } from "@/lib/i18n/localized";
 import AppointmentStatusBadge from "./AppointmentStatusBadge";
 import AppointmentActions from "./AppointmentActions";
 import { SOURCE_LABELS, type AppointmentRow } from "./appointmentTypes";
@@ -169,7 +170,9 @@ export default function AppointmentDayView({ reloadToken }: { reloadToken: numbe
                     <span className="text-slate-600" dir="auto">
                       {a.patient.phone}
                     </span>
-                    <span className="text-slate-700">{a.service.name}</span>
+                    <span className="text-slate-700">
+                      {localized(a.service.name, "fr")}
+                    </span>
                     <span className="text-xs text-slate-500">
                       ({a.service.durationMinutes} min · {SOURCE_LABELS[a.source] ?? a.source})
                     </span>

@@ -23,7 +23,9 @@ export interface AppointmentPatientRef {
 
 export interface AppointmentServiceRef {
   id: string;
-  name: string;
+  /** Per-locale JSON `{fr, ar, en}` as returned by the API — render via
+   * `localized(service.name, "fr")` (admin dashboard is FR only). */
+  name: Record<string, string | null | undefined>;
   durationMinutes: number;
 }
 
