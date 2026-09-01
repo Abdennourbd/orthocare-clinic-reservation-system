@@ -2,7 +2,7 @@
 
 **Status:** ✅ Complete (10 steps, all passed security audit)
 
-**Delivery timeline:** Step 1 (schema) Aug 28; Steps 2–8 (routes, forms, anonymization, screens) Aug 28–30; Steps 9a–9b (bilingual search columns + branching) Sept 1.
+**Delivery timeline:** Step 1 (schema) Aug 28; Steps 2–8 (routes, forms, anonymization, screens) Aug 28–30; Steps 9a–9b (bilingual search columns + branching) Sept 1; Step 10 (manual testing + verification closure) Sept 1.
 
 ## What was delivered
 
@@ -68,7 +68,14 @@
 
 ## Verification
 
-**From the relay file (`.claude/tasks/task-13.md`), Journal entries:**
+**Closure audit (2026-09-01):** a completeness audit found that steps 1–9b were code-complete but step 10 (manual testing / output polish) had no recorded evidence, `tasks/todo.md` acceptance criteria were unticked, the local test DB was missing two migrations (178 tests failing on the `firstNameNormalized` column), and `tests/setup.ts` did not truncate the new `Visit` table. All fixed:
+
+- Migrations `20260828152745_add_visit` and `20260901011632_add_patient_name_normalization` applied to the local test DB
+- `"Visit"` added to the `tests/setup.ts` truncate list (previously `Visit` rows leaked between suites)
+- `tasks/todo.md` Task 13 acceptance criteria ticked; deferred follow-ups (duplicates on normalized columns; production backfill) now tracked there
+- Manual browser smoke test (dev server against local DB, all patient screens): list, bilingual search (`benali`/`Bénali`), create, duplicate 409 ack flow (inline, not a modal), manual visit + timeline, anonymization — **7/7 PASS, zero console errors**
+
+**From the relay file (`.claude/tasks/task-13.md`, since removed from tracking), Journal entries:**
 
 - **2026-08-28 — `ortho-db`:** Step 1 (schema) — VERT. Migration 100% additive, `Visit.date` UTC, cascades correct.
 - **2026-08-28 — `ortho-builder`:** Step 2 (authz-matrix) — VERT. Enabled dynamic route testing (`[id]` → scan path vs. runtime path).
@@ -83,7 +90,7 @@
 
 **Commands run (from Journal):**
 ```
-npm test                          → 498/498 green
+npm test                          → 500/500 green (re-verified 2026-09-01 after test-DB migration + Visit truncate fix)
 npm run typecheck                 → OK
 npm run lint                      → OK
 npm run db:migrate                → migration applied locally

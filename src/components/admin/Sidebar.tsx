@@ -18,6 +18,7 @@ const NAV_ITEMS: Array<{
 }> = [
   { href: "/admin", label: "Tableau de bord", adminOnly: false },
   { href: "/admin/patients", label: "Patients", adminOnly: false },
+  { href: "/admin/appointments", label: "Rendez-vous", adminOnly: false },
   { href: "/admin/audit", label: "Journal d'audit", adminOnly: true },
 ];
 

@@ -289,7 +289,10 @@ Task details + rationale live in `tasks/plan.md`. This is the working checklist.
 - [x] Soft-delete only (active=false); anonymization available to ADMIN and audited as `PATIENT_ANONYMIZED`
 - [x] Opening a patient record logs `PATIENT_RECORD_VIEWED` (for patient data, who *looked* matters as much as who changed)
 - [x] Duplicate warning renders inline with an explicit save-anyway acknowledgment (never a dead-end blocking modal); visit timeline has defined loading + empty states
-**Verification:** Manual CRUD + duplicate flag test; `npm test -- patient-duplicates`; verify an anonymized patient keeps their appointment history count but loses identifiers.
+**Verification:** ✅ Done (2026-09-01): `npm test` 500/500 green, typecheck + lint clean, and manual browser smoke test of all patient screens (list, bilingual search, create, duplicate ack flow, visit add + timeline, anonymization) passed with zero console errors — see `tasks/task13-summary.md`.
+**Deferred follow-ups (tracked so they are not lost):**
+- [ ] `findDuplicateCandidates()` still scans raw name columns in TypeScript; branch it to the new `firstNameNormalized`/`lastNameNormalized` indexed columns (post-étape 9a refactor, documented in `src/lib/patients/duplicates.ts` and `tasks/task13-summary.md` debt #4)
+- [ ] Production backfill: `scripts/backfill-patient-name-normalization.ts` is localhost-guarded, so pre-existing Neon records have NULL normalized columns — Arabic normalized search silently fails for them (accepted debt #2; revisit if the clinic needs it)
 **Dependencies:** Task 12
 **Estimated scope:** Medium (3–4 days)
 **Skill:** No specialized skill required — standard CRUD over the Task 3a model. A **fuzzy-matching / record-deduplication** reference helps if you want name matching to tolerate spelling variants (worthwhile for Arabic/French transliterations of the same name). The **frontend-ui-engineering** skill applies to the patient-record UI: a readable unified visit timeline with defined loading/empty states, and a duplicate-warning UX that keeps staff moving — inline banner with an explicit "it's a different person / save anyway" acknowledgment rather than a dead-end modal.
@@ -297,13 +300,14 @@ Task details + rationale live in `tasks/plan.md`. This is the working checklist.
 ## Task 14: Appointment management
 **Description:** Day view of appointments; **call queue** (`GET /api/admin/appointments/pending` — bookings awaiting a confirmation call, oldest first, showing time left before auto-expiry) and **search by phone or name** (`GET /api/admin/appointments/search` — for when a patient is on the line right now); confirm-after-call, cancel, reschedule (re-checks availability via Task 5), mark completed/no-show, manual booking creation (CONFIRMED, blocks slot). All status changes set the matching timestamp (`confirmedAt`/`cancelledAt`/`completedAt`/`noShowAt`), call `logAction`, and fire SMS. Routes: `GET/POST /api/admin/appointments`, `GET/PATCH .../[id]`, `POST .../[id]/reschedule`.
 **Acceptance criteria:**
-- [ ] Receptionist changes status; SMS fires + action audited on each change
-- [ ] Reschedule re-checks slot availability via `bookSlot`
-- [ ] Manual booking creates CONFIRMED appointment that blocks its slot
-- [ ] Cancel/reschedule route through `releaseSlot()` (so waitlist fires later) with the right `cancelReason`
-- [ ] Per-status timestamps set correctly
-- [ ] Call queue lists PENDING bookings oldest-first with time remaining before expiry — this is the receptionist's most frequent daily job and deserves its own screen, not a filtered day view
-- [ ] Appointment findable by phone or name in one search
+- [x] Receptionist changes status; SMS fires + action audited on each change
+- [x] Reschedule re-checks slot availability via `bookSlot`
+- [x] Manual booking creates CONFIRMED appointment that blocks its slot
+- [x] Cancel/reschedule route through `releaseSlot()` (so waitlist fires later) with the right `cancelReason`
+- [x] Per-status timestamps set correctly
+- [x] Call queue lists PENDING bookings oldest-first with time remaining before expiry — this is the receptionist's most frequent daily job and deserves its own screen, not a filtered day view
+- [x] Appointment findable by phone or name in one search
+**Verification:** ✅ Done (2026-09-01): `npm test` 569/569 green, typecheck + lint + production build clean, browser smoke test of all appointment screens (day view, call queue with expiry countdown, search by name/phone, confirm action → CONFIRMATION SMS + audit, manual booking end-to-end) — see `tasks/task14-summary.md`.
 **Verification:** Manual admin flow end-to-end; integration test on status transitions; time a receptionist-style task ("patient calls to cancel") to confirm it takes a few seconds, not a hunt through dates.
 **Dependencies:** Task 13 (manual booking needs patient CRUD), Task 5
 **Estimated scope:** Large (4–5 days)
