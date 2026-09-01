@@ -281,14 +281,14 @@ Task details + rationale live in `tasks/plan.md`. This is the working checklist.
 ## Task 13: Patient records + duplicate detection
 **Description:** Patient CRUD, visit history timeline (COMPLETED appointments UNION Visit rows), notes. Duplicate detection: on create/edit, query patients sharing **normalized phone (E.164)** or name; return warnings; require staff acknowledgment to proceed. `Visit` model (3c schema). Anonymization path for erasure requests (`lib/privacy/anonymize.ts` — scrub identifying fields, set `anonymizedAt`, keep the appointment shell so statistics stay correct). Routes: `GET/POST /api/admin/patients`, `GET/PATCH /api/admin/patients/[id]`, `GET .../history`, `POST .../visits`, `POST .../anonymize` (ADMIN only).
 **Acceptance criteria:**
-- [ ] Admin creates/edits patient profile; `createdById`/`updatedById` set
-- [ ] Visit history shows COMPLETED appointments + Visits in unified timeline
-- [ ] Manual visit addable
-- [ ] Duplicate match (phone or name) shown; save blocked until acknowledged
-- [ ] Duplicate detection matches across DZ phone formats (proves normalization is actually used)
-- [ ] Soft-delete only (active=false); anonymization available to ADMIN and audited as `PATIENT_ANONYMIZED`
-- [ ] Opening a patient record logs `PATIENT_RECORD_VIEWED` (for patient data, who *looked* matters as much as who changed)
-- [ ] Duplicate warning renders inline with an explicit save-anyway acknowledgment (never a dead-end blocking modal); visit timeline has defined loading + empty states
+- [x] Admin creates/edits patient profile; `createdById`/`updatedById` set
+- [x] Visit history shows COMPLETED appointments + Visits in unified timeline
+- [x] Manual visit addable
+- [x] Duplicate match (phone or name) shown; save blocked until acknowledged
+- [x] Duplicate detection matches across DZ phone formats (proves normalization is actually used)
+- [x] Soft-delete only (active=false); anonymization available to ADMIN and audited as `PATIENT_ANONYMIZED`
+- [x] Opening a patient record logs `PATIENT_RECORD_VIEWED` (for patient data, who *looked* matters as much as who changed)
+- [x] Duplicate warning renders inline with an explicit save-anyway acknowledgment (never a dead-end blocking modal); visit timeline has defined loading + empty states
 **Verification:** Manual CRUD + duplicate flag test; `npm test -- patient-duplicates`; verify an anonymized patient keeps their appointment history count but loses identifiers.
 **Dependencies:** Task 12
 **Estimated scope:** Medium (3–4 days)
