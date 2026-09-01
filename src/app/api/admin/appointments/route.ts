@@ -136,15 +136,28 @@ export async function POST(request: NextRequest) {
     return errorResponse(400, "VALIDATION_ERROR", "Date/heure de début invalide.");
   }
 
-  // Domain check BEFORE any write: the patient must exist. The service's
-  // existence is checked inside bookSlot (ServiceNotFoundError below) — one
-  // 404 shape per missing entity, never a spread of internals.
-  const patient = await getPrisma().patient.findUnique({
-    where: { id: patientId },
+  // resourceId is a v2-reserved column (no Resource table exists yet): a
+  // non-null value would be persisted as a dangling reference and only salt
+  // the advisory lock. Rejected before any write.
+  if (resourceId != null) {
+    return errorResponse(
+      400,
+      "RESOURCE_UNSUPPORTED",
+      "Les ressources multi-chaises ne sont pas encore prises en charge.",
+    );
+  }
+
+  // Domain check BEFORE any write: the patient must exist AND be usable —
+  // a deactivated or anonymized patient (RGPD soft path) must not receive a
+  // new booking. The service's existence is checked inside bookSlot
+  // (ServiceNotFoundError below) — one 404 shape per missing entity, never a
+  // spread of internals.
+  const patient = await getPrisma().patient.findFirst({
+    where: { id: patientId, active: true, anonymizedAt: null },
     select: { id: true },
   });
   if (!patient) {
-    return errorResponse(404, "NOT_FOUND", "Patient introuvable.");
+    return errorResponse(404, "NOT_FOUND", "Patient introuvable ou inactif.");
   }
 
   // Manual booking = CONFIRMED appointment that BLOCKS its slot, created
@@ -187,10 +200,13 @@ export async function POST(request: NextRequest) {
       select: appointmentRowSelect,
     }),
     // Same convention as the public booking (locale -> preferredLocale so
-    // later messaging knows the patient's language without asking again).
+    // later messaging knows the patient's language without asking again) —
+    // but ONLY when the locale was actually provided: the schema has no
+    // default, so an omitted locale must not clobber the patient's stored
+    // preferredLocale.
     getPrisma().patient.update({
       where: { id: patientId },
-      data: { preferredLocale: locale },
+      data: { ...(locale !== undefined ? { preferredLocale: locale } : {}) },
       select: { id: true },
     }),
   ]);

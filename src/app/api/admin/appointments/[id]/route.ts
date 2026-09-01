@@ -10,6 +10,7 @@ import { logAction } from "@/lib/audit/logAction";
 import { getClientIp } from "@/lib/security/clientIp";
 import { checkRateLimit, RateLimitError } from "@/lib/security/rateLimit";
 import { releaseSlot } from "@/lib/booking/releaseSlot";
+import { runSideEffect } from "@/lib/booking/runSideEffect";
 import {
   AppointmentNotFoundError,
   AppointmentAlreadyReleasedError,
@@ -52,8 +53,8 @@ import {
 // side effects.
 //
 // Messaging failures never propagate: a failed SMS must not fail the status
-// change it accompanies (same `safe()` discipline as the self-service
-// actions, src/lib/selfservice/actions.ts).
+// change it accompanies (the shared runSideEffect discipline, also used by
+// the self-service actions, src/lib/selfservice/actions.ts).
 //
 // Next 16: `params` is a Promise — awaited before use.
 
@@ -117,16 +118,6 @@ export async function GET(
   return withRefreshedSession(ok(appointment), guard);
 }
 
-/** Run a side effect, swallowing failures so the status change always wins. */
-async function safe<T>(fn: () => Promise<T>): Promise<T | null> {
-  try {
-    return await fn();
-  } catch (e) {
-    console.error("appointment side effect failed", e);
-    return null;
-  }
-}
-
 // The senders, resolved by the stable NAME carried in STATUS_TRANSITIONS
 // (the transition map stays pure — no messaging imports — so the unit test
 // can read it without a database).
@@ -181,25 +172,34 @@ export async function PATCH(
     return errorResponse(404, "NOT_FOUND", "Rendez-vous introuvable.");
   }
 
-  // Domain gate: every staff action targets an ACTIVE appointment. Once
-  // CANCELLED/RESCHEDULED/COMPLETED/NO_SHOW, there is nothing left to
-  // confirm, cancel, complete or mark no-show — 409, not 404 (the row exists;
-  // the operation is the conflict). The one exception: CONFIRM on an already
-  // CONFIRMED appointment is an idempotent no-op (a double-click, a retry) —
-  // the state is already the requested one, so succeed without rewriting,
-  // without re-messaging and without a duplicate audit row.
-  const activeStatuses: AppointmentStatus[] = [
-    AppointmentStatus.PENDING,
-    AppointmentStatus.CONFIRMED,
-  ];
-  if (!activeStatuses.includes(existing.status)) {
+  // Domain gate: the transition map's `from` allowlist decides which current
+  // statuses each action may target — CONFIRM/CANCEL on an active
+  // appointment (PENDING/CONFIRMED), COMPLETE/NO_SHOW only on a CONFIRMED
+  // one (bookkeeping on a visit the front desk actually managed). Once the
+  // status is outside `from`, there is nothing left to do — 409, not 404
+  // (the row exists; the operation is the conflict). The one exception:
+  // CONFIRM on an already CONFIRMED appointment is an idempotent no-op (a
+  // double-click, a retry) — the state is already the requested one, so
+  // succeed without rewriting, without re-messaging and without a duplicate
+  // transition audit row.
+  if (!transition.from.includes(existing.status)) {
     return errorResponse(
       409,
-      "APPOINTMENT_NOT_ACTIVE",
-      "Ce rendez-vous n'est plus actif.",
+      "INVALID_STATUS_TRANSITION",
+      "Cette action n'est pas autorisée pour ce statut de rendez-vous.",
     );
   }
   if (action === "CONFIRM" && existing.status === AppointmentStatus.CONFIRMED) {
+    // The no-op still exposes patient PII in its response — audited like the
+    // GET detail above, with an idempotentConfirm marker.
+    await logAction(
+      { type: AuditActorType.STAFF, userId: guard.user.id },
+      AuditAction.PATIENT_RECORD_VIEWED,
+      "Appointment",
+      id,
+      { scope: "record", idempotentConfirm: true },
+      getClientIp(request.headers),
+    );
     const current = await getPrisma().appointment.findUnique({
       where: { id },
       select: appointmentDetailSelect,
@@ -249,13 +249,39 @@ export async function PATCH(
       // instead) but keeps the if-chain exhaustive over timestampField.
       data.cancelledAt = new Date();
     }
-    await getPrisma().appointment.update({ where: { id }, data });
+    // Atomic conditional write: the status predicate closes the TOCTOU
+    // window between the read above and this write — a concurrent release
+    // (cancel/reschedule/expiry, all atomic in releaseSlot/rescheduleSlot)
+    // that moved the row off `from` makes the write a no-op instead of
+    // resurrecting a cancelled appointment (double-booking). count === 0
+    // means we lost that race: re-read to disambiguate a vanished row (404)
+    // from a status conflict (409). CONFIRM stays idempotent — an
+    // already-CONFIRMED row is inside CONFIRM's `from`, but the no-op branch
+    // above returns before reaching this write.
+    const updated = await getPrisma().appointment.updateMany({
+      where: { id, status: { in: transition.from } },
+      data,
+    });
+    if (updated.count === 0) {
+      const reread = await getPrisma().appointment.findUnique({
+        where: { id },
+        select: { id: true },
+      });
+      if (!reread) {
+        return errorResponse(404, "NOT_FOUND", "Rendez-vous introuvable.");
+      }
+      return errorResponse(
+        409,
+        "APPOINTMENT_NOT_ACTIVE",
+        "Ce rendez-vous n'est plus actif.",
+      );
+    }
   }
 
   // SMS after the commit, failures swallowed (never fails the status change).
   if (transition.smsSender) {
     const senderName: SmsSenderName = transition.smsSender;
-    await safe(() => SMS_SENDERS[senderName](id));
+    await runSideEffect(() => SMS_SENDERS[senderName](id));
   }
 
   await logAction(

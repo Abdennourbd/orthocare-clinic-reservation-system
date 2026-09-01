@@ -41,7 +41,10 @@ export const manualBookingSchema = z.object({
   // Free-text front-desk note persisted on the appointment (visitNotes is the
   // Appointment model's only free-text column).
   notes: z.string().max(5000, "Les notes sont limitées à 5000 caractères.").optional(),
-  locale: z.enum(["fr", "ar", "en"]).default("fr"),
+  // Optional with NO default: a default would silently overwrite the
+  // patient's stored preferredLocale with "fr" when the front desk omits the
+  // field. Only an explicitly provided locale updates preferredLocale.
+  locale: z.enum(["fr", "ar", "en"]).optional(),
 });
 
 export const appointmentStatusChangeSchema = z.object({

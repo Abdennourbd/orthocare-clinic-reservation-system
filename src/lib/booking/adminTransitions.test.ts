@@ -13,6 +13,7 @@ import { STATUS_TRANSITIONS, getAdminTransition } from "./adminTransitions";
 describe("STATUS_TRANSITIONS", () => {
   it("maps CONFIRM to CONFIRMED with confirmedAt, the right audit action, a confirmation SMS and no slot release", () => {
     expect(STATUS_TRANSITIONS.CONFIRM).toEqual({
+      from: [AppointmentStatus.PENDING, AppointmentStatus.CONFIRMED],
       newStatus: AppointmentStatus.CONFIRMED,
       timestampField: "confirmedAt",
       auditAction: AuditAction.APPOINTMENT_CONFIRMED,
@@ -24,6 +25,7 @@ describe("STATUS_TRANSITIONS", () => {
 
   it("maps CANCEL to CANCELLED with cancelledAt, the STAFF cancel reason, a cancellation SMS and a slot release", () => {
     expect(STATUS_TRANSITIONS.CANCEL).toEqual({
+      from: [AppointmentStatus.PENDING, AppointmentStatus.CONFIRMED],
       newStatus: AppointmentStatus.CANCELLED,
       timestampField: "cancelledAt",
       auditAction: AuditAction.APPOINTMENT_CANCELLED,
@@ -35,6 +37,7 @@ describe("STATUS_TRANSITIONS", () => {
 
   it("maps COMPLETE to COMPLETED with completedAt, no SMS and no slot release", () => {
     expect(STATUS_TRANSITIONS.COMPLETE).toEqual({
+      from: [AppointmentStatus.CONFIRMED],
       newStatus: AppointmentStatus.COMPLETED,
       timestampField: "completedAt",
       auditAction: AuditAction.APPOINTMENT_COMPLETED,
@@ -46,6 +49,7 @@ describe("STATUS_TRANSITIONS", () => {
 
   it("maps NO_SHOW to NO_SHOW with noShowAt, no SMS and no slot release", () => {
     expect(STATUS_TRANSITIONS.NO_SHOW).toEqual({
+      from: [AppointmentStatus.CONFIRMED],
       newStatus: AppointmentStatus.NO_SHOW,
       timestampField: "noShowAt",
       auditAction: AuditAction.APPOINTMENT_NO_SHOW,
@@ -86,6 +90,28 @@ describe("STATUS_TRANSITIONS", () => {
       } else {
         expect(transition.cancelReason).toBeNull();
       }
+    }
+  });
+
+  it("gates COMPLETE/NO_SHOW to CONFIRMED only (no completion of an unmanaged PENDING booking)", () => {
+    for (const action of ["COMPLETE", "NO_SHOW"] as const) {
+      expect(STATUS_TRANSITIONS[action].from).toEqual([AppointmentStatus.CONFIRMED]);
+    }
+  });
+
+  it("allows CONFIRM and CANCEL on any active status (PENDING or CONFIRMED)", () => {
+    for (const action of ["CONFIRM", "CANCEL"] as const) {
+      expect(STATUS_TRANSITIONS[action].from).toEqual([
+        AppointmentStatus.PENDING,
+        AppointmentStatus.CONFIRMED,
+      ]);
+    }
+  });
+
+  it("never targets a status inside its own `from`, except CONFIRM (the route's idempotent no-op relies on CONFIRMED ∈ from)", () => {
+    for (const [action, transition] of Object.entries(STATUS_TRANSITIONS)) {
+      if (action === "CONFIRM") continue;
+      expect(transition.from).not.toContain(transition.newStatus);
     }
   });
 

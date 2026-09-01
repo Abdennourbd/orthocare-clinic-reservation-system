@@ -26,6 +26,10 @@ export type SmsSenderName =
   | "sendAppointmentCancelled";
 
 export type AdminTransition = {
+  /** The current statuses the action may target (the domain gate enforced by
+   * the PATCH route). CONFIRM/CANCEL apply to any active appointment;
+   * COMPLETE/NO_SHOW are bookkeeping on a confirmed visit only. */
+  from: AppointmentStatus[];
   /** The status the appointment lands in. */
   newStatus: AppointmentStatus;
   /** The status timestamp that must be set to "now" on the write. */
@@ -47,6 +51,7 @@ export const STATUS_TRANSITIONS: Record<AdminStatusAction, AdminTransition> = {
   // Confirm-after-call: stamps confirmedAt (+ confirmedByUserId, set by the
   // route) and sends the confirmation SMS carrying the self-service link.
   CONFIRM: {
+    from: [AppointmentStatus.PENDING, AppointmentStatus.CONFIRMED],
     newStatus: AppointmentStatus.CONFIRMED,
     timestampField: "confirmedAt",
     auditAction: AuditAction.APPOINTMENT_CONFIRMED,
@@ -57,6 +62,7 @@ export const STATUS_TRANSITIONS: Record<AdminStatusAction, AdminTransition> = {
   // Staff cancel frees the slot through releaseSlot(STAFF) so the waitlist
   // fires, and messages the patient.
   CANCEL: {
+    from: [AppointmentStatus.PENDING, AppointmentStatus.CONFIRMED],
     newStatus: AppointmentStatus.CANCELLED,
     timestampField: "cancelledAt",
     auditAction: AuditAction.APPOINTMENT_CANCELLED,
@@ -67,6 +73,7 @@ export const STATUS_TRANSITIONS: Record<AdminStatusAction, AdminTransition> = {
   // Complete / no-show: bookkeeping on a past appointment — no slot change,
   // no SMS (no sender exists for these).
   COMPLETE: {
+    from: [AppointmentStatus.CONFIRMED],
     newStatus: AppointmentStatus.COMPLETED,
     timestampField: "completedAt",
     auditAction: AuditAction.APPOINTMENT_COMPLETED,
@@ -75,6 +82,7 @@ export const STATUS_TRANSITIONS: Record<AdminStatusAction, AdminTransition> = {
     releasesSlot: false,
   },
   NO_SHOW: {
+    from: [AppointmentStatus.CONFIRMED],
     newStatus: AppointmentStatus.NO_SHOW,
     timestampField: "noShowAt",
     auditAction: AuditAction.APPOINTMENT_NO_SHOW,

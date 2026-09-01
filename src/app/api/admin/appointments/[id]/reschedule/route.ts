@@ -10,6 +10,7 @@ import { logAction } from "@/lib/audit/logAction";
 import { getClientIp } from "@/lib/security/clientIp";
 import { checkRateLimit, RateLimitError } from "@/lib/security/rateLimit";
 import { rescheduleSlot } from "@/lib/booking/rescheduleSlot";
+import { runSideEffect } from "@/lib/booking/runSideEffect";
 import {
   SlotConflictError,
   AppointmentNotFoundError,
@@ -40,17 +41,7 @@ import {
 // Order is load-bearing: requireStaff -> CSRF -> rate limit -> Zod -> domain
 // checks (404 / 409) -> DB write. A 404 must NEVER precede a 401/403.
 // Messaging failures never propagate (sendAppointmentRescheduled is wrapped
-// in safe()).
-
-/** Run a side effect, swallowing failures so the reschedule always wins. */
-async function safe<T>(fn: () => Promise<T>): Promise<T | null> {
-  try {
-    return await fn();
-  } catch (e) {
-    console.error("appointment side effect failed", e);
-    return null;
-  }
-}
+// in runSideEffect()).
 
 export async function POST(
   request: NextRequest,
@@ -86,6 +77,18 @@ export async function POST(
   const newStartUTC = new Date(parsed.data.startTime);
   if (Number.isNaN(newStartUTC.getTime())) {
     return errorResponse(400, "VALIDATION_ERROR", "Nouvelle date/heure invalide.");
+  }
+
+  // resourceId is a v2-reserved column (no Resource table exists yet): a
+  // non-null value would be persisted as a dangling reference and only salt
+  // the advisory lock. Rejected before any write; omitted/null means "keep
+  // the current chair" (always null in v1).
+  if (parsed.data.resourceId != null) {
+    return errorResponse(
+      400,
+      "RESOURCE_UNSUPPORTED",
+      "Les ressources multi-chaises ne sont pas encore prises en charge.",
+    );
   }
 
   const { id } = await params;
@@ -133,7 +136,7 @@ export async function POST(
 
   // SMS carrying the ROTATED self-service link for the NEW appointment,
   // keyed to the OLD appointmentId — after commit, failures swallowed.
-  await safe(() =>
+  await runSideEffect(() =>
     sendAppointmentRescheduled(result.oldAppointment.id, result.newAppointment.id),
   );
 
