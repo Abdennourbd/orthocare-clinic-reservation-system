@@ -295,6 +295,7 @@ describe("PATCH /api/admin/appointments/[id]", () => {
     expect(response.status).toBe(200);
     const dbAppt = await getPrisma().appointment.findUnique({ where: { id: appt.id } });
     expect(dbAppt?.status).toBe(AppointmentStatus.CANCELLED);
+    expect(dbAppt?.cancelledAt).not.toBeNull();
     expect(dbAppt?.cancelReason).toBe(CancelReason.STAFF);
     
     // Prove slot is freed: we can book again in this exact slot
@@ -414,7 +415,15 @@ describe("POST /api/admin/appointments/[id]/reschedule", () => {
     expect(body.newAppointment.status).toBe(AppointmentStatus.CONFIRMED);
 
     const oldAppt = await getPrisma().appointment.findUnique({ where: { id: appt.id } });
+    expect(oldAppt?.status).toBe(AppointmentStatus.RESCHEDULED);
     expect(oldAppt?.cancelReason).toBe(CancelReason.STAFF);
+
+    const newAppt = await getPrisma().appointment.findUnique({ where: { id: body.newAppointment.id } });
+    expect(newAppt).not.toBeNull();
+    expect(newAppt?.status).toBe(AppointmentStatus.CONFIRMED);
+    expect(newAppt?.patientId).toBe(patient.id);
+    expect(newAppt?.serviceId).toBe(service.id);
+    expect(newAppt?.startTime.toISOString()).toBe(newStartUTC.toISOString());
 
     // Old slot is freed, can book again
     const response2 = await appointmentsCreateRoute(postRequest("/api/admin/appointments", {
@@ -518,7 +527,7 @@ describe("GET /api/admin/appointments/search", () => {
     const service = await createService();
     const startUTC = await futureBookableLocalStart("11:00", 8);
 
-    await getPrisma().appointment.create({
+    const appt = await getPrisma().appointment.create({
       data: { patientId: patient1.id, serviceId: service.id, startTime: startUTC, endTime: new Date(startUTC.getTime() + 30 * 60000), status: AppointmentStatus.CONFIRMED, source: AppointmentSource.ONLINE }
     });
 
@@ -528,11 +537,25 @@ describe("GET /api/admin/appointments/search", () => {
     const res1 = await appointmentsSearchRoute(getRequest("/api/admin/appointments/search?q=Mahrez", cookie));
     const b1 = await res1.json();
     expect(b1.appointments.length).toBe(1);
+    expect(b1.appointments[0].id).toBe(appt.id);
+
+    // case-insensitive name search
+    const res1b = await appointmentsSearchRoute(getRequest("/api/admin/appointments/search?q=mAHrez", cookie));
+    const b1b = await res1b.json();
+    expect(b1b.appointments.length).toBe(1);
+    expect(b1b.appointments[0].id).toBe(appt.id);
 
     // by partial digits
     const res2 = await appointmentsSearchRoute(getRequest("/api/admin/appointments/search?q=12378", cookie));
     const b2 = await res2.json();
     expect(b2.appointments.length).toBe(1);
+    expect(b2.appointments[0].id).toBe(appt.id);
+
+    // DZ phone format normalization
+    const res2b = await appointmentsSearchRoute(getRequest("/api/admin/appointments/search?q=0550123789", cookie));
+    const b2b = await res2b.json();
+    expect(b2b.appointments.length).toBe(1);
+    expect(b2b.appointments[0].id).toBe(appt.id);
 
     // LIKE metacharacters
     const res3 = await appointmentsSearchRoute(getRequest("/api/admin/appointments/search?q=%", cookie));
