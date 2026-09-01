@@ -1,10 +1,9 @@
 import { describe, it, expect, beforeEach, afterAll, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { getPrisma } from "@/lib/db";
-import { AuditAction, AuditActorType, Role, AppointmentStatus, AppointmentSource, CancelReason } from "@/generated/prisma/client";
+import { AuditAction, Role, AppointmentStatus, AppointmentSource, CancelReason } from "@/generated/prisma/client";
 import { createSessionToken, SESSION_COOKIE_NAME } from "@/lib/auth/session";
 import { futureBookableLocalStart, nextOpenLocalDate } from "./helpers/testDates";
-import { getClinicDayBoundsUTC, addClinicDays } from "@/lib/time/clinicTime";
 
 // Senders from MESSAGE_PROVIDER default mock
 // The messaging framework logs its intercepted messages to SmsMessage rows
@@ -93,6 +92,11 @@ async function lastAudit(action: AuditAction) {
   });
 }
 
+/** Typed view of an AuditLog row's JSON `detail` object. */
+function auditDetail(audit: { detail: unknown } | null | undefined): Record<string, unknown> {
+  return (audit?.detail ?? {}) as Record<string, unknown>;
+}
+
 async function createPatient(data: { firstName: string; lastName: string; phone: string; active?: boolean }) {
   return getPrisma().patient.create({
     data: {
@@ -144,7 +148,7 @@ describe("GET /api/admin/appointments", () => {
 
     const audit = await lastAudit(AuditAction.PATIENT_RECORD_VIEWED);
     expect(audit?.userId).toBe(staff.id);
-    const detail = audit?.detail as any;
+    const detail = auditDetail(audit);
     expect(detail.scope).toBe("day-view");
     expect(detail.date).toBe(localDate);
     expect(detail.resultCount).toBe(1);
@@ -204,7 +208,7 @@ describe("POST /api/admin/appointments", () => {
 
     const audit = await lastAudit(AuditAction.APPOINTMENT_CONFIRMED);
     expect(audit?.userId).toBe(staff.id);
-    const detail = audit?.detail as any;
+    const detail = auditDetail(audit);
     expect(detail.scope).toBe("manual-booking");
     expect(JSON.stringify(detail)).not.toContain("Sara");
   });
@@ -276,7 +280,7 @@ describe("PATCH /api/admin/appointments/[id]", () => {
 
     const audit = await lastAudit(AuditAction.APPOINTMENT_CONFIRMED);
     expect(audit?.entityId).toBe(appt.id);
-    expect((audit?.detail as any).action).toBe("CONFIRM");
+    expect(auditDetail(audit).action).toBe("CONFIRM");
 
     // Message is written to SmsMessage
     const sms = await getPrisma().smsMessage.findFirst({ where: { appointmentId: appt.id } });
@@ -376,7 +380,7 @@ describe("PATCH /api/admin/appointments/[id]", () => {
 
     const audit = await lastAudit(AuditAction.PATIENT_RECORD_VIEWED);
     expect(audit?.entityId).toBe(appt.id);
-    expect((audit?.detail as any).idempotentConfirm).toBe(true);
+    expect(auditDetail(audit).idempotentConfirm).toBe(true);
 
     expect(await getPrisma().smsMessage.count()).toBe(beforeSmsCount);
   });
@@ -435,7 +439,7 @@ describe("POST /api/admin/appointments/[id]/reschedule", () => {
 
     const audit = await lastAudit(AuditAction.APPOINTMENT_RESCHEDULED);
     expect(audit?.entityId).toBe(appt.id);
-    expect((audit?.detail as any).newAppointmentId).toBe(body.newAppointment.id);
+    expect(auditDetail(audit).newAppointmentId).toBe(body.newAppointment.id);
 
     const sms = await getPrisma().smsMessage.findFirst({ where: { type: "RESCHEDULE", patientId: patient.id } });
     expect(sms).not.toBeNull();
@@ -515,7 +519,7 @@ describe("GET /api/admin/appointments/pending", () => {
 
     const audit = await lastAudit(AuditAction.PATIENT_RECORD_VIEWED);
     expect(audit?.userId).toBe(staff.id);
-    expect((audit?.detail as any).scope).toBe("call-queue");
+    expect(auditDetail(audit).scope).toBe("call-queue");
   });
 });
 
@@ -563,7 +567,7 @@ describe("GET /api/admin/appointments/search", () => {
     expect(b3.appointments).toEqual([]);
 
     const audit = await lastAudit(AuditAction.PATIENT_RECORD_VIEWED);
-    expect((audit?.detail as any).scope).toBe("search");
+    expect(auditDetail(audit).scope).toBe("search");
     const serialized = JSON.stringify(audit?.detail);
     expect(serialized).not.toContain("Mahrez");
     expect(serialized).not.toContain("12378");
