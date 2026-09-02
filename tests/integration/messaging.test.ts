@@ -9,6 +9,15 @@ import {
 } from "@/generated/prisma/client";
 import { sendMessage } from "@/lib/messaging/index";
 import type { MessageProvider } from "@/lib/messaging/provider";
+// readMessageTemplate is wrapped in a spy (call-through) so the bodyOverride
+// test below can assert that no template read happens; every other test keeps
+// its real behavior.
+vi.mock("@/lib/messaging/templates", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/lib/messaging/templates")>();
+  return { ...actual, readMessageTemplate: vi.fn(actual.readMessageTemplate) };
+});
+import { readMessageTemplate } from "@/lib/messaging/templates";
 import { notifyBookingCreated } from "@/lib/messaging/notifyBookingCreated";
 import { sendAppointmentRescheduled } from "@/lib/messaging/appointmentChanges";
 import { AppointmentNotConfirmedError } from "@/lib/selfservice/errors";
@@ -244,6 +253,58 @@ describe("sendMessage dispatcher", () => {
       where: { batchId: "batch-1" },
     });
     expect(byBatch).toHaveLength(1);
+  });
+
+  it("uses a free-text bodyOverride verbatim, with templateId null and no template read", async () => {
+    vi.mocked(readMessageTemplate).mockClear();
+    const patient = await makePatient();
+
+    const msg = await sendMessage({
+      type: SmsMessageType.MANUAL,
+      patientId: patient.id,
+      to: patient.phoneE164,
+      bodyOverride: "  Bonjour, la clinique vous attend.  ",
+    });
+
+    expect(msg).not.toBeNull();
+    expect(msg!.body).toBe("Bonjour, la clinique vous attend.");
+    expect(msg!.templateId).toBeNull();
+    expect(msg!.type).toBe(SmsMessageType.MANUAL);
+    expect(msg!.status).toBe(SmsStatus.SENT);
+    expect(msg!.sentAt).toBeInstanceOf(Date);
+    // The override is the body: the template layer is never touched.
+    expect(vi.mocked(readMessageTemplate)).not.toHaveBeenCalled();
+  });
+
+  it("rejects an empty or oversized bodyOverride before anything is persisted", async () => {
+    const patient = await makePatient();
+
+    for (const bad of ["", "   ", "x".repeat(481)]) {
+      await expect(
+        sendMessage({
+          type: SmsMessageType.MANUAL,
+          patientId: patient.id,
+          to: patient.phoneE164,
+          bodyOverride: bad,
+        }),
+      ).rejects.toThrow("bodyOverride invalide");
+    }
+    expect(await getPrisma().smsMessage.count()).toBe(0);
+  });
+
+  it("sends MANUAL free-text to an opted-out patient (transactional, Task 16)", async () => {
+    const patient = await makePatient({ messagingOptOut: true });
+
+    const msg = await sendMessage({
+      type: SmsMessageType.MANUAL,
+      patientId: patient.id,
+      to: patient.phoneE164,
+      bodyOverride: "Message manuel du staff",
+    });
+
+    expect(msg).not.toBeNull();
+    expect(msg!.status).toBe(SmsStatus.SENT);
+    expect(await getPrisma().smsMessage.count()).toBe(1);
   });
 
   it("records FAILED (with error, no sentAt) when the provider returns a failure", async () => {

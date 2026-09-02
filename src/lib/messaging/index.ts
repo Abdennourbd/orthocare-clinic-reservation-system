@@ -50,10 +50,15 @@ export type SendMessageInput = {
   patientId: string;
   /** E.164 recipient. */
   to: string;
-  /** Template key into `messageTemplates` Settings. */
-  templateKey: MessageTemplateKey;
+  /** Template key into `messageTemplates` Settings. Unused when
+   * `bodyOverride` is present (template reading is skipped entirely). */
+  templateKey?: MessageTemplateKey;
   /** Placeholders substituted into the template. */
-  vars: Record<string, string>;
+  vars?: Record<string, string>;
+  /** Free-text body (Task 16 manual sends) used verbatim instead of a
+   * template. The route's Zod schema enforces non-empty / max 480 chars; the
+   * dispatcher re-checks defensively because it is a public function. */
+  bodyOverride?: string;
   appointmentId?: string;
   batchId?: string;
   sentById?: string;
@@ -72,6 +77,9 @@ export type SendMessageInput = {
  *   recorded on the row (status FAILED + error) and the row is still returned,
  *   so a messaging failure never fails the caller's operation.
  *
+ * Free-text manual sends (Task 16) flow through the same gate so
+ * opt-out/idempotency/row-lifecycle cannot be bypassed.
+ *
  * @param provider overrides the env-selected provider (used by tests).
  */
 export async function sendMessage(
@@ -79,6 +87,18 @@ export async function sendMessage(
   provider: MessageProvider = getProvider(),
 ): Promise<SmsMessage | null> {
   const prisma = getPrisma();
+
+  // 0. Free-text override (Task 16 manual sends): validated defensively even
+  // though the route's Zod schema enforces the same bounds — the dispatcher
+  // is a public function and must never persist a body it was not meant to.
+  let manualBody: string | null = null;
+  if (input.bodyOverride !== undefined) {
+    const trimmed = input.bodyOverride.trim();
+    if (trimmed.length === 0 || trimmed.length > 480) {
+      throw new Error("bodyOverride invalide");
+    }
+    manualBody = trimmed;
+  }
 
   // 1. Opt-out gate (non-transactional only). Task 13 étape 5 (§Contraintes
   // point 6): a soft-deleted record (`active: false`) must stop receiving
@@ -95,11 +115,14 @@ export async function sendMessage(
     if (patient?.messagingOptOut || patient?.active === false) return null;
   }
 
-  // 2. Render the body from the (admin-editable) template.
-  const body = renderTemplate(
-    await readMessageTemplate(input.templateKey),
-    input.vars,
-  );
+  // 2. Render the body from the (admin-editable) template — skipped entirely
+  // when a free-text override is supplied.
+  const body =
+    manualBody ??
+    renderTemplate(
+      await readMessageTemplate(input.templateKey!),
+      input.vars ?? {},
+    );
 
   // 3. Record the send. A unique-violation here means this appointment+type
   // was already messaged. If the previous attempt FAILED the patient never

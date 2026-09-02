@@ -34,6 +34,10 @@ export const DEFAULT_MESSAGE_TEMPLATES = {
   /** Stale PENDING booking auto-cancelled by the expiry cron (Task 9). */
   expired:
     "Bonjour {firstName}, votre demande de rendez-vous {serviceName} du {date} à {time} n'a pas été confirmée à temps et a été annulée. Contactez la clinique pour reprendre rendez-vous. Ortho'Care Clinic",
+  /** Task 16 delay broadcast ("today is delayed by X min"). Non-transactional —
+   * suppressed for opted-out/inactive patients by the dispatcher. */
+  delay:
+    "Bonjour {firstName}, votre rendez-vous de {time} aujourd'hui est retardé d'environ {delayMinutes} minutes. Ortho'Care Clinic",
 } as const;
 
 export type MessageTemplateKey = keyof typeof DEFAULT_MESSAGE_TEMPLATES;

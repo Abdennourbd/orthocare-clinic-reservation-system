@@ -1,8 +1,10 @@
 import { describe, it, expect } from "vitest";
 import {
   DEFAULT_MESSAGE_TEMPLATES,
+  readMessageTemplate,
   renderTemplate,
 } from "./templates";
+import { getPrisma } from "@/lib/db";
 
 describe("renderTemplate", () => {
   it("substitutes known placeholders", () => {
@@ -24,6 +26,53 @@ describe("renderTemplate", () => {
   it("handles numeric values", () => {
     const out = renderTemplate("min {minutes}", { minutes: 30 });
     expect(out).toBe("min 30");
+  });
+});
+
+describe("delay template (Task 16)", () => {
+  it("renders the firstName, time and delayMinutes substitutions", () => {
+    const out = renderTemplate(DEFAULT_MESSAGE_TEMPLATES.delay, {
+      firstName: "Sara",
+      time: "11:00",
+      delayMinutes: 20,
+    });
+    expect(out).toBe(
+      "Bonjour Sara, votre rendez-vous de 11:00 aujourd'hui est retardé d'environ 20 minutes. Ortho'Care Clinic",
+    );
+  });
+
+  it("leaves unknown placeholders verbatim (existing renderTemplate behavior)", () => {
+    // An admin-edited template may carry a placeholder the dispatcher never
+    // supplies ({serviceName} here) — it must come through untouched, not
+    // crash the send.
+    const out = renderTemplate(
+      `${DEFAULT_MESSAGE_TEMPLATES.delay} Service : {serviceName}`,
+      { firstName: "Sara", time: "11:00", delayMinutes: 20 },
+    );
+    expect(out).toBe(
+      "Bonjour Sara, votre rendez-vous de 11:00 aujourd'hui est retardé d'environ 20 minutes. Ortho'Care Clinic Service : {serviceName}",
+    );
+  });
+});
+
+describe("readMessageTemplate", () => {
+  it("returns the Setting override when messageTemplates.delay exists", async () => {
+    await getPrisma().setting.create({
+      data: {
+        key: "messageTemplates",
+        value: { delay: "Retard personnalisé pour {firstName}" },
+      },
+    });
+
+    expect(await readMessageTemplate("delay")).toBe(
+      "Retard personnalisé pour {firstName}",
+    );
+  });
+
+  it("falls back to the built-in default when the Setting is missing", async () => {
+    expect(await readMessageTemplate("delay")).toBe(
+      DEFAULT_MESSAGE_TEMPLATES.delay,
+    );
   });
 });
 
