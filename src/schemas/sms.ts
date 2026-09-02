@@ -64,7 +64,15 @@ export const smsHistoryQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).optional(),
 });
 
+/** GET /api/admin/sms/batches — past broadcast batches (metadata only). The
+ * only knob is the page size; every filter knob lives on the history
+ * endpoint, which reads the per-batch SmsMessage rows. */
+export const smsBatchesQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).optional(),
+});
+
 export type SingleSmsInput = z.infer<typeof singleSmsSchema>;
 export type BroadcastPreviewInput = z.infer<typeof broadcastPreviewSchema>;
 export type BroadcastSendInput = z.infer<typeof broadcastSendSchema>;
 export type SmsHistoryQuery = z.infer<typeof smsHistoryQuerySchema>;
+export type SmsBatchesQuery = z.infer<typeof smsBatchesQuerySchema>;

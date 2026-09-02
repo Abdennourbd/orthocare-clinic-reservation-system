@@ -37,6 +37,8 @@ import { POST as appointmentRescheduleRoute } from "@/app/api/admin/appointments
 import { GET as appointmentsPendingRoute } from "@/app/api/admin/appointments/pending/route";
 import { GET as appointmentsSearchRoute } from "@/app/api/admin/appointments/search/route";
 import { POST as smsSingleRoute } from "@/app/api/admin/sms/single/route";
+import { GET as smsHistoryRoute } from "@/app/api/admin/sms/route";
+import { GET as smsBatchesRoute } from "@/app/api/admin/sms/batches/route";
 import { POST as smsBroadcastPreviewRoute } from "@/app/api/admin/sms/broadcast/preview/route";
 import { POST as smsBroadcastRoute } from "@/app/api/admin/sms/broadcast/route";
 
@@ -382,6 +384,24 @@ const ROUTES: RouteRow[] = [
     allowed: [Role.ADMIN],
     okStatus: 400,
     handler: smsBroadcastRoute,
+  },
+  {
+    method: "GET",
+    scanPath: "/api/admin/sms",
+    // Task 16 — the front desk (both roles) reads the SMS history.
+    allowed: [Role.ADMIN, Role.RECEPTIONIST],
+    // No query — every filter is optional, so an authorized actor gets 200
+    // with the (empty) first history page. Proves the guard runs before the
+    // read.
+    handler: smsHistoryRoute,
+  },
+  {
+    method: "GET",
+    scanPath: "/api/admin/sms/batches",
+    allowed: [Role.ADMIN, Role.RECEPTIONIST],
+    // No query — optional limit only, so an authorized actor gets 200 with
+    // the (empty) batch list.
+    handler: smsBatchesRoute,
   },
 ];
 

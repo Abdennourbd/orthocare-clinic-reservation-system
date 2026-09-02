@@ -17,9 +17,10 @@ import {
 } from "@/lib/time/clinicTime";
 import { localStart, nextOpenLocalDate } from "./helpers/testDates";
 
-// Task 16 — integration tests for the first three SMS Center routes:
-// POST /api/admin/sms/single, /api/admin/sms/broadcast/preview and
-// /api/admin/sms/broadcast. Setup mirrors appointments-api.test.ts (users,
+// Task 16 — integration tests for the SMS Center routes:
+// POST /api/admin/sms/single, /api/admin/sms/broadcast/preview,
+// /api/admin/sms/broadcast, GET /api/admin/sms (history) and
+// GET /api/admin/sms/batches. Setup mirrors appointments-api.test.ts (users,
 // session cookie, NextRequest construction); the mock provider records every
 // send as an SmsMessage row we can assert on.
 //
@@ -82,6 +83,13 @@ function postRequest(path: string, body: unknown, cookie?: string) {
       ...(cookie ? { cookie } : {}),
     },
     body: body === undefined ? undefined : JSON.stringify(body),
+  });
+}
+
+function getRequest(path: string, cookie?: string) {
+  return new NextRequest(`http://localhost:3000${path}`, {
+    method: "GET",
+    headers: { ...(cookie ? { cookie } : {}) },
   });
 }
 
@@ -437,5 +445,236 @@ describe("POST /api/admin/sms/broadcast", () => {
     // and the delay minutes appear verbatim.
     expect(rowForA!.body).toContain(formatClinicLocalTime(seed.apptA.startTime));
     expect(rowForA!.body).toContain("15");
+  });
+});
+
+describe("GET /api/admin/sms (history)", () => {
+  /** Seed an SmsMessage row directly — the history read does not need a real
+   * send, only rows with controlled createdAt/batchId/type/patientId. */
+  async function createSmsRow(data: {
+    patientId?: string;
+    batchId?: string;
+    type?: SmsMessageType;
+    body?: string;
+    createdAt: Date;
+  }) {
+    return getPrisma().smsMessage.create({
+      data: {
+        to: "+213550300100",
+        body: data.body ?? "Message de test.",
+        ...(data.patientId ? { patientId: data.patientId } : {}),
+        ...(data.batchId ? { batchId: data.batchId } : {}),
+        type: data.type ?? SmsMessageType.MANUAL,
+        provider: "mock",
+        status: SmsStatus.SENT,
+        sentAt: data.createdAt,
+        createdAt: data.createdAt,
+      },
+    });
+  }
+
+  const t1 = new Date("2026-01-01T10:00:00Z");
+  const t2 = new Date("2026-01-01T10:01:00Z");
+  const t3 = new Date("2026-01-01T10:02:00Z");
+
+  it("returns rows newest-first with the patient's name (and the body, this read may show it)", async () => {
+    const admin = await createStaff(Role.ADMIN);
+    const cookie = await cookieFor(admin);
+    const patient = await createPatient({ firstName: "Sami", lastName: "Ghezali", phone: "0550400201" });
+    const [r1, r2, r3] = await Promise.all([
+      createSmsRow({ patientId: patient.id, createdAt: t1 }),
+      createSmsRow({ patientId: patient.id, createdAt: t2 }),
+      createSmsRow({ patientId: patient.id, createdAt: t3 }),
+    ]);
+    const { GET: historyRoute } = await import("@/app/api/admin/sms/route");
+
+    const response = await historyRoute(getRequest("/api/admin/sms", cookie));
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.messages.map((m: { id: string }) => m.id)).toEqual([r3.id, r2.id, r1.id]);
+    expect(body.messages[0].patient).toEqual({
+      id: patient.id,
+      firstName: "Sami",
+      lastName: "Ghezali",
+    });
+    expect(body.nextCursor).toBeNull();
+  });
+
+  it("filters by batchId", async () => {
+    const admin = await createStaff(Role.ADMIN);
+    const cookie = await cookieFor(admin);
+    const [inBatchA, inBatchB] = await Promise.all([
+      createSmsRow({ batchId: "batch-hist-a", createdAt: t1 }),
+      createSmsRow({ batchId: "batch-hist-a", createdAt: t2 }),
+    ]);
+    await createSmsRow({ batchId: "batch-hist-b", createdAt: t3 });
+    const { GET: historyRoute } = await import("@/app/api/admin/sms/route");
+
+    const response = await historyRoute(getRequest("/api/admin/sms?batchId=batch-hist-a", cookie));
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.messages.map((m: { id: string }) => m.id)).toEqual([inBatchB.id, inBatchA.id]);
+  });
+
+  it("filters by patientId", async () => {
+    const admin = await createStaff(Role.ADMIN);
+    const cookie = await cookieFor(admin);
+    const p1 = await createPatient({ firstName: "Lina", lastName: "Brahimi", phone: "0550400202" });
+    const p2 = await createPatient({ firstName: "Mehdi", lastName: "Saidi", phone: "0550400203" });
+    const [own1, own2] = await Promise.all([
+      createSmsRow({ patientId: p1.id, createdAt: t1 }),
+      createSmsRow({ patientId: p1.id, createdAt: t2 }),
+    ]);
+    await createSmsRow({ patientId: p2.id, createdAt: t3 });
+    const { GET: historyRoute } = await import("@/app/api/admin/sms/route");
+
+    const response = await historyRoute(getRequest(`/api/admin/sms?patientId=${p1.id}`, cookie));
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.messages.map((m: { id: string }) => m.id)).toEqual([own2.id, own1.id]);
+  });
+
+  it("filters by type=DELAY", async () => {
+    const admin = await createStaff(Role.ADMIN);
+    const cookie = await cookieFor(admin);
+    const delay = await createSmsRow({ type: SmsMessageType.DELAY, batchId: "batch-hist-d", createdAt: t2 });
+    await createSmsRow({ type: SmsMessageType.MANUAL, createdAt: t1 });
+    const { GET: historyRoute } = await import("@/app/api/admin/sms/route");
+
+    const response = await historyRoute(getRequest("/api/admin/sms?type=DELAY", cookie));
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.messages.map((m: { id: string }) => m.id)).toEqual([delay.id]);
+  });
+
+  it("paginates: limit=2 returns the 2 newest + a cursor, and the cursor page returns only the remaining row", async () => {
+    const admin = await createStaff(Role.ADMIN);
+    const cookie = await cookieFor(admin);
+    const [r1, r2, r3] = await Promise.all([
+      createSmsRow({ createdAt: t1 }),
+      createSmsRow({ createdAt: t2 }),
+      createSmsRow({ createdAt: t3 }),
+    ]);
+    const { GET: historyRoute } = await import("@/app/api/admin/sms/route");
+
+    const first = await historyRoute(getRequest("/api/admin/sms?limit=2", cookie));
+    expect(first.status).toBe(200);
+    const firstBody = await first.json();
+    expect(firstBody.messages.map((m: { id: string }) => m.id)).toEqual([r3.id, r2.id]);
+    expect(firstBody.nextCursor).toBe(r2.id);
+
+    const second = await historyRoute(getRequest(`/api/admin/sms?limit=2&cursor=${r2.id}`, cookie));
+    expect(second.status).toBe(200);
+    const secondBody = await second.json();
+    // Only the one remaining row, no overlap with page 1; the page is not
+    // full so there is no further cursor.
+    expect(secondBody.messages.map((m: { id: string }) => m.id)).toEqual([r1.id]);
+    expect(secondBody.nextCursor).toBeNull();
+  });
+
+  it("audits the read: PATIENT_RECORD_VIEWED / SmsMessage with scope sms-history (ids/enums only, never the body)", async () => {
+    const admin = await createStaff(Role.ADMIN);
+    const cookie = await cookieFor(admin);
+    const patient = await createPatient({ firstName: "Wassim", lastName: "Kaci", phone: "0550400204" });
+    await createSmsRow({ patientId: patient.id, body: "Corps confidentiel.", createdAt: t1 });
+    const { GET: historyRoute } = await import("@/app/api/admin/sms/route");
+
+    const response = await historyRoute(getRequest("/api/admin/sms", cookie));
+    expect(response.status).toBe(200);
+
+    const audit = await getPrisma().auditLog.findFirst({
+      where: { action: AuditAction.PATIENT_RECORD_VIEWED, entityType: "SmsMessage" },
+      orderBy: { createdAt: "desc" },
+    });
+    expect(audit).not.toBeNull();
+    expect(audit!.actorType).toBe(AuditActorType.STAFF);
+    expect(audit!.userId).toBe(admin.id);
+    const detail = (audit!.detail ?? {}) as Record<string, unknown>;
+    expect(detail.scope).toBe("sms-history");
+    expect(detail.resultCount).toBe(1);
+    expect(JSON.stringify(audit!.detail)).not.toContain("Corps confidentiel.");
+  });
+
+  it("RECEPTIONIST may read the history too (200)", async () => {
+    const staff = await createStaff(Role.RECEPTIONIST);
+    const cookie = await cookieFor(staff);
+    await createSmsRow({ createdAt: t1 });
+    const { GET: historyRoute } = await import("@/app/api/admin/sms/route");
+
+    const response = await historyRoute(getRequest("/api/admin/sms", cookie));
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.messages).toHaveLength(1);
+  });
+});
+
+describe("GET /api/admin/sms/batches", () => {
+  it("returns both batches newest-first with counts and the sender's name", async () => {
+    const admin = await createStaff(Role.ADMIN);
+    const cookie = await cookieFor(admin);
+    const earlier = new Date("2026-01-01T09:00:00Z");
+    const later = new Date("2026-01-01T10:00:00Z");
+    await getPrisma().smsBroadcast.create({
+      data: {
+        date: "2026-01-01",
+        delayMinutes: 10,
+        idempotencyKey: "hist-batch-0001",
+        recipientCount: 3,
+        sentCount: 2,
+        suppressedCount: 1,
+        failedCount: 0,
+        sentById: admin.id,
+        createdAt: earlier,
+      },
+    });
+    const newest = await getPrisma().smsBroadcast.create({
+      data: {
+        date: "2026-01-01",
+        delayMinutes: 20,
+        idempotencyKey: "hist-batch-0002",
+        recipientCount: 5,
+        sentCount: 4,
+        suppressedCount: 0,
+        failedCount: 1,
+        sentById: admin.id,
+        createdAt: later,
+      },
+    });
+    const { GET: batchesRoute } = await import("@/app/api/admin/sms/batches/route");
+
+    const response = await batchesRoute(getRequest("/api/admin/sms/batches", cookie));
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.batches).toHaveLength(2);
+    expect(body.batches[0].id).toBe(newest.id);
+    expect(body.batches[0].date).toBe("2026-01-01");
+    expect(body.batches[0].delayMinutes).toBe(20);
+    expect(body.batches[0].recipientCount).toBe(5);
+    expect(body.batches[0].sentCount).toBe(4);
+    expect(body.batches[0].suppressedCount).toBe(0);
+    expect(body.batches[0].failedCount).toBe(1);
+    expect(body.batches[0].sentBy).toEqual({ name: "Staff Test" });
+    // The older batch comes second.
+    expect(body.batches[1].delayMinutes).toBe(10);
+  });
+
+  it("RECEPTIONIST may list the batches too (200)", async () => {
+    const staff = await createStaff(Role.RECEPTIONIST);
+    const cookie = await cookieFor(staff);
+    await getPrisma().smsBroadcast.create({
+      data: {
+        date: "2026-01-01",
+        delayMinutes: 15,
+        idempotencyKey: "hist-batch-0003",
+        recipientCount: 1,
+        sentCount: 1,
+      },
+    });
+    const { GET: batchesRoute } = await import("@/app/api/admin/sms/batches/route");
+
+    const response = await batchesRoute(getRequest("/api/admin/sms/batches", cookie));
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.batches).toHaveLength(1);
   });
 });
