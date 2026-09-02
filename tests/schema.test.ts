@@ -380,4 +380,107 @@ describe("Schema smoke test (Task 3a)", () => {
 
     expect(await prisma.patient.count({ where: { id: patient.id } })).toBe(1);
   });
+
+  it("attaches a PatientDocument to a Patient and reads it back through patient.documents (Task 15)", async () => {
+    const prisma = getPrisma();
+
+    const staff = await prisma.user.create({
+      data: {
+        name: "Document Uploader",
+        email: "document-uploader-test@orthocare.com",
+        passwordHash: "dummyhash",
+        role: Role.RECEPTIONIST,
+      },
+    });
+
+    const patient = await prisma.patient.create({
+      data: {
+        firstName: "Karim",
+        lastName: "Amrani",
+        phone: "0553445566",
+        phoneE164: "+213553445566",
+      },
+    });
+
+    // Every field is set explicitly, including the optional ones (deletedAt /
+    // deletedById): a fixture that lets Prisma default fields to NULL cannot
+    // catch a dropped column, so the assertions below would pass no matter
+    // what the schema actually stores.
+    const uploadedAt = new Date("2026-02-10T09:15:00.000Z");
+    const blobKey = `patients/${patient.id}/radio-panoramique.jpg`;
+    const document = await prisma.patientDocument.create({
+      data: {
+        patientId: patient.id,
+        name: "radio-panoramique.jpg",
+        mimeType: "image/jpeg",
+        sizeBytes: 204800,
+        blobKey,
+        uploadedById: staff.id,
+        uploadedAt,
+        deletedAt: null,
+        deletedById: null,
+      },
+    });
+    expect(document.id).toBeDefined();
+
+    const withDocuments = await prisma.patient.findUnique({
+      where: { id: patient.id },
+      include: { documents: true },
+    });
+    expect(withDocuments?.documents).toHaveLength(1);
+    expect(withDocuments?.documents[0].id).toBe(document.id);
+    expect(withDocuments?.documents[0].name).toBe("radio-panoramique.jpg");
+    expect(withDocuments?.documents[0].mimeType).toBe("image/jpeg");
+    expect(withDocuments?.documents[0].sizeBytes).toBe(204800);
+    expect(withDocuments?.documents[0].blobKey).toBe(blobKey);
+    expect(withDocuments?.documents[0].uploadedById).toBe(staff.id);
+    expect(withDocuments?.documents[0].uploadedAt.toISOString()).toBe(
+      uploadedAt.toISOString(),
+    );
+    expect(withDocuments?.documents[0].deletedAt).toBeNull();
+    expect(withDocuments?.documents[0].deletedById).toBeNull();
+
+    // Prove the named `uploadedBy` relation itself resolves, not just the
+    // scalar `uploadedById` FK.
+    const withUploader = await prisma.patientDocument.findUnique({
+      where: { id: document.id },
+      include: { uploadedBy: true },
+    });
+    expect(withUploader?.uploadedBy?.email).toBe(
+      "document-uploader-test@orthocare.com",
+    );
+  });
+
+  it("rejects a PatientDocument whose patientId does not exist (Task 15)", async () => {
+    const prisma = getPrisma();
+
+    // Also proves the per-test TRUNCATE ... CASCADE in tests/setup.ts reaches
+    // "PatientDocument" through its FK to "Patient", although the table is
+    // not named there: a leftover row from the previous test would make this
+    // assertion fail.
+    expect(await prisma.patientDocument.count()).toBe(0);
+
+    let caught: unknown;
+    try {
+      await prisma.patientDocument.create({
+        data: {
+          patientId: "does-not-exist",
+          name: "radio-panoramique.jpg",
+          mimeType: "image/jpeg",
+          sizeBytes: 204800,
+          blobKey: "patients/does-not-exist/radio-panoramique.jpg",
+        },
+      });
+    } catch (error) {
+      caught = error;
+    }
+
+    // A specific Prisma FK-violation code, not just "something threw": a
+    // missing-required-field bug would also throw, but with a different
+    // code, and this test must not pass for the wrong reason.
+    expect(caught).toBeDefined();
+    expect((caught as { code?: string }).code).toBe("P2003");
+
+    expect(await prisma.patientDocument.count()).toBe(0);
+  });
 });

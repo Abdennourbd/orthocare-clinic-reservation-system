@@ -46,6 +46,8 @@ model User {
   patientsCreated    Patient[] @relation("PatientCreatedBy")
   patientsUpdated    Patient[] @relation("PatientUpdatedBy")
   visitsCreated      Visit[]
+  patientDocumentsUploaded PatientDocument[] @relation("PatientDocumentUploadedBy")
+  patientDocumentsDeleted  PatientDocument[] @relation("PatientDocumentDeletedBy")
   scheduleExceptions ScheduleException[]
   smsMessagesSent    SmsMessage[]
   notifications      Notification[]
@@ -114,6 +116,7 @@ model Patient {
   waitlistEntries    WaitlistEntry[]
   smsMessages        SmsMessage[]
   visits             Visit[]
+  documents          PatientDocument[]
 
   @@index([phoneE164])
   // Composite (ONE index on the pair, not two single-column ones), and
@@ -256,6 +259,60 @@ model Visit {
 
   // The timeline query is always "this patient's visits, most recent first".
   @@index([patientId, date])
+}
+
+// -----------------------------------------------------------------------------
+// Task 15: PatientDocument — files attached to a patient record, in practice
+// X-rays. plan.md §Domain / Data Model.
+//
+// PATIENT HEALTH DATA, the most sensitive rows of this schema. `blobKey` is the
+// pathname of a PRIVATE Vercel blob (`access: "private"`, plan.md:111-112),
+// never a public URL, and it is never returned to a client: every download goes
+// through GET /api/admin/documents/[id], which re-checks the session and
+// streams the file itself. `name` is the uploader's original filename —
+// patient-adjacent data (it often carries the patient's name or a diagnosis),
+// so it must never reach a log, an error message, a URL or an audit `detail`.
+// `mimeType` is only ever written after validation against the allow-list of
+// src/lib/documents/mime.ts; the column itself enforces nothing.
+//
+// Deletion is soft (`deletedAt` / `deletedById`), as everywhere in this schema:
+// the row survives so the AuditLog trail stays readable, while the blob itself
+// is really erased from storage.
+//
+// Deletion behaviour of the foreign keys (Prisma defaults, spelled out because
+// it is a data-loss decision): `patient` is required -> ON DELETE RESTRICT, so
+// a patient holding documents can never be hard-deleted (erasure is the soft
+// path, `anonymizedAt`). `uploadedBy` / `deletedBy` are optional -> ON DELETE
+// SET NULL: losing a staff account must never destroy the document's trace.
+// -----------------------------------------------------------------------------
+
+model PatientDocument {
+  id           String    @id @default(cuid())
+  patientId    String
+  patient      Patient   @relation(fields: [patientId], references: [id])
+
+  /** Original filename, as uploaded — patient-adjacent, never logged. */
+  name         String
+  /** Validated against the allow-list of src/lib/documents/mime.ts. */
+  mimeType     String
+  sizeBytes    Int
+  /** Pathname of a PRIVATE Vercel blob, never a public URL and never returned
+   *  to a client. Unique: one row per stored object, so a retried upload can
+   *  never leave two rows pointing at the same file — and deleting one can
+   *  never orphan the other. */
+  blobKey      String    @unique
+
+  uploadedById String?
+  uploadedBy   User?     @relation("PatientDocumentUploadedBy", fields: [uploadedById], references: [id])
+  uploadedAt   DateTime  @default(now())
+
+  // Soft delete: the row stays for the audit trail, the blob is really removed.
+  deletedAt    DateTime?
+  deletedById  String?
+  deletedBy    User?     @relation("PatientDocumentDeletedBy", fields: [deletedById], references: [id])
+
+  // The list query is always "this patient's documents, most recent first".
+  @@index([patientId, uploadedAt])
 }
 
 // -----------------------------------------------------------------------------
