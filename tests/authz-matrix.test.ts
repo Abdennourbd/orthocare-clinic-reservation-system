@@ -22,6 +22,10 @@ import {
   POST as patientDocumentsCreateRoute,
 } from "@/app/api/admin/patients/[id]/documents/route";
 import {
+  GET as documentDownloadRoute,
+  DELETE as documentDeleteRoute,
+} from "@/app/api/admin/documents/[id]/route";
+import {
   GET as appointmentsListRoute,
   POST as appointmentsCreateRoute,
 } from "@/app/api/admin/appointments/route";
@@ -265,6 +269,28 @@ const ROUTES: RouteRow[] = [
     // (400), before any patient lookup.
     okStatus: 400,
     handler: patientDocumentsCreateRoute,
+  },
+  {
+    method: "GET",
+    scanPath: "/api/admin/documents/[id]",
+    requestPath: "/api/admin/documents/does-not-exist",
+    params: { id: "does-not-exist" },
+    allowed: [Role.ADMIN, Role.RECEPTIONIST],
+    // Task 15 step 4 — an authorized actor requesting an unknown/deleted
+    // document id gets the indistinguishable 404 (proves the guard runs
+    // before the DB lookup, not that the route is broken).
+    okStatus: 404,
+    handler: documentDownloadRoute,
+  },
+  {
+    method: "DELETE",
+    scanPath: "/api/admin/documents/[id]",
+    requestPath: "/api/admin/documents/does-not-exist",
+    params: { id: "does-not-exist" },
+    // Task 15 step 4 — ADMIN only: the receptionist must get 403 on DELETE.
+    allowed: [Role.ADMIN],
+    okStatus: 404,
+    handler: documentDeleteRoute,
   },
   {
     method: "GET",

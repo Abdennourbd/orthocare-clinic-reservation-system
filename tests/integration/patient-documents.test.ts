@@ -8,6 +8,10 @@ import {
   POST as patientDocumentsPostRoute,
   GET as patientDocumentsGetRoute,
 } from "@/app/api/admin/patients/[id]/documents/route";
+import {
+  GET as documentDownloadRoute,
+  DELETE as documentDeleteRoute,
+} from "@/app/api/admin/documents/[id]/route";
 
 // The real SDK is never exercised in CI: the whole @vercel/blob module is
 // mocked at its boundary, so the route runs its REAL code path —
@@ -22,9 +26,11 @@ vi.mock("@vercel/blob", () => ({
   del: vi.fn(),
 }));
 
-import { put } from "@vercel/blob";
+import { put, get, del } from "@vercel/blob";
 
 const mockedPut = vi.mocked(put);
+const mockedGet = vi.mocked(get);
+const mockedDel = vi.mocked(del);
 
 // A real JPEG signature (FF D8 FF) followed by a JFIF marker and filler —
 // the same fixture shape as src/lib/documents/mime.test.ts.
@@ -54,6 +60,8 @@ beforeEach(() => {
   vi.stubEnv("BLOB_READ_WRITE_TOKEN", "test-blob-token-for-vitest-only");
   mockedPut.mockReset();
   mockedPut.mockResolvedValue({} as Awaited<ReturnType<typeof put>>);
+  mockedGet.mockReset();
+  mockedDel.mockReset();
 });
 
 afterAll(() => {
@@ -140,6 +148,34 @@ async function listRequest(patientId: string, cookie: string) {
       headers: { cookie },
     }),
     ctx(patientId),
+  );
+}
+
+function streamOf(bytes: Uint8Array<ArrayBuffer>): ReadableStream<Uint8Array> {
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(bytes);
+      controller.close();
+    },
+  });
+}
+
+async function downloadRequest(documentId: string, cookie: string) {
+  return documentDownloadRoute(
+    new NextRequest(`http://localhost:3000/api/admin/documents/${documentId}`, {
+      headers: { cookie },
+    }),
+    ctx(documentId),
+  );
+}
+
+async function deleteDocumentRequest(documentId: string, cookie: string) {
+  return documentDeleteRoute(
+    new NextRequest(`http://localhost:3000/api/admin/documents/${documentId}`, {
+      method: "DELETE",
+      headers: { cookie },
+    }),
+    ctx(documentId),
   );
 }
 
@@ -491,5 +527,246 @@ describe("GET /api/admin/patients/[id]/documents", () => {
     const body = (await response.json()) as { error: { code: string; message: string } };
     expect(body.error.code).toBe("PATIENT_ANONYMIZED");
     expect(body.error.message).toBe("Cette fiche a été anonymisée et ne peut plus être modifiée.");
+  });
+});
+
+describe("GET /api/admin/documents/[id] (download — step 4)", () => {
+  it("streams the bytes with the stored Content-Type and an attachment Content-Disposition, and audits the download", async () => {
+    const staff = await createStaff();
+    const cookie = await cookieFor(staff);
+    const patient = await createPatient();
+    const bytes = realJpegBytes(1024);
+
+    const upload = await uploadRequest(patient.id, cookie, { bytes, name: "radio-b.jpg" });
+    expect(upload.status).toBe(201);
+    const docId = ((await upload.json()) as { id: string }).id;
+
+    mockedGet.mockResolvedValue({
+      statusCode: 200,
+      stream: streamOf(bytes),
+    } as unknown as Awaited<ReturnType<typeof get>>);
+
+    const response = await downloadRequest(docId, cookie);
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Content-Type")).toBe("image/jpeg");
+    const disposition = response.headers.get("Content-Disposition") ?? "";
+    expect(disposition.startsWith("attachment; filename=")).toBe(true);
+    expect(disposition).toContain("radio-b.jpg");
+    // The streamed bytes are the uploaded ones, end to end.
+    expect(new Uint8Array(await response.arrayBuffer())).toEqual(bytes);
+    // The adapter's private-access contract, same as the upload control.
+    expect(mockedGet).toHaveBeenCalledTimes(1);
+    expect(mockedGet.mock.calls[0][1]).toMatchObject({ access: "private" });
+
+    const audit = await lastAudit(AuditAction.PATIENT_DOCUMENT_DOWNLOADED);
+    expect(audit?.actorType).toBe(AuditActorType.STAFF);
+    expect(audit?.userId).toBe(staff.id);
+    expect(audit?.entityType).toBe("PatientDocument");
+    expect(audit?.entityId).toBe(docId);
+    const serialized = JSON.stringify(audit?.detail);
+    expect(serialized).not.toContain("radio-b.jpg");
+    expect(serialized).not.toContain("blobKey");
+    expect(serialized).toContain(patient.id);
+  });
+
+  it("encodes an Arabic name with an apostrophe per RFC 5987 — exact filename*=UTF-8'' header, ASCII fallback present", async () => {
+    const staff = await createStaff();
+    const cookie = await cookieFor(staff);
+    const patient = await createPatient();
+
+    const upload = await uploadRequest(patient.id, cookie, { name: "radio d'أشعة.jpg" });
+    expect(upload.status).toBe(201);
+    const docId = ((await upload.json()) as { id: string }).id;
+
+    const bytes = realJpegBytes(64);
+    mockedGet.mockResolvedValue({
+      statusCode: 200,
+      stream: streamOf(bytes),
+    } as unknown as Awaited<ReturnType<typeof get>>);
+
+    const response = await downloadRequest(docId, cookie);
+    expect(response.status).toBe(200);
+    // Hand-computed expectation (NOT recomputed with the route's own code):
+    //   encodeURIComponent then ' -> %27; non-ASCII -> '_' in the fallback.
+    expect(response.headers.get("Content-Disposition")).toBe(
+      `attachment; filename="radio d'____.jpg"; filename*=UTF-8''radio%20d%27%D8%A3%D8%B4%D8%B9%D8%A9.jpg`,
+    );
+  });
+
+  it("404-indistinguishable: a deleted doc and a nonexistent id produce byte-identical 404s on GET and DELETE", async () => {
+    const staff = await createStaff(Role.ADMIN);
+    const cookie = await cookieFor(staff);
+    const patient = await createPatient();
+
+    const upload = await uploadRequest(patient.id, cookie);
+    expect(upload.status).toBe(201);
+    const docId = ((await upload.json()) as { id: string }).id;
+
+    const deleted = await deleteDocumentRequest(docId, cookie);
+    expect(deleted.status).toBe(200);
+
+    const getDeleted = await downloadRequest(docId, cookie);
+    const getMissing = await downloadRequest("does-not-exist", cookie);
+    const deleteDeleted = await deleteDocumentRequest(docId, cookie);
+    const deleteMissing = await deleteDocumentRequest("does-not-exist", cookie);
+
+    for (const response of [getDeleted, getMissing, deleteDeleted, deleteMissing]) {
+      expect(response.status).toBe(404);
+    }
+    // Same status AND same body for all four — existence is never confirmed.
+    const bodies = await Promise.all(
+      [getDeleted, getMissing, deleteDeleted, deleteMissing].map((r) => r.text()),
+    );
+    expect(new Set(bodies).size).toBe(1);
+  });
+
+  it("anonymized chart: downloading the patient's document returns the byte-identical indistinguishable 404", async () => {
+    const staff = await createStaff(Role.ADMIN);
+    const cookie = await cookieFor(staff);
+    const patient = await createPatient();
+
+    const upload = await uploadRequest(patient.id, cookie);
+    expect(upload.status).toBe(201);
+    const docId = ((await upload.json()) as { id: string }).id;
+
+    // Route-impossible state: no route callable from here can set
+    // anonymizedAt on an existing chart (the anonymize route erases names
+    // in the same transaction), so it is set directly via getPrisma() —
+    // the only way to pin the read-closure guard.
+    await getPrisma().patient.update({
+      where: { id: patient.id },
+      data: { anonymizedAt: new Date() },
+    });
+
+    const response = await downloadRequest(docId, cookie);
+    const missing = await downloadRequest("does-not-exist", cookie);
+
+    expect(response.status).toBe(404);
+    expect(await response.text()).toBe(await missing.text());
+    // Read-closure only: nothing was deleted, the blob was never touched.
+    const row = await getPrisma().patientDocument.findUniqueOrThrow({ where: { id: docId } });
+    expect(row.deletedAt).toBeNull();
+    expect(mockedGet).not.toHaveBeenCalled();
+    expect(await lastAudit(AuditAction.PATIENT_DOCUMENT_DOWNLOADED)).toBeNull();
+  });
+
+  it("anonymized chart: deleting the patient's document returns the byte-identical indistinguishable 404", async () => {
+    const staff = await createStaff(Role.ADMIN);
+    const cookie = await cookieFor(staff);
+    const patient = await createPatient();
+
+    const upload = await uploadRequest(patient.id, cookie);
+    expect(upload.status).toBe(201);
+    const docId = ((await upload.json()) as { id: string }).id;
+
+    // Route-impossible state, same reasoning as the GET test above.
+    await getPrisma().patient.update({
+      where: { id: patient.id },
+      data: { anonymizedAt: new Date() },
+    });
+
+    const response = await deleteDocumentRequest(docId, cookie);
+    const missing = await deleteDocumentRequest("does-not-exist", cookie);
+
+    expect(response.status).toBe(404);
+    expect(await response.text()).toBe(await missing.text());
+    // Nothing was soft-deleted, the blob was never touched.
+    const row = await getPrisma().patientDocument.findUniqueOrThrow({ where: { id: docId } });
+    expect(row.deletedAt).toBeNull();
+    expect(mockedDel).not.toHaveBeenCalled();
+    expect(await lastAudit(AuditAction.PATIENT_DOCUMENT_DELETED)).toBeNull();
+  });
+});
+
+describe("DELETE /api/admin/documents/[id] (soft delete — step 4)", () => {
+  it("soft-deletes the row FIRST, then deletes the blob; audits blobDeleted: true; never exposes blobKey", async () => {
+    const staff = await createStaff(Role.ADMIN);
+    const cookie = await cookieFor(staff);
+    const patient = await createPatient();
+
+    const upload = await uploadRequest(patient.id, cookie, { name: "radio-c.jpg" });
+    expect(upload.status).toBe(201);
+    const docId = ((await upload.json()) as { id: string }).id;
+    const rowBefore = await getPrisma().patientDocument.findUniqueOrThrow({ where: { id: docId } });
+
+    // Order proof: at the moment the SDK delete fires, the row must ALREADY
+    // be soft-deleted (DB first, blob second).
+    let deletedAtWhenDelCalled: Date | null = null;
+    mockedDel.mockImplementationOnce(async () => {
+      const row = await getPrisma().patientDocument.findUniqueOrThrow({ where: { id: docId } });
+      deletedAtWhenDelCalled = row.deletedAt;
+    });
+
+    const response = await deleteDocumentRequest(docId, cookie);
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { blobDeleted: boolean };
+    expect(body.blobDeleted).toBe(true);
+
+    const row = await getPrisma().patientDocument.findUniqueOrThrow({ where: { id: docId } });
+    expect(row.deletedAt).not.toBeNull();
+    expect(row.deletedById).toBe(staff.id);
+    expect(row.blobKey).toBe(rowBefore.blobKey);
+    expect(mockedDel).toHaveBeenCalledTimes(1);
+    // The DB update ran before the blob delete.
+    expect(deletedAtWhenDelCalled).not.toBeNull();
+
+    const audit = await lastAudit(AuditAction.PATIENT_DOCUMENT_DELETED);
+    expect(audit?.actorType).toBe(AuditActorType.STAFF);
+    expect(audit?.userId).toBe(staff.id);
+    expect(audit?.entityType).toBe("PatientDocument");
+    expect(audit?.entityId).toBe(docId);
+    const serialized = JSON.stringify(audit?.detail);
+    expect(serialized).toContain("blobDeleted");
+    expect(serialized).toContain("true");
+    expect(serialized).not.toContain("radio-c.jpg");
+    expect(serialized).not.toContain("blobKey");
+    expect(serialized).toContain(patient.id);
+  });
+
+  it("blob delete fails -> still 200 with blobDeleted: false, row stays soft-deleted, audit says so", async () => {
+    const staff = await createStaff(Role.ADMIN);
+    const cookie = await cookieFor(staff);
+    const patient = await createPatient();
+
+    const upload = await uploadRequest(patient.id, cookie);
+    expect(upload.status).toBe(201);
+    const docId = ((await upload.json()) as { id: string }).id;
+
+    mockedDel.mockRejectedValueOnce(new Error("network down"));
+
+    const response = await deleteDocumentRequest(docId, cookie);
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { blobDeleted: boolean };
+    expect(body.blobDeleted).toBe(false);
+
+    const row = await getPrisma().patientDocument.findUniqueOrThrow({ where: { id: docId } });
+    expect(row.deletedAt).not.toBeNull();
+    expect(row.deletedById).toBe(staff.id);
+
+    const audit = await lastAudit(AuditAction.PATIENT_DOCUMENT_DELETED);
+    const detail = audit?.detail as { blobDeleted?: boolean };
+    expect(detail.blobDeleted).toBe(false);
+  });
+
+  it("a soft-deleted document disappears from the step-3 list", async () => {
+    const staff = await createStaff(Role.ADMIN);
+    const cookie = await cookieFor(staff);
+    const patient = await createPatient();
+
+    const upload = await uploadRequest(patient.id, cookie, { name: "radio-d.jpg" });
+    expect(upload.status).toBe(201);
+    const docId = ((await upload.json()) as { id: string }).id;
+
+    const before = await listRequest(patient.id, cookie);
+    expect(((await before.json()) as { total: number }).total).toBe(1);
+
+    const del = await deleteDocumentRequest(docId, cookie);
+    expect(del.status).toBe(200);
+
+    const after = await listRequest(patient.id, cookie);
+    expect(after.status).toBe(200);
+    const body = (await after.json()) as { items: unknown[]; total: number };
+    expect(body.total).toBe(0);
+    expect(body.items).toHaveLength(0);
   });
 });
