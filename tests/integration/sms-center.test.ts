@@ -2,6 +2,8 @@ import { describe, it, expect, beforeEach, afterAll, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { getPrisma } from "@/lib/db";
 import {
+  AppointmentSource,
+  AppointmentStatus,
   AuditAction,
   AuditActorType,
   Role,
@@ -9,11 +11,22 @@ import {
   SmsStatus,
 } from "@/generated/prisma/client";
 import { createSessionToken, SESSION_COOKIE_NAME } from "@/lib/auth/session";
+import {
+  formatClinicLocalTime,
+  toClinicLocalDateString,
+} from "@/lib/time/clinicTime";
+import { localStart, nextOpenLocalDate } from "./helpers/testDates";
 
-// Task 16 — integration tests for the first SMS Center route:
-// POST /api/admin/sms/single. Setup mirrors appointments-api.test.ts (users,
+// Task 16 — integration tests for the first three SMS Center routes:
+// POST /api/admin/sms/single, /api/admin/sms/broadcast/preview and
+// /api/admin/sms/broadcast. Setup mirrors appointments-api.test.ts (users,
 // session cookie, NextRequest construction); the mock provider records every
 // send as an SmsMessage row we can assert on.
+//
+// Broadcast fixtures are seeded on the CLINIC-local today (computed via
+// toClinicLocalDateString + localStart, never a hardcoded date — same trap as
+// tests/integration/helpers/testDates.ts documents for booking dates), so the
+// routes' default date always matches the seeded day.
 
 beforeEach(async () => {
   vi.stubEnv("SESSION_SECRET", "test-session-secret-for-vitest-only");
@@ -93,6 +106,59 @@ async function createPatient(data: {
         : {}),
     },
   });
+}
+
+async function createService(name: string = "Consultation") {
+  return getPrisma().service.create({
+    data: { name, slug: name.toLowerCase(), description: "Test", durationMinutes: 30, active: true },
+  });
+}
+
+async function createAppointment(patientId: string, serviceId: string, startTime: Date, status: AppointmentStatus) {
+  return getPrisma().appointment.create({
+    data: {
+      patientId,
+      serviceId,
+      startTime,
+      endTime: new Date(startTime.getTime() + 30 * 60000),
+      status,
+      source: AppointmentSource.ONLINE,
+    },
+  });
+}
+
+/**
+ * The broadcast fixture day: the CLINIC-local today with five appointments —
+ * pA (CONFIRMED, reachable), pB (CONFIRMED, opted out), pC (PENDING,
+ * reachable), pD (CANCELLED), pE (CONFIRMED but inactive) — plus one extra
+ * CONFIRMED appointment of pA on ANOTHER open day that must never leak into
+ * today's audience. Expected split (splitAudience): recipients pA + pC
+ * (recipientCount 2); excluded pB OPTED_OUT, pD CANCELLED, pE INACTIVE.
+ */
+async function seedBroadcastDay() {
+  const today = toClinicLocalDateString(new Date());
+  const service = await createService();
+
+  const [pA, pB, pC, pD, pE] = await Promise.all([
+    createPatient({ firstName: "Amine", lastName: "Belkacem", phone: "0550300101" }),
+    createPatient({ firstName: "Nadia", lastName: "Hamdi", phone: "0550300102", messagingOptOut: true }),
+    createPatient({ firstName: "Sofiane", lastName: "Merabet", phone: "0550300103" }),
+    createPatient({ firstName: "Lila", lastName: "Cherif", phone: "0550300104" }),
+    createPatient({ firstName: "Omar", lastName: "Ziani", phone: "0550300105", active: false }),
+  ]);
+
+  const apptA = await createAppointment(pA.id, service.id, localStart(today, "10:00"), AppointmentStatus.CONFIRMED);
+  const apptB = await createAppointment(pB.id, service.id, localStart(today, "10:30"), AppointmentStatus.CONFIRMED);
+  const apptC = await createAppointment(pC.id, service.id, localStart(today, "11:00"), AppointmentStatus.PENDING);
+  const apptD = await createAppointment(pD.id, service.id, localStart(today, "11:30"), AppointmentStatus.CANCELLED);
+  const apptE = await createAppointment(pE.id, service.id, localStart(today, "12:00"), AppointmentStatus.CONFIRMED);
+
+  // pA's second appointment, days later on another open day: same patient,
+  // but a different clinic-local date — the broadcast targets ONE day only.
+  const otherDate = await nextOpenLocalDate(5);
+  const otherAppt = await createAppointment(pA.id, service.id, localStart(otherDate, "10:00"), AppointmentStatus.CONFIRMED);
+
+  return { today, service, pA, pB, pC, pD, pE, apptA, apptB, apptC, apptD, apptE, otherDate, otherAppt };
 }
 
 describe("POST /api/admin/sms/single", () => {
@@ -175,5 +241,201 @@ describe("POST /api/admin/sms/single", () => {
     expect(response.status).toBe(400);
     expect((await response.json()).error.code).toBe("VALIDATION_ERROR");
     expect(await getPrisma().smsMessage.count()).toBe(0);
+  });
+});
+
+describe("POST /api/admin/sms/broadcast/preview", () => {
+  it("returns today's audience with exact exclusion reasons + sample body, writing NOTHING", async () => {
+    const seed = await seedBroadcastDay();
+    const admin = await createStaff(Role.ADMIN);
+    const cookie = await cookieFor(admin);
+    const { POST: previewRoute } = await import("@/app/api/admin/sms/broadcast/preview/route");
+
+    const beforeMessages = await getPrisma().smsMessage.count();
+    // No date passed: the route must default to the CLINIC-local today.
+    const response = await previewRoute(
+      postRequest("/api/admin/sms/broadcast/preview", { delayMinutes: 15 }, cookie),
+    );
+    expect(response.status).toBe(200);
+    const body = await response.json();
+
+    expect(body.date).toBe(seed.today);
+    expect(body.delayMinutes).toBe(15);
+    expect(body.recipientCount).toBe(2);
+    expect(body.recipients.map((r: { patientId: string }) => r.patientId).sort()).toEqual(
+      [seed.pA.id, seed.pC.id].sort(),
+    );
+    expect(typeof body.recipients[0].startTime).toBe("string");
+    expect(body.recipients[0].phone).toBe("+213550300101");
+
+    expect(body.excluded).toHaveLength(3);
+    const reasonByAppointment = new Map(
+      body.excluded.map((e: { appointmentId: string; reason: string }) => [e.appointmentId, e.reason]),
+    );
+    expect(reasonByAppointment.get(seed.apptB.id)).toBe("OPTED_OUT");
+    expect(reasonByAppointment.get(seed.apptD.id)).toBe("CANCELLED");
+    expect(reasonByAppointment.get(seed.apptE.id)).toBe("INACTIVE");
+    // pA's other-day appointment must not leak into today's audience.
+    expect(reasonByAppointment.has(seed.otherAppt.id)).toBe(false);
+    expect(body.recipients.some((r: { appointmentId: string }) => r.appointmentId === seed.otherAppt.id)).toBe(false);
+
+    expect(body.sampleBody).toContain("retardé");
+
+    // A preview is a pure read: no message, no batch row.
+    expect(await getPrisma().smsMessage.count()).toBe(beforeMessages);
+    expect(await getPrisma().smsBroadcast.count()).toBe(0);
+  });
+});
+
+describe("POST /api/admin/sms/broadcast", () => {
+  it("sends the delay broadcast: counters, DELAY rows sharing the batchId (no appointmentId), batch row + audit", async () => {
+    const seed = await seedBroadcastDay();
+    const admin = await createStaff(Role.ADMIN);
+    const cookie = await cookieFor(admin);
+    const { POST: broadcastRoute } = await import("@/app/api/admin/sms/broadcast/route");
+
+    const response = await broadcastRoute(
+      postRequest("/api/admin/sms/broadcast", { delayMinutes: 15, idempotencyKey: "send-key-0001" }, cookie),
+    );
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.alreadySent).toBe(false);
+    // pB (opted out) and pE (inactive) are EXCLUDED by the audience split —
+    // they never reach the dispatcher, so suppressedCount stays 0; only
+    // dispatcher-null returns would count as suppressed.
+    expect(body.sentCount).toBe(2);
+    expect(body.suppressedCount).toBe(0);
+    expect(body.failedCount).toBe(0);
+    expect(body.recipientCount).toBe(2);
+
+    const rows = await getPrisma().smsMessage.findMany({ where: { batchId: body.batchId } });
+    expect(rows).toHaveLength(2);
+    for (const row of rows) {
+      expect(row.type).toBe(SmsMessageType.DELAY);
+      // DELAY rows never carry an appointmentId: the (appointmentId, type)
+      // unique index would otherwise block a second broadcast the same day.
+      expect(row.appointmentId).toBeNull();
+      expect(row.sentById).toBe(admin.id);
+      expect(row.status).toBe(SmsStatus.SENT);
+    }
+
+    const batch = await getPrisma().smsBroadcast.findUnique({ where: { id: body.batchId } });
+    expect(batch).not.toBeNull();
+    expect(batch!.date).toBe(seed.today);
+    expect(batch!.delayMinutes).toBe(15);
+    expect(batch!.idempotencyKey).toBe("send-key-0001");
+    expect(batch!.recipientCount).toBe(2);
+    expect(batch!.sentCount).toBe(2);
+    expect(batch!.suppressedCount).toBe(0);
+    expect(batch!.failedCount).toBe(0);
+    expect(batch!.sentById).toBe(admin.id);
+
+    const audit = await getPrisma().auditLog.findFirst({
+      where: { action: AuditAction.SMS_SENT, entityType: "SmsBroadcast", entityId: body.batchId },
+    });
+    expect(audit).not.toBeNull();
+    expect(audit!.userId).toBe(admin.id);
+    const detail = (audit!.detail ?? {}) as Record<string, unknown>;
+    expect(detail.recipientCount).toBe(2);
+  });
+
+  it("double-submit with the SAME idempotencyKey: same batchId, alreadySent true, ZERO extra rows", async () => {
+    await seedBroadcastDay();
+    const admin = await createStaff(Role.ADMIN);
+    const cookie = await cookieFor(admin);
+    const { POST: broadcastRoute } = await import("@/app/api/admin/sms/broadcast/route");
+
+    const payload = { delayMinutes: 15, idempotencyKey: "double-key-001" };
+    const first = await broadcastRoute(postRequest("/api/admin/sms/broadcast", payload, cookie));
+    expect(first.status).toBe(200);
+    const firstBody = await first.json();
+    expect(firstBody.alreadySent).toBe(false);
+
+    const delayCountAfterFirst = await getPrisma().smsMessage.count({
+      where: { type: SmsMessageType.DELAY },
+    });
+
+    // The exact same POST (double click / retried request).
+    const second = await broadcastRoute(postRequest("/api/admin/sms/broadcast", payload, cookie));
+    expect(second.status).toBe(200);
+    const secondBody = await second.json();
+    expect(secondBody.alreadySent).toBe(true);
+    expect(secondBody.batchId).toBe(firstBody.batchId);
+    expect(secondBody.sentCount).toBe(firstBody.sentCount);
+
+    expect(
+      await getPrisma().smsMessage.count({ where: { type: SmsMessageType.DELAY } }),
+    ).toBe(delayCountAfterFirst);
+    expect(await getPrisma().smsBroadcast.count()).toBe(1);
+  });
+
+  it("a DIFFERENT idempotencyKey the same day is a new batch (2 more DELAY rows) — designed behavior", async () => {
+    await seedBroadcastDay();
+    const admin = await createStaff(Role.ADMIN);
+    const cookie = await cookieFor(admin);
+    const { POST: broadcastRoute } = await import("@/app/api/admin/sms/broadcast/route");
+
+    const first = await broadcastRoute(
+      postRequest("/api/admin/sms/broadcast", { delayMinutes: 15, idempotencyKey: "first-key-0001" }, cookie),
+    );
+    const firstBody = await first.json();
+    expect(firstBody.alreadySent).toBe(false);
+
+    const second = await broadcastRoute(
+      postRequest("/api/admin/sms/broadcast", { delayMinutes: 15, idempotencyKey: "second-key-002" }, cookie),
+    );
+    expect(second.status).toBe(200);
+    const secondBody = await second.json();
+    expect(secondBody.alreadySent).toBe(false);
+    expect(secondBody.batchId).not.toBe(firstBody.batchId);
+
+    const secondBatchRows = await getPrisma().smsMessage.findMany({
+      where: { batchId: secondBody.batchId },
+    });
+    expect(secondBatchRows).toHaveLength(2);
+    expect(await getPrisma().smsBroadcast.count()).toBe(2);
+    expect(await getPrisma().smsMessage.count({ where: { type: SmsMessageType.DELAY } })).toBe(4);
+  });
+
+  it("RECEPTIONIST is blocked from preview AND broadcast, zero rows created", async () => {
+    await seedBroadcastDay();
+    const staff = await createStaff(Role.RECEPTIONIST);
+    const cookie = await cookieFor(staff);
+    const { POST: previewRoute } = await import("@/app/api/admin/sms/broadcast/preview/route");
+    const { POST: broadcastRoute } = await import("@/app/api/admin/sms/broadcast/route");
+
+    const preview = await previewRoute(
+      postRequest("/api/admin/sms/broadcast/preview", { delayMinutes: 15 }, cookie),
+    );
+    expect(preview.status).toBe(403);
+
+    const broadcast = await broadcastRoute(
+      postRequest("/api/admin/sms/broadcast", { delayMinutes: 15, idempotencyKey: "blocked-key-01" }, cookie),
+    );
+    expect(broadcast.status).toBe(403);
+
+    expect(await getPrisma().smsMessage.count()).toBe(0);
+    expect(await getPrisma().smsBroadcast.count()).toBe(0);
+  });
+
+  it("DELAY body carries the recipient's slot time and the delayMinutes", async () => {
+    const seed = await seedBroadcastDay();
+    const admin = await createStaff(Role.ADMIN);
+    const cookie = await cookieFor(admin);
+    const { POST: broadcastRoute } = await import("@/app/api/admin/sms/broadcast/route");
+
+    const response = await broadcastRoute(
+      postRequest("/api/admin/sms/broadcast", { delayMinutes: 15, idempotencyKey: "body-key-0001" }, cookie),
+    );
+    const body = await response.json();
+
+    const rowForA = await getPrisma().smsMessage.findFirst({
+      where: { batchId: body.batchId, patientId: seed.pA.id },
+    });
+    expect(rowForA).not.toBeNull();
+    // The slot time is rendered clinic-local (the seeded 10:00 local start)
+    // and the delay minutes appear verbatim.
+    expect(rowForA!.body).toContain(formatClinicLocalTime(seed.apptA.startTime));
+    expect(rowForA!.body).toContain("15");
   });
 });

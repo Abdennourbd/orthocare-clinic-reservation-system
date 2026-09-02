@@ -37,6 +37,8 @@ import { POST as appointmentRescheduleRoute } from "@/app/api/admin/appointments
 import { GET as appointmentsPendingRoute } from "@/app/api/admin/appointments/pending/route";
 import { GET as appointmentsSearchRoute } from "@/app/api/admin/appointments/search/route";
 import { POST as smsSingleRoute } from "@/app/api/admin/sms/single/route";
+import { POST as smsBroadcastPreviewRoute } from "@/app/api/admin/sms/broadcast/preview/route";
+import { POST as smsBroadcastRoute } from "@/app/api/admin/sms/broadcast/route";
 
 // Task 12 — the authorization matrix (plan.md §Testing strategy):
 //   one table-driven test walking EVERY /api/admin/* route ×
@@ -365,6 +367,21 @@ const ROUTES: RouteRow[] = [
     // patient lookup.
     okStatus: 400,
     handler: smsSingleRoute,
+  },
+  {
+    method: "POST",
+    scanPath: "/api/admin/sms/broadcast/preview",
+    // Task 16 — only ADMIN sees the broadcast audience / triggers the send.
+    allowed: [Role.ADMIN],
+    okStatus: 400,
+    handler: smsBroadcastPreviewRoute,
+  },
+  {
+    method: "POST",
+    scanPath: "/api/admin/sms/broadcast",
+    allowed: [Role.ADMIN],
+    okStatus: 400,
+    handler: smsBroadcastRoute,
   },
 ];
 
