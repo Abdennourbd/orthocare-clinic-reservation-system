@@ -268,6 +268,8 @@ describe("sendMessage dispatcher", () => {
 
     expect(msg).not.toBeNull();
     expect(msg!.body).toBe("Bonjour, la clinique vous attend.");
+    // Explicit null: the union makes mixing bodyOverride with a templateKey a
+    // compile error, and the dispatcher branch persists null, never undefined.
     expect(msg!.templateId).toBeNull();
     expect(msg!.type).toBe(SmsMessageType.MANUAL);
     expect(msg!.status).toBe(SmsStatus.SENT);

@@ -50,19 +50,27 @@ export type SendMessageInput = {
   patientId: string;
   /** E.164 recipient. */
   to: string;
-  /** Template key into `messageTemplates` Settings. Unused when
-   * `bodyOverride` is present (template reading is skipped entirely). */
-  templateKey?: MessageTemplateKey;
-  /** Placeholders substituted into the template. */
-  vars?: Record<string, string>;
-  /** Free-text body (Task 16 manual sends) used verbatim instead of a
-   * template. The route's Zod schema enforces non-empty / max 480 chars; the
-   * dispatcher re-checks defensively because it is a public function. */
-  bodyOverride?: string;
   appointmentId?: string;
   batchId?: string;
   sentById?: string;
-};
+} & (
+  | {
+      /** Free-text body (Task 16 manual sends) used verbatim instead of a
+       * template. The route's Zod schema enforces non-empty / max 480 chars;
+       * the dispatcher re-checks defensively because it is a public function. */
+      bodyOverride: string;
+      /** Exclusive with `bodyOverride` — the template layer is never touched. */
+      templateKey?: never;
+      vars?: never;
+    }
+  | {
+      bodyOverride?: never;
+      /** Template key into `messageTemplates` Settings. */
+      templateKey: MessageTemplateKey;
+      /** Placeholders substituted into the template. */
+      vars: Record<string, string>;
+    }
+);
 
 /**
  * Send one outbound message through the active provider and record it in
@@ -88,18 +96,6 @@ export async function sendMessage(
 ): Promise<SmsMessage | null> {
   const prisma = getPrisma();
 
-  // 0. Free-text override (Task 16 manual sends): validated defensively even
-  // though the route's Zod schema enforces the same bounds — the dispatcher
-  // is a public function and must never persist a body it was not meant to.
-  let manualBody: string | null = null;
-  if (input.bodyOverride !== undefined) {
-    const trimmed = input.bodyOverride.trim();
-    if (trimmed.length === 0 || trimmed.length > 480) {
-      throw new Error("bodyOverride invalide");
-    }
-    manualBody = trimmed;
-  }
-
   // 1. Opt-out gate (non-transactional only). Task 13 étape 5 (§Contraintes
   // point 6): a soft-deleted record (`active: false`) must stop receiving
   // NON-transactional messages too, same as an explicit opt-out — before
@@ -115,14 +111,28 @@ export async function sendMessage(
     if (patient?.messagingOptOut || patient?.active === false) return null;
   }
 
-  // 2. Render the body from the (admin-editable) template — skipped entirely
-  // when a free-text override is supplied.
-  const body =
-    manualBody ??
-    renderTemplate(
-      await readMessageTemplate(input.templateKey!),
-      input.vars ?? {},
+  // 2. Resolve the body: a free-text override (Task 16 manual sends) is used
+  // verbatim — validated defensively even though the route's Zod schema
+  // enforces the same bounds, because the dispatcher is a public function —
+  // and persists templateId null; otherwise the (admin-editable) template is
+  // rendered. The union on SendMessageInput makes mixing the two a compile
+  // error, and the narrowing here keeps the branches honest.
+  let body: string;
+  let templateId: string | null;
+  if (input.bodyOverride !== undefined) {
+    const trimmed = input.bodyOverride.trim();
+    if (trimmed.length === 0 || trimmed.length > 480) {
+      throw new Error("bodyOverride invalide");
+    }
+    body = trimmed;
+    templateId = null;
+  } else {
+    body = renderTemplate(
+      await readMessageTemplate(input.templateKey),
+      input.vars,
     );
+    templateId = input.templateKey;
+  }
 
   // 3. Record the send. A unique-violation here means this appointment+type
   // was already messaged. If the previous attempt FAILED the patient never
@@ -137,7 +147,7 @@ export async function sendMessage(
         body,
         patientId: input.patientId,
         type: input.type,
-        templateId: input.templateKey,
+        templateId,
         batchId: input.batchId,
         provider: provider.name,
         status: SmsStatus.SENDING,
