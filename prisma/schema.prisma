@@ -50,6 +50,7 @@ model User {
   patientDocumentsDeleted  PatientDocument[] @relation("PatientDocumentDeletedBy")
   scheduleExceptions ScheduleException[]
   smsMessagesSent    SmsMessage[]
+  smsBroadcasts      SmsBroadcast[]
   notifications      Notification[]
   auditLogs          AuditLog[]
 }
@@ -417,6 +418,7 @@ model WaitlistEntry {
 
 // -----------------------------------------------------------------------------
 // Task 7: Messaging (SmsMessage + Notification) — 3c schema slice.
+// Task 16 adds SmsBroadcast below: one row per staff delay-broadcast batch.
 //
 // Every outbound message is recorded in `SmsMessage` regardless of channel
 // (SMS or WhatsApp later); `provider` records which channel was actually used
@@ -469,6 +471,36 @@ model SmsMessage {
   @@unique([appointmentId, type])
   @@index([patientId])
   @@index([batchId])
+}
+
+// -----------------------------------------------------------------------------
+// Task 16: SmsBroadcast — one row per staff delay-broadcast batch.
+//
+// `id` doubles as the `batchId` stamped on each SmsMessage of the batch, so
+// the dashboard groups the individual rows without a join table. The unique
+// `idempotencyKey` is the double-click guard: a P2002 on it means the batch
+// was already sent — the route returns the existing row and sends nothing.
+// The counters record what the dispatcher did: `sentCount` delivered,
+// `suppressedCount` skipped because the patient opted out or is inactive
+// (sendMessage returned null), `failedCount` provider failures. `sentBy` is
+// optional -> ON DELETE SET NULL: losing the staff account must never destroy
+// the batch record.
+// -----------------------------------------------------------------------------
+
+model SmsBroadcast {
+  id              String   @id @default(cuid()) // doubles as batchId on its SmsMessage rows
+  date            String   // clinic-local YYYY-MM-DD targeted
+  delayMinutes    Int
+  idempotencyKey  String   @unique // double-click protection: P2002 → return existing batch, send nothing
+  recipientCount  Int
+  sentCount       Int      @default(0)
+  suppressedCount Int      @default(0) // opt-out/inactive — dispatcher returned null
+  failedCount     Int      @default(0)
+  sentById        String?
+  sentBy          User?    @relation(fields: [sentById], references: [id])
+  createdAt       DateTime @default(now())
+
+  @@index([createdAt])
 }
 
 enum NotificationType {
