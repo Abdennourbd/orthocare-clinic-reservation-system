@@ -274,8 +274,11 @@ export default function BroadcastForm({
               </table>
             </div>
           ) : (
+            // Zero-recipient day: the Exclus list above stays visible (it IS
+            // the audit of who was filtered out) but there is nothing to
+            // send, so the send button below is disabled too.
             <p className="text-sm text-slate-500" role="status">
-              Aucun rendez-vous concerné ce jour.
+              Aucun destinataire pour cette date.
             </p>
           )}
 
@@ -303,7 +306,7 @@ export default function BroadcastForm({
           <button
             type="button"
             onClick={() => void sendBroadcast()}
-            disabled={pending}
+            disabled={pending || preview.recipientCount === 0}
             className={buttonPrimary}
           >
             {pending ? "Envoi…" : "Envoyer la diffusion"}

@@ -5,9 +5,12 @@ import ManualSmsForm from "./ManualSmsForm";
 
 // Task 16 — ManualSmsForm component tests, mirroring AddVisitForm.test.tsx
 // conventions (fetchOnce helper, vi.stubGlobal("fetch", …), jsdom). The
-// success outcome is reported through the `onNotify` callback the shell
-// (SmsCenter) renders as the top banner, so the assertions check what the
-// shell will actually display.
+// patient search is SUBMIT-ONLY (final review convention ruling: every
+// patients GET is an audited PATIENT_RECORD_VIEWED + a draw from the shared
+// read pool), so the tests drive the "Rechercher" button / form submit
+// instead of a debounce. The success outcome is reported through the
+// `onNotify` callback the shell (SmsCenter) renders as the top banner, so
+// the assertions check what the shell will actually display.
 
 function fetchOnce(status: number, body: unknown) {
   return {
@@ -39,12 +42,35 @@ async function pickFirstPatient() {
   fireEvent.change(screen.getByLabelText("Rechercher un patient (nom ou téléphone)"), {
     target: { value: "Alaoui" },
   });
+  fireEvent.click(screen.getByRole("button", { name: "Rechercher" }));
   await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
   fireEvent.click(await screen.findByRole("button", { name: "Sofia Alaoui — +213550123456" }));
 }
 
 describe("ManualSmsForm", () => {
-  it("searches patients (debounced), posts { patientId, body } and reports success with the patient name", async () => {
+  it("submits the patient search from the search form's onSubmit (Enter key path)", async () => {
+    (fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      fetchOnce(200, { patients: [PATIENT] }),
+    );
+    render(<ManualSmsForm onNotify={vi.fn()} />);
+
+    fireEvent.change(screen.getByLabelText("Rechercher un patient (nom ou téléphone)"), {
+      target: { value: "Alaoui" },
+    });
+    // Enter in the input submits the search form — same wiring as
+    // AppointmentSearch.
+    const searchForm = (screen.getByLabelText("Rechercher un patient (nom ou téléphone)") as HTMLInputElement)
+      .form;
+    expect(searchForm).not.toBeNull();
+    fireEvent.submit(searchForm!);
+
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+    const [url] = (fetch as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(url).toBe("/api/admin/patients?q=Alaoui");
+    expect(await screen.findByRole("button", { name: "Sofia Alaoui — +213550123456" })).toBeInTheDocument();
+  });
+
+  it("searches patients (submit-only), posts { patientId, body } and reports success with the patient name", async () => {
     const onNotify = vi.fn();
     (fetch as ReturnType<typeof vi.fn>)
       .mockResolvedValueOnce(fetchOnce(200, { patients: [PATIENT] }))

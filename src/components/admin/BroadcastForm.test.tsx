@@ -134,6 +134,49 @@ describe("BroadcastForm", () => {
     expect(screen.queryByRole("button", { name: "Envoyer la diffusion" })).toBeNull();
   });
 
+  it("reuses the SAME idempotencyKey when retrying after a FAILED send", async () => {
+    const onNotify = vi.fn();
+    // Preview OK → send 500 → the key must survive so the retry lands on the
+    // same server-side batch instead of re-messaging the audience.
+    (fetch as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce(fetchOnce(200, PREVIEW))
+      .mockResolvedValueOnce(
+        fetchOnce(500, {
+          error: { code: "PROVIDER_ERROR", message: "Le fournisseur SMS est indisponible. Réessayez." },
+        }),
+      )
+      .mockResolvedValueOnce(fetchOnce(200, SEND_RESULT));
+    render(<BroadcastForm onNotify={onNotify} onSent={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Aperçu" }));
+    await screen.findByText("2 destinataire(s)");
+    fireEvent.click(screen.getByRole("button", { name: "Envoyer la diffusion" }));
+
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
+    // The failure renders inline; the preview and its key are untouched.
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Le fournisseur SMS est indisponible. Réessayez.",
+    );
+    expect(onNotify).not.toHaveBeenCalled();
+
+    // Retry WITHOUT touching date/delay: same fields, same key.
+    fireEvent.click(screen.getByRole("button", { name: "Envoyer la diffusion" }));
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(3));
+
+    const calls = (fetch as ReturnType<typeof vi.fn>).mock.calls;
+    const firstKey = JSON.parse(calls[1][1].body as string).idempotencyKey as string;
+    const retryKey = JSON.parse(calls[2][1].body as string).idempotencyKey as string;
+    expect(firstKey).toBeTruthy();
+    expect(retryKey).toBe(firstKey);
+    // The retry actually goes through and reports the batch.
+    await waitFor(() =>
+      expect(onNotify).toHaveBeenCalledWith({
+        kind: "success",
+        message: "3 envoyé(s), 1 ignoré(s), 0 échec(s) — lot batch-1",
+      }),
+    );
+  });
+
   it("disables the send button while pending (double-click protection layer 2)", async () => {
     const onNotify = vi.fn();
     // Preview resolves; the send NEVER does — controlled pending state.
