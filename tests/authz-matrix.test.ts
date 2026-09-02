@@ -18,6 +18,10 @@ import { GET as patientHistoryRoute } from "@/app/api/admin/patients/[id]/histor
 import { POST as patientVisitsRoute } from "@/app/api/admin/patients/[id]/visits/route";
 import { POST as patientAnonymizeRoute } from "@/app/api/admin/patients/[id]/anonymize/route";
 import {
+  GET as patientDocumentsRoute,
+  POST as patientDocumentsCreateRoute,
+} from "@/app/api/admin/patients/[id]/documents/route";
+import {
   GET as appointmentsListRoute,
   POST as appointmentsCreateRoute,
 } from "@/app/api/admin/appointments/route";
@@ -239,6 +243,28 @@ const ROUTES: RouteRow[] = [
     // as POST /api/admin/patients.
     okStatus: 400,
     handler: patientAnonymizeRoute,
+  },
+  {
+    method: "GET",
+    scanPath: "/api/admin/patients/[id]/documents",
+    requestPath: "/api/admin/patients/does-not-exist/documents",
+    params: { id: "does-not-exist" },
+    allowed: [Role.ADMIN, Role.RECEPTIONIST],
+    // An authorized actor requesting an unknown id gets 404 — proves the
+    // guard runs before the DB lookup, not that the route is broken.
+    okStatus: 404,
+    handler: patientDocumentsRoute,
+  },
+  {
+    method: "POST",
+    scanPath: "/api/admin/patients/[id]/documents",
+    requestPath: "/api/admin/patients/does-not-exist/documents",
+    params: { id: "does-not-exist" },
+    allowed: [Role.ADMIN, Role.RECEPTIONIST],
+    // requestAs() sends no body — formData parsing fails after the guard
+    // (400), before any patient lookup.
+    okStatus: 400,
+    handler: patientDocumentsCreateRoute,
   },
   {
     method: "GET",
