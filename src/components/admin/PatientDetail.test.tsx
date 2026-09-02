@@ -78,6 +78,9 @@ function installRouter(byUrl: Record<string, () => Response>) {
     const url = String(input);
     if (url in byUrl) return byUrl[url]();
     if (url.startsWith("/api/services")) return fetchOnce(200, { services: [] });
+    // Task 15 step 5 — PatientDocuments now mounts inside PatientDetail and
+    // fetches the (empty) documents list on load.
+    if (url.endsWith("/documents")) return fetchOnce(200, { items: [], total: 0 });
     throw new Error(`Unmocked fetch in test: ${url}`);
   });
 }
@@ -107,12 +110,21 @@ describe("PatientDetail — anonymize confirm gate resets across patients (regre
       }
       if (url === "/api/admin/patients/p1") return fetchOnce(200, patientA);
       if (url === "/api/admin/patients/p1/history") return fetchOnce(200, { items: [] });
+      if (url.endsWith("/documents")) return fetchOnce(200, { items: [], total: 0 });
       if (url.startsWith("/api/services")) return fetchOnce(200, { services: [] });
       throw new Error(`Unmocked fetch in test: ${url} ${init?.method ?? "GET"}`);
     });
 
     render(<PatientDetail patientId="p1" role="ADMIN" />);
     await screen.findByRole("heading", { name: "Benali Sara" });
+
+    // Task 15 step 5 (test-quality fix round 1) — PatientDocuments must
+    // actually be mounted for an active patient; otherwise deleting the
+    // `{!isAnonymized && <PatientDocuments />}` wiring would leave every
+    // test green while the feature silently vanishes.
+    expect(
+      screen.getByRole("heading", { name: "Documents du patient" }),
+    ).toBeInTheDocument();
 
     const confirmInput = () => screen.getByLabelText(/Pour confirmer, saisissez le nom de famille/);
     const confirmButton = () =>
@@ -153,6 +165,9 @@ describe("PatientDetail — anonymize confirm gate resets across patients (regre
 
     const { rerender } = render(<PatientDetail patientId="p1" role="ADMIN" />);
     await screen.findByRole("heading", { name: "Benali Sara" });
+    expect(
+      screen.getByRole("heading", { name: "Documents du patient" }),
+    ).toBeInTheDocument();
 
     const confirmInputFor = () =>
       screen.getByLabelText(/Pour confirmer, saisissez le nom de famille/);
@@ -170,6 +185,11 @@ describe("PatientDetail — anonymize confirm gate resets across patients (regre
 
     expect(confirmInputFor()).toHaveValue("");
     expect(confirmButtonFor()).toBeDisabled();
+    // Patient B is also active — the documents panel must still be mounted
+    // after the client-side switch.
+    expect(
+      screen.getByRole("heading", { name: "Documents du patient" }),
+    ).toBeInTheDocument();
   });
 
   it("resets the deactivation confirm banner back to its initial button when switching patients", async () => {
@@ -214,6 +234,7 @@ describe("PatientDetail — post-audit minor fixes", () => {
         return fetchOnce(200, patientA);
       }
       if (url === "/api/admin/patients/p1/history") return fetchOnce(200, { items: [] });
+      if (url.endsWith("/documents")) return fetchOnce(200, { items: [], total: 0 });
       if (url.startsWith("/api/services")) return fetchOnce(200, { services: [] });
       if (url === "/api/admin/patients/p1" && init?.method === "PATCH") {
         return fetchOnce(200, updated);
@@ -248,5 +269,40 @@ describe("PatientDetail — post-audit minor fixes", () => {
       "Trop de consultations de dossiers en peu de temps. Réessayez dans quelques minutes.",
     );
     expect(screen.queryByRole("button", { name: "Réessayer" })).toBeNull();
+  });
+});
+
+describe("PatientDetail — documents panel mounting (task 15 step 5, test-quality fix round 1)", () => {
+  it("mounts the documents panel for an active patient and hides it for an anonymized chart", async () => {
+    const active = makePatient({ id: "p1" });
+    const anonymized = makePatient({
+      id: "p2",
+      firstName: "Amine",
+      lastName: "Kaddour",
+      anonymizedAt: "2026-08-31T10:00:00.000Z",
+    });
+
+    installRouter({
+      "/api/admin/patients/p1": () => fetchOnce(200, active),
+      "/api/admin/patients/p1/history": () => fetchOnce(200, { items: [] }),
+      "/api/admin/patients/p2": () => fetchOnce(200, anonymized),
+      "/api/admin/patients/p2/history": () => fetchOnce(200, { items: [] }),
+    });
+
+    const { rerender } = render(<PatientDetail patientId="p1" role="ADMIN" />);
+    await screen.findByRole("heading", { name: "Benali Sara" });
+    expect(
+      screen.getByRole("heading", { name: "Documents du patient" }),
+    ).toBeInTheDocument();
+
+    // An anonymized chart must NOT mount PatientDocuments — the routes
+    // close on anonymized patients anyway, but the hiding is the UX rule
+    // (same as AddVisitForm) and this is what catches the wiring being
+    // broken in either direction.
+    rerender(<PatientDetail patientId="p2" role="ADMIN" />);
+    await screen.findByRole("heading", { name: "Kaddour Amine" });
+    expect(
+      screen.queryByRole("heading", { name: "Documents du patient" }),
+    ).toBeNull();
   });
 });

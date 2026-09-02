@@ -8,6 +8,7 @@ import PatientForm, { type FormValues, type PatientFormSuccess } from "./Patient
 import PatientTimeline from "./PatientTimeline";
 import AddVisitForm from "./AddVisitForm";
 import AnonymizePatientAction from "./AnonymizePatientAction";
+import PatientDocuments from "./PatientDocuments";
 
 // Task 13 step 8 — the patient record screen: identity + edit form, unified
 // history timeline, manual visit entry, and the two ADMIN-only destructive
@@ -376,6 +377,12 @@ export default function PatientDetail({
       <PatientTimeline patientId={patient.id} reloadToken={timelineReloadToken} />
 
       {!isAnonymized && <AddVisitForm patientId={patient.id} onCreated={handleVisitCreated} />}
+
+      {/* Task 15 step 5 — same visibility rule as AddVisitForm above: hidden
+          for an anonymized chart (both documents routes answer 404/409
+          there anyway). `role` only decides whether the ADMIN-only delete
+          button renders — the DELETE route re-checks the role itself. */}
+      {!isAnonymized && <PatientDocuments patientId={patient.id} role={role} />}
     </div>
   );
 }
