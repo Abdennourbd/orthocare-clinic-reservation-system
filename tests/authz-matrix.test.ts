@@ -36,6 +36,7 @@ import {
 import { POST as appointmentRescheduleRoute } from "@/app/api/admin/appointments/[id]/reschedule/route";
 import { GET as appointmentsPendingRoute } from "@/app/api/admin/appointments/pending/route";
 import { GET as appointmentsSearchRoute } from "@/app/api/admin/appointments/search/route";
+import { POST as smsSingleRoute } from "@/app/api/admin/sms/single/route";
 
 // Task 12 — the authorization matrix (plan.md §Testing strategy):
 //   one table-driven test walking EVERY /api/admin/* route ×
@@ -354,6 +355,16 @@ const ROUTES: RouteRow[] = [
     // No `q` in the query — Zod fails after the guard (q is required).
     okStatus: 400,
     handler: appointmentsSearchRoute,
+  },
+  {
+    method: "POST",
+    scanPath: "/api/admin/sms/single",
+    // Task 16 — the front desk (both roles) sends manual SMS.
+    allowed: [Role.ADMIN, Role.RECEPTIONIST],
+    // requestAs() sends no body — Zod fails after the guard, before any
+    // patient lookup.
+    okStatus: 400,
+    handler: smsSingleRoute,
   },
 ];
 
