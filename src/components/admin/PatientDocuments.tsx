@@ -251,12 +251,13 @@ export default function PatientDocuments({
           </div>
         ) : loading ? (
           <ul className="space-y-2" role="status">
-            <span className="sr-only">Chargement des documents…</span>
             {[0, 1].map((i) => (
               <li
                 key={i}
                 className="h-14 animate-pulse rounded-md border border-slate-200 bg-slate-100"
-              />
+              >
+                {i === 0 && <span className="sr-only">Chargement des documents…</span>}
+              </li>
             ))}
           </ul>
         ) : items.length === 0 ? (
@@ -314,7 +315,11 @@ export default function PatientDocuments({
                     <p role="alert" className="text-sm text-red-800">
                       Supprimer définitivement ce document ? Cette action est irréversible.
                     </p>
-                    {deleteError && <p className="text-sm text-red-700">{deleteError}</p>}
+                    {deleteError && (
+                      <p role="alert" className="text-sm text-red-700">
+                        {deleteError}
+                      </p>
+                    )}
                     <div className="flex gap-2">
                       <button
                         type="button"

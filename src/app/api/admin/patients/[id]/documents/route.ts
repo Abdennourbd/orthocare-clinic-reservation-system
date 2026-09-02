@@ -27,10 +27,12 @@ import { AuditAction, AuditActorType } from "@/generated/prisma/client";
 // as the sibling ../visits route.
 //
 // POST order is load-bearing: requireStaff -> CSRF -> rate limit ->
-// formData (400) -> FILE SIZE (413, BEFORE arrayBuffer — an oversized file
-// must never be fully buffered in memory, step-2 audit MINEUR-2) ->
-// Zod metadata (400) -> 404 (patient) -> arrayBuffer -> byte-level
-// validation (415/413) -> blob put -> DB row -> audit. The 404 comes AFTER
+// formData (400) -> Zod metadata (400) -> 404 (patient) -> 409 (anonymized)
+// -> FILE SIZE (413) -> arrayBuffer -> byte-level validation (415/413) ->
+// blob put -> DB row -> audit. Load-bearing invariant: nothing reads the
+// file bytes (arrayBuffer) before the size gate — an oversized file is
+// rejected from the declared part size without ever being fully buffered
+// in memory (step-2 audit MINEUR-2). The 404 comes AFTER
 // body parsing so an authorized caller with a malformed body always gets 400
 // (tests/authz-matrix.test.ts pins okStatus 400 on a bodyless POST), and the
 // blob write happens only after every validation has passed — a rejected
