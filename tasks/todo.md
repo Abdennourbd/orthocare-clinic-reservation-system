@@ -374,12 +374,12 @@ Task details + rationale live in `tasks/plan.md`. This is the working checklist.
 ## Task 18: KPIs overview
 **Description:** Today's schedule, utilization rate, no-shows, new patients/month on dashboard home. Computed from appointments (no extra tables). Routes: `GET /api/admin/kpis?from=&to=`.
 **Acceptance criteria:**
-- [ ] Numbers computed from appointments (not stored)
-- [ ] Correct per date range; renders on dashboard home
-- [ ] Date ranges evaluated in **clinic-local** time, so "today" means the clinic's today, not UTC's
-- [ ] KPIs cover the success metrics in plan.md: online booking share, median time-to-confirmation, no-show rate, utilization, auto-expiry rate
-- [ ] Unit tests on aggregation functions (seeded data → expected numbers)
-**Verification:** Manual vs seeded data; `npm test -- kpis`.
+- [x] Numbers computed from appointments (not stored)
+- [x] Correct per date range; renders on dashboard home
+- [x] Date ranges evaluated in **clinic-local** time, so "today" means the clinic's today, not UTC's
+- [x] KPIs cover the success metrics in plan.md: online booking share, median time-to-confirmation, no-show rate, utilization, auto-expiry rate
+- [x] Unit tests on aggregation functions (seeded data → expected numbers)
+**Verification:** Manual vs seeded data; `npm test -- kpis`. ✅ Done (2026-09-03): `npm test` 797/797 green, typecheck + lint + build clean, browser check of `/admin` (8 cards + Sat–Thu week label, mobile stacks, zero console errors) — see `tasks/task18-summary.md`.
 **Dependencies:** Task 14
 **Estimated scope:** Medium (2 days)
 **Skill:** A **SQL aggregation / analytics** skill if the queries get heavy; otherwise none. Keep the aggregations pure so they stay unit-testable, as plan.md specifies.
