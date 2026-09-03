@@ -126,7 +126,7 @@ describe("services CRUD", () => {
     const created = await servicesCreate(cReq);
     expect(created.status).toBe(201);
 
-    const { request: gReq, context: gCtx } = req("GET", "/api/admin/services", undefined, cookie);
+    const { request: gReq } = req("GET", "/api/admin/services", undefined, cookie);
     const listed = await servicesList(gReq);
     expect(listed.status).toBe(200);
     const listBody = (await listed.json()) as { services: Array<{ slug: string }> };
