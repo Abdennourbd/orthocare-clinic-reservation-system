@@ -10,6 +10,8 @@ import {
 import { releaseSlot, AppointmentAlreadyReleasedError } from "@/lib/booking/releaseSlot";
 import { rescheduleSlot } from "@/lib/booking/rescheduleSlot";
 import { createBooking } from "@/lib/booking/createBooking";
+import { selfServiceCancel } from "@/lib/selfservice/actions";
+import { createSelfServiceToken } from "@/lib/selfservice/tokens";
 import {
   getClinicDayBoundsUTC,
   toClinicLocalDateString,
@@ -230,7 +232,8 @@ describe("waitlist slot-freed via releaseSlot/rescheduleSlot (Task 17.4)", () =>
     });
     expect(waitlistEntry).not.toBeNull();
 
-    // Victim holds the watched day; self-service cancel frees it.
+    // Victim holds the watched day; self-service cancel frees it via the real
+    // self-service path (token + selfServiceCancel → releaseSlotInTx + emit).
     const victim = await createPatient();
     const victimAppt = await createConfirmedAppointment(
       victim.id,
@@ -238,7 +241,8 @@ describe("waitlist slot-freed via releaseSlot/rescheduleSlot (Task 17.4)", () =>
       localStart(dayWatch, "11:00"),
     );
 
-    await releaseSlot(victimAppt.id, CancelReason.PATIENT_SELF_SERVICE);
+    const { rawToken } = await createSelfServiceToken(victimAppt.id);
+    await selfServiceCancel(rawToken);
     await waitForEntryInactive(waitlistEntry!.id);
 
     const sms = await getPrisma().smsMessage.findMany({

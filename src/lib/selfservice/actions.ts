@@ -32,11 +32,12 @@ export type SelfServiceCancelResult = {
 };
 
 /**
- * Cancel an appointment through the self-service link. Routes through
- * `releaseSlot()` (so the slot-freed event fires for the waitlist, Task 17),
- * marks the single-use token as used, messages the patient, notifies staff and
- * audits with actor PATIENT. The appointment must still be active — the token
- * verification enforces it.
+ * Cancel an appointment through the self-service link. Mirrors `releaseSlot()`'s
+ * contract via `releaseSlotInTx()` + its own post-commit `emitSlotFreed()` (single
+ * transaction with the token update, so the slot-freed event fires for the
+ * waitlist, Task 17), marks the single-use token as used, messages the patient,
+ * notifies staff and audits with actor PATIENT. The appointment must still be
+ * active — the token verification enforces it.
  */
 export async function selfServiceCancel(
   rawToken: string,
