@@ -316,12 +316,12 @@ Task details + rationale live in `tasks/plan.md`. This is the working checklist.
 ## Task 15: Patient documents
 **Description:** `PatientDocument` model (3c schema). Vercel Blob upload/download, patient-scoped, staff-only. **Blobs are stored privately — never as a public URL.** Downloads go through `GET /api/admin/documents/[id]`, which checks the staff session on every request, then streams the file or issues a short-lived signed URL. Routes: `POST /api/admin/patients/[id]/documents`, `GET .../documents`, `GET /api/admin/documents/[id]`, `DELETE ...` (ADMIN only).
 **Acceptance criteria:**
-- [ ] Upload validated against a MIME allow-list (JPEG, PNG, PDF, DICOM) with a size cap; extension and content type must agree
-- [ ] Documents listed per patient; download served with `Content-Disposition: attachment` and `X-Content-Type-Options: nosniff` (an uploaded SVG or HTML file served inline from your own domain is stored cross-site scripting)
-- [ ] **A blob URL on its own, with no session, does not grant access** — verified explicitly
-- [ ] Non-staff access denied; docs scoped to owning patient
-- [ ] Downloads audited (`PATIENT_DOCUMENT_DOWNLOADED`); delete is ADMIN-only, soft-deletes the row, removes the blob, and is audited
-**Verification:** Manual upload/download; security check (non-staff → 403, raw blob URL in a logged-out browser → denied); `npm test -- documents`.
+- [x] Upload validated against a MIME allow-list (JPEG, PNG, PDF, DICOM) with a size cap; extension and content type must agree
+- [x] Documents listed per patient; download served with `Content-Disposition: attachment` and `X-Content-Type-Options: nosniff` (an uploaded SVG or HTML file served inline from your own domain is stored cross-site scripting)
+- [x] **A blob URL on its own, with no session, does not grant access** — verified explicitly
+- [x] Non-staff access denied; docs scoped to owning patient
+- [x] Downloads audited (`PATIENT_DOCUMENT_DOWNLOADED`); delete is ADMIN-only, soft-deletes the row, removes the blob, and is audited
+**Verification:** ✅ Done (2026-09-04): live upload→201→list→download (byte-identical, attachment + nosniff)→delete→404 cycle in browser against dev + real private Blob store, anon→401, receptionist DELETE→403/list→200, audit shows UPLOADED→DOWNLOADED→DELETED; `mime` + `patient-documents` suites 45/45 green; no blobKey/URL in any response.
 **Dependencies:** Task 13
 **Estimated scope:** Medium (2–3 days)
 **Skill:** A **file-upload security** skill (storage access modes, signed URLs, MIME validation, content-sniffing defences). Worth reading before starting: X-rays are the most sensitive data in the system, and the default "public blob with a random URL" pattern silently fails the staff-only requirement. The upload UI itself is standard **frontend-ui-engineering** basics: multi-file input, upload progress, and inline error states per rejected file (type/size) so staff immediately see *why* an upload failed.
