@@ -12,7 +12,9 @@
     "about": "À propos",
     "contact": "Contact",
     "privacy": "Confidentialité",
-    "book": "Prendre rendez-vous"
+    "book": "Prendre rendez-vous",
+    "menu": "Menu",
+    "close": "Fermer"
   },
   "LocaleSwitcher": {
     "label": "Changer de langue",
@@ -67,10 +69,22 @@
     "Features": {
       "title": "Pourquoi nous choisir",
       "subtitle": "Des soins modernes, doux et personnalisés, au cœur de Rouiba.",
-      "gentle": { "title": "Soins tout en douceur", "desc": "Une approche patiente et rassurante, pour les enfants comme pour les adultes." },
-      "tech": { "title": "Techniques modernes", "desc": "Orthodontie contemporaine et équipements récents pour des traitements efficaces." },
-      "team": { "title": "Équipe dévouée", "desc": "Une doctoresse et un personnel attentifs, à l'écoute de chaque patient." },
-      "booking": { "title": "Réservation facile", "desc": "Prenez rendez-vous en ligne en quelques clics, à tout moment." }
+      "gentle": {
+        "title": "Soins tout en douceur",
+        "desc": "Une approche patiente et rassurante, pour les enfants comme pour les adultes."
+      },
+      "tech": {
+        "title": "Techniques modernes",
+        "desc": "Orthodontie contemporaine et équipements récents pour des traitements efficaces."
+      },
+      "team": {
+        "title": "Équipe dévouée",
+        "desc": "Une doctoresse et un personnel attentifs, à l'écoute de chaque patient."
+      },
+      "booking": {
+        "title": "Réservation facile",
+        "desc": "Prenez rendez-vous en ligne en quelques clics, à tout moment."
+      }
     }
   },
   "ServicesPage": {
@@ -112,9 +126,18 @@
     "story2": "Notre équipe place le patient au centre de chaque décision : des soins précis, une communication claire et un suivi régulier, du premier rendez-vous à la fin du traitement.",
     "valuesTitle": "Nos valeurs",
     "values": {
-      "care": { "title": "Bienveillance", "desc": "Un accompagnement patient et rassurant à chaque étape." },
-      "safety": { "title": "Sécurité", "desc": "Hygiène rigoureuse et protocoles de soins éprouvés." },
-      "quality": { "title": "Qualité", "desc": "Des techniques modernes pour des résultats durables." }
+      "care": {
+        "title": "Bienveillance",
+        "desc": "Un accompagnement patient et rassurant à chaque étape."
+      },
+      "safety": {
+        "title": "Sécurité",
+        "desc": "Hygiène rigoureuse et protocoles de soins éprouvés."
+      },
+      "quality": {
+        "title": "Qualité",
+        "desc": "Des techniques modernes pour des résultats durables."
+      }
     },
     "cta": "Prendre rendez-vous"
   },
@@ -126,12 +149,30 @@
     "title": "Politique de confidentialité",
     "lastUpdated": "Dernière mise à jour : août 2026",
     "intro": "Cette page explique quelles données nous collectons lorsque vous utilisez le site d'Ortho'Care Clinic, pourquoi nous les collectons, et quels sont vos droits.",
-    "what": { "title": "Ce que nous collectons", "body": "Lorsque vous prenez rendez-vous en ligne, nous collectons votre prénom, votre nom, votre numéro de téléphone, et, si vous le fournissez, votre adresse e-mail et votre date de naissance. Nous enregistrons également les détails de votre rendez-vous (service, date, heure) ainsi que votre consentement.\nNous ne collectons aucune donnée de paiement sur ce site." },
-    "why": { "title": "Pourquoi nous collectons ces données", "body": "Ces informations servent uniquement à gérer vos rendez-vous : les créer, vous contacter pour les confirmer, vous envoyer des rappels et assurer le suivi de vos soins." },
-    "processors": { "title": "Nos prestataires", "body": "Vos données sont hébergées et traitées par des prestataires situés hors d'Algérie : notre hébergeur (Vercel), notre base de données (PostgreSQL hébergé), notre service de messagerie (SMS/WhatsApp) et notre outil de surveillance des erreurs (Sentry). Les avis et la carte Google sont intégrés via des widgets Google." },
-    "retention": { "title": "Durée de conservation", "body": "Nous conservons vos données de rendez-vous et de patient aussi longtemps que nécessaire à votre suivi, puis conformément à nos obligations légales." },
-    "rights": { "title": "Vos droits", "body": "Vous pouvez demander à tout moment la correction ou la suppression de vos données en contactant la clinique. Vous pouvez également refuser de recevoir des messages non essentiels (SMS/WhatsApp) en nous le signalant." },
-    "contact": { "title": "Contact", "body": "Pour toute question concernant vos données, contactez-nous au +213 793 03 58 93 ou à l'adresse du cabinet : 10, rue Larbi Abdelsalem, Rouiba, Alger." }
+    "what": {
+      "title": "Ce que nous collectons",
+      "body": "Lorsque vous prenez rendez-vous en ligne, nous collectons votre prénom, votre nom, votre numéro de téléphone, et, si vous le fournissez, votre adresse e-mail et votre date de naissance. Nous enregistrons également les détails de votre rendez-vous (service, date, heure) ainsi que votre consentement.\nNous ne collectons aucune donnée de paiement sur ce site."
+    },
+    "why": {
+      "title": "Pourquoi nous collectons ces données",
+      "body": "Ces informations servent uniquement à gérer vos rendez-vous : les créer, vous contacter pour les confirmer, vous envoyer des rappels et assurer le suivi de vos soins."
+    },
+    "processors": {
+      "title": "Nos prestataires",
+      "body": "Vos données sont hébergées et traitées par des prestataires situés hors d'Algérie : notre hébergeur (Vercel), notre base de données (PostgreSQL hébergé), notre service de messagerie (SMS/WhatsApp) et notre outil de surveillance des erreurs (Sentry). Les avis et la carte Google sont intégrés via des widgets Google."
+    },
+    "retention": {
+      "title": "Durée de conservation",
+      "body": "Nous conservons vos données de rendez-vous et de patient aussi longtemps que nécessaire à votre suivi, puis conformément à nos obligations légales."
+    },
+    "rights": {
+      "title": "Vos droits",
+      "body": "Vous pouvez demander à tout moment la correction ou la suppression de vos données en contactant la clinique. Vous pouvez également refuser de recevoir des messages non essentiels (SMS/WhatsApp) en nous le signalant."
+    },
+    "contact": {
+      "title": "Contact",
+      "body": "Pour toute question concernant vos données, contactez-nous au +213 793 03 58 93 ou à l'adresse du cabinet : 10, rue Larbi Abdelsalem, Rouiba, Alger."
+    }
   },
   "Hero": {
     "title": "Votre sourire, notre priorité",

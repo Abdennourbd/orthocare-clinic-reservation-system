@@ -12,7 +12,9 @@
     "about": "About",
     "contact": "Contact",
     "privacy": "Privacy",
-    "book": "Book an appointment"
+    "book": "Book an appointment",
+    "menu": "Menu",
+    "close": "Close"
   },
   "LocaleSwitcher": {
     "label": "Change language",
@@ -67,10 +69,22 @@
     "Features": {
       "title": "Why choose us",
       "subtitle": "Modern, gentle and personalised care in the heart of Rouiba.",
-      "gentle": { "title": "Gentle care", "desc": "A patient, reassuring approach for children and adults alike." },
-      "tech": { "title": "Modern techniques", "desc": "Contemporary orthodontics and up-to-date equipment for effective treatment." },
-      "team": { "title": "Dedicated team", "desc": "An attentive doctor and staff who listen to every patient." },
-      "booking": { "title": "Easy booking", "desc": "Book online in a few clicks, at any time." }
+      "gentle": {
+        "title": "Gentle care",
+        "desc": "A patient, reassuring approach for children and adults alike."
+      },
+      "tech": {
+        "title": "Modern techniques",
+        "desc": "Contemporary orthodontics and up-to-date equipment for effective treatment."
+      },
+      "team": {
+        "title": "Dedicated team",
+        "desc": "An attentive doctor and staff who listen to every patient."
+      },
+      "booking": {
+        "title": "Easy booking",
+        "desc": "Book online in a few clicks, at any time."
+      }
     }
   },
   "ServicesPage": {
@@ -112,9 +126,18 @@
     "story2": "Our team puts the patient at the centre of every decision: precise care, clear communication and regular follow-up, from the first appointment to the end of treatment.",
     "valuesTitle": "Our values",
     "values": {
-      "care": { "title": "Kindness", "desc": "Patient, reassuring support at every step." },
-      "safety": { "title": "Safety", "desc": "Rigorous hygiene and proven care protocols." },
-      "quality": { "title": "Quality", "desc": "Modern techniques for lasting results." }
+      "care": {
+        "title": "Kindness",
+        "desc": "Patient, reassuring support at every step."
+      },
+      "safety": {
+        "title": "Safety",
+        "desc": "Rigorous hygiene and proven care protocols."
+      },
+      "quality": {
+        "title": "Quality",
+        "desc": "Modern techniques for lasting results."
+      }
     },
     "cta": "Book an appointment"
   },
@@ -126,12 +149,30 @@
     "title": "Privacy policy",
     "lastUpdated": "Last updated: August 2026",
     "intro": "This page explains what data we collect when you use the Ortho'Care Clinic website, why we collect it, and your rights.",
-    "what": { "title": "What we collect", "body": "When you book online, we collect your first name, last name and phone number, and, if you provide them, your email address and date of birth. We also store your appointment details (service, date, time) and your consent.\nWe do not collect any payment data on this site." },
-    "why": { "title": "Why we collect this data", "body": "This information is used solely to manage your appointments: create them, contact you to confirm, send reminders and follow up on your care." },
-    "processors": { "title": "Our providers", "body": "Your data is hosted and processed by providers located outside Algeria: our host (Vercel), our database (hosted PostgreSQL), our messaging service (SMS/WhatsApp) and our error-monitoring tool (Sentry). Google reviews and the map are embedded via Google widgets." },
-    "retention": { "title": "How long we keep data", "body": "We keep your appointment and patient data as long as needed for your follow-up, then in line with our legal obligations." },
-    "rights": { "title": "Your rights", "body": "You can ask at any time to correct or delete your data by contacting the clinic. You can also opt out of non-essential messages (SMS/WhatsApp) by letting us know." },
-    "contact": { "title": "Contact", "body": "For any question about your data, contact us at +213 793 03 58 93 or at the clinic: 10, rue Larbi Abdelsalem, Rouiba, Algiers." }
+    "what": {
+      "title": "What we collect",
+      "body": "When you book online, we collect your first name, last name and phone number, and, if you provide them, your email address and date of birth. We also store your appointment details (service, date, time) and your consent.\nWe do not collect any payment data on this site."
+    },
+    "why": {
+      "title": "Why we collect this data",
+      "body": "This information is used solely to manage your appointments: create them, contact you to confirm, send reminders and follow up on your care."
+    },
+    "processors": {
+      "title": "Our providers",
+      "body": "Your data is hosted and processed by providers located outside Algeria: our host (Vercel), our database (hosted PostgreSQL), our messaging service (SMS/WhatsApp) and our error-monitoring tool (Sentry). Google reviews and the map are embedded via Google widgets."
+    },
+    "retention": {
+      "title": "How long we keep data",
+      "body": "We keep your appointment and patient data as long as needed for your follow-up, then in line with our legal obligations."
+    },
+    "rights": {
+      "title": "Your rights",
+      "body": "You can ask at any time to correct or delete your data by contacting the clinic. You can also opt out of non-essential messages (SMS/WhatsApp) by letting us know."
+    },
+    "contact": {
+      "title": "Contact",
+      "body": "For any question about your data, contact us at +213 793 03 58 93 or at the clinic: 10, rue Larbi Abdelsalem, Rouiba, Algiers."
+    }
   },
   "Hero": {
     "title": "Your smile, our priority",

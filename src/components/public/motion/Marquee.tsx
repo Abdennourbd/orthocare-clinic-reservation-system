@@ -1,4 +1,5 @@
 "use client";
+import { useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 
 export default function Marquee({
@@ -13,22 +14,28 @@ export default function Marquee({
   className?: string;
 }) {
   const shouldReduceMotion = useReducedMotion();
+  // WCAG 2.2.2: moving content must be pausable — pause on hover/focus so
+  // keyboard and mouse users resting on a card stop the motion.
+  const [paused, setPaused] = useState(false);
+  const frozen = shouldReduceMotion || paused;
 
   // No `whitespace-nowrap` on the root: the row layout comes from `min-w-max`
   // on the track plus `shrink-0` on each item, so text inside an item is free
   // to wrap within that item's own width instead of overflowing it.
   return (
-    <div className={`overflow-hidden flex ${className}`}>
+    <div
+      className={`overflow-hidden flex ${className}`}
+      onMouseEnter={() => setPaused(true)}
+      onMouseLeave={() => setPaused(false)}
+      onFocus={() => setPaused(true)}
+      onBlur={() => setPaused(false)}
+    >
       <motion.div
         className="flex min-w-max"
-        animate={
-          shouldReduceMotion
-            ? undefined
-            : { x: direction === "left" ? [0, "-50%"] : ["-50%", 0] }
-        }
+        animate={frozen ? { x: 0 } : { x: direction === "left" ? [0, "-50%"] : ["-50%", 0] }}
         transition={{
           duration: speed,
-          repeat: Infinity,
+          repeat: frozen ? 0 : Infinity,
           ease: "linear",
         }}
       >

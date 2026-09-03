@@ -13,6 +13,10 @@ export default async function ServicesPreview() {
   ]);
   const services = (await listActiveServices(locale)).slice(0, 6);
 
+  // Like GalleryPreview/FaqPreview/TestimonialsPreview: render nothing when
+  // there is no content rather than a hollow section with a dead link.
+  if (services.length === 0) return null;
+
   return (
     <section className="mx-auto max-w-6xl px-4 py-20 sm:px-6" aria-labelledby="services-title">
       <Reveal className="text-center">
