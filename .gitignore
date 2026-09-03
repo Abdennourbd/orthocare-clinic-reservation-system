@@ -50,4 +50,4 @@ next-env.d.ts
 AGENTS.md
 CLAUDE.md
 MEMORY.md
-opencode.json
+opencode.json.dev.*.log
