@@ -431,7 +431,13 @@ export default function TeamDashboard({ currentUserId }: { currentUserId: string
                               disabled={busy || isSelf}
                               onClick={() => void handleToggleActive(member)}
                               className={member.active ? buttonDangerClass : buttonSecondaryClass}
-                              aria-label={member.active ? `Désactiver ${member.email}` : `Réactiver ${member.email}`}
+                              aria-label={
+                                confirmId === member.id
+                                  ? `Confirmer la ${member.active ? "désactivation" : "réactivation"} de ${member.email}`
+                                  : member.active
+                                    ? `Désactiver ${member.email}`
+                                    : `Réactiver ${member.email}`
+                              }
                             >
                               {confirmId === member.id
                                 ? "Confirmer ?"
