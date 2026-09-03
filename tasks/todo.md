@@ -357,15 +357,15 @@ Task details + rationale live in `tasks/plan.md`. This is the working checklist.
 ## Task 17: Waitlist
 **Description:** The `WaitlistEntry` model is already migrated (delivered early with a `source` field — Task 6 writes PATIENT-source entries from the booking wizard's cancellation-watch opt-in). This task delivers the **slot-freed subscriber** and the **staff side**: staff add patients to the waitlist per service/preferred dates (STAFF-source). The subscriber listens to the **slot-freed event** from `releaseSlot()` (Task 5) — so it fires on staff cancellations (Task 14), self-service cancellations (Task 8), auto-expiry (Task 9) and reschedules. It notifies active entries whose `serviceId` matches the event's `serviceId` and whose `preferredDates` contain the freed slot's **clinic-local date** (date maths via `lib/time/clinicTime.ts`; dates stored as clinic-local at UTC midnight). SMS is non-transactional (opt-out respected); on notification `notifiedAt` is set and the entry deactivated — **one notification per entry in v1**. Routes: `GET/POST /api/admin/waitlist`, `DELETE /api/admin/waitlist/[id]`.
 **Acceptance criteria:**
-- [ ] Staff adds patient to waitlist (STAFF source)
-- [ ] Cancellation (staff OR self-service) triggers notification to eligible waitlist entries
-- [ ] Matching is by service **and** watched date: an entry watching Friday is not notified for a Tuesday cancellation; freed-slot dates computed in clinic-local time
-- [ ] PATIENT-source entries (from Task 6's booking opt-in) are notified identically — no extra code path
-- [ ] `notifiedAt` set on notification **and entry deactivated** — same entry not re-notified
-- [ ] Claimed slot removes/ deactivates waitlist entry
-- [ ] Auto-expired PENDING bookings (Task 9) also trigger waitlist notification — same `releaseSlot()` path, no extra code
-- [ ] Waitlist offers are non-transactional: opted-out patients are not messaged
-- [ ] Integration test: cancel via self-service link → waitlist SMS fires for matching entries (service + date), not for non-matching ones
+- [x] Staff adds patient to waitlist (STAFF source)
+- [x] Cancellation (staff OR self-service) triggers notification to eligible waitlist entries
+- [x] Matching is by service **and** watched date: an entry watching Friday is not notified for a Tuesday cancellation; freed-slot dates computed in clinic-local time
+- [x] PATIENT-source entries (from Task 6's booking opt-in) are notified identically — no extra code path
+- [x] `notifiedAt` set on notification **and entry deactivated** — same entry not re-notified
+- [x] Claimed slot removes/ deactivates waitlist entry
+- [x] Auto-expired PENDING bookings (Task 9) also trigger waitlist notification — same `releaseSlot()` path, no extra code
+- [x] Waitlist offers are non-transactional: opted-out patients are not messaged
+- [x] Integration test: cancel via self-service link → waitlist SMS fires for matching entries (service + date), not for non-matching ones
 **Verification:** Manual: cancel both ways → waitlist SMS fired; `npm test -- waitlist`.
 **Dependencies:** Task 14, Task 8 (to verify self-service path triggers it), Task 6 (PATIENT-source entries exist)
 **Estimated scope:** Medium (2 days)
