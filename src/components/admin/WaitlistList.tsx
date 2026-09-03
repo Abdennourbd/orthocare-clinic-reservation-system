@@ -76,17 +76,36 @@ export default function WaitlistList({
   const [deletePending, setDeletePending] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const confirmButtonRef = useRef<HTMLButtonElement>(null);
-  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  // aria-label of the Supprimer trigger to re-focus after the panel closes.
+  // (The trigger unmounts while its confirm panel is open, so a node ref
+  // would point at a detached element — re-query by label after close.)
+  // A ref (not state): the effect below consumes it without re-rendering.
+  const pendingFocusLabelRef = useRef<string | null>(null);
 
-  // Focus the confirm action when the panel opens; Esc cancels.
+  // Focus the confirm action when the panel opens; re-focus the trigger
+  // when it closes via Esc/Annuler.
   useEffect(() => {
-    if (confirmId) confirmButtonRef.current?.focus();
+    if (confirmId) {
+      confirmButtonRef.current?.focus();
+      return;
+    }
+    const label = pendingFocusLabelRef.current;
+    if (label) {
+      pendingFocusLabelRef.current = null;
+      document
+        .querySelector<HTMLButtonElement>(`[aria-label="${CSS.escape(label)}"]`)
+        ?.focus();
+    }
   }, [confirmId]);
 
   function cancelConfirm() {
+    const entry = entries.find((e) => e.id === confirmId);
+    if (entry) {
+      pendingFocusLabelRef.current =
+        `Supprimer l'entrée de ${entry.patient.lastName} ${entry.patient.firstName}`;
+    }
     setConfirmId(null);
     setDeleteError(null);
-    triggerRef.current?.focus();
   }
 
   async function handleDeleteConfirm() {
@@ -169,8 +188,7 @@ export default function WaitlistList({
                     {entry.active && confirmId !== entry.id && (
                       <button
                         type="button"
-                        onClick={(e) => {
-                          triggerRef.current = e.currentTarget;
+                        onClick={() => {
                           setConfirmId(entry.id);
                           setDeleteError(null);
                         }}
