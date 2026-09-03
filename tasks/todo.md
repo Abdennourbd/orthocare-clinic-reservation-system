@@ -400,11 +400,11 @@ Task details + rationale live in `tasks/plan.md`. This is the working checklist.
 ## Task 20: Team management
 **Description:** Admin creates/edits/deactivates receptionist accounts and issues one-time password resets. Deactivation and reset both bump `tokenVersion` (revoking live sessions); a reset also sets `mustChangePassword`. There is deliberately **no public "forgot password" email flow** — fewer moving parts, smaller attack surface, and it matches how a small clinic actually operates. Routes: `GET/POST /api/admin/team`, `PATCH /api/admin/team/[id]`, `POST /api/admin/team/[id]/reset-password`.
 **Acceptance criteria:**
-- [ ] Admin can create receptionist
-- [ ] Deactivated staff cannot log in; live session revoked
-- [ ] Admin can issue a password reset; the staff member must set a new password at next login
-- [ ] Only ADMIN sees this section (route + nav gated)
-- [ ] Account creation, deactivation, role change and password reset all audited
+- [x] Admin can create receptionist
+- [x] Deactivated staff cannot log in; live session revoked
+- [x] Admin can issue a password reset; the staff member must set a new password at next login
+- [x] Only ADMIN sees this section (route + nav gated)
+- [x] Account creation, deactivation, role change and password reset all audited
 **Verification:** Manual; role check test.
 **Dependencies:** Task 12
 **Estimated scope:** Small (1–2 days)
