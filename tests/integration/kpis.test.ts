@@ -134,6 +134,8 @@ describe("GET /api/admin/kpis", () => {
         total: number;
         newPatients: number;
         openMinutes: number;
+        bookedMinutes: number;
+        utilizationRate: number | null;
         onlineShare: number | null;
       };
     };
@@ -141,7 +143,24 @@ describe("GET /api/admin/kpis", () => {
     expect(body.kpis.total).toBe(2);
     // The seeded patient was created "now" (inside the week).
     expect(body.kpis.newPatients).toBe(1);
-    expect(body.kpis.openMinutes).toBeGreaterThan(0);
+    // Both fixtures sit on `from` (2 × 30 min); open minutes are exact.
+    const { computeOpenMinutes } = await import("@/lib/kpis/aggregations");
+    const expectedOpen = computeOpenMinutes(
+      {
+        sat: { open: "10:00", close: "17:00" },
+        sun: { open: "10:00", close: "17:00" },
+        mon: { open: "10:00", close: "17:00" },
+        tue: { open: "10:00", close: "17:00" },
+        wed: { open: "10:00", close: "17:00" },
+        thu: { open: "10:00", close: "17:00" },
+        fri: { closed: true },
+      },
+      from,
+      to,
+    );
+    expect(body.kpis.openMinutes).toBe(expectedOpen);
+    expect(body.kpis.bookedMinutes).toBe(60);
+    expect(body.kpis.utilizationRate).toBeCloseTo(60 / expectedOpen, 5);
     expect(body.kpis.onlineShare).toBeCloseTo(0.5, 5);
   });
 
@@ -168,6 +187,64 @@ describe("GET /api/admin/kpis", () => {
       getRequest("/api/admin/kpis?from=not-a-date", await cookieFor(staff)),
     );
     expect(res.status).toBe(400);
+  });
+
+  it("rejects from>to with 400", async () => {
+    const { from, to } = await seedWeek();
+    const staff = await createStaff(Role.ADMIN);
+    const res = await GET(
+      getRequest(
+        `/api/admin/kpis?from=${to}&to=${from}`,
+        await cookieFor(staff),
+      ),
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it("rejects ranges over 366 days with 400", async () => {
+    await seedWeek();
+    const staff = await createStaff(Role.ADMIN);
+    const res = await GET(
+      getRequest(
+        "/api/admin/kpis?from=2024-01-01&to=2025-06-01",
+        await cookieFor(staff),
+      ),
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it("defaults an omitted side to the clinic week", async () => {
+    const { from, to } = await seedWeek();
+    const staff = await createStaff(Role.RECEPTIONIST);
+    const cookie = await cookieFor(staff);
+
+    const fromOnly = await GET(getRequest(`/api/admin/kpis?from=${from}`, cookie));
+    expect(fromOnly.status).toBe(200);
+    expect(((await fromOnly.json()) as { range: unknown }).range).toEqual({
+      from,
+      to,
+    });
+
+    const toOnly = await GET(getRequest(`/api/admin/kpis?to=${to}`, cookie));
+    expect(toOnly.status).toBe(200);
+    expect(((await toOnly.json()) as { range: unknown }).range).toEqual({
+      from,
+      to,
+    });
+  });
+
+  it("returns null utilization (not a crash) when workingHours is missing", async () => {
+    await seedWeek();
+    await getPrisma().setting.delete({ where: { key: "workingHours" } });
+    const staff = await createStaff(Role.RECEPTIONIST);
+
+    const res = await GET(getRequest("/api/admin/kpis", await cookieFor(staff)));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      kpis: { openMinutes: number; utilizationRate: number | null };
+    };
+    expect(body.kpis.openMinutes).toBe(0);
+    expect(body.kpis.utilizationRate).toBeNull();
   });
 
   it("rejects anonymous callers with 401 and writes no audit row", async () => {

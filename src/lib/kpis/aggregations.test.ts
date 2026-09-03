@@ -47,6 +47,15 @@ describe("getClinicWeekRange (Sat→Thu)", () => {
       to: "2026-09-03",
     });
   });
+
+  it.each([
+    ["2026-08-30", "2026-08-29"], // Sun → Sat
+    ["2026-08-31", "2026-08-29"], // Mon → Sat
+    ["2026-09-01", "2026-08-29"], // Tue → Sat
+    ["2026-09-02", "2026-08-29"], // Wed → Sat
+  ])("returns Sat→today when today is %s", (today, from) => {
+    expect(getClinicWeekRange(today)).toEqual({ from, to: today });
+  });
 });
 
 describe("computeOpenMinutes", () => {
@@ -146,8 +155,9 @@ describe("computeKpis", () => {
 
     expect(kpis.total).toBe(6);
     expect(kpis.pendingCount).toBe(1);
-    // Thu has only the RESCHEDULED row; today counts non-CANCELLED.
-    expect(kpis.todayCount).toBe(1);
+    // Thu has only the RESCHEDULED row (stale — the reschedule holds the new
+    // slot), so today counts 0: RESCHEDULED is excluded like CANCELLED.
+    expect(kpis.todayCount).toBe(0);
     expect(kpis.newPatients).toBe(2);
     expect(kpis.bookedMinutes).toBe(120);
     expect(kpis.openMinutes).toBe(2520);
@@ -159,6 +169,44 @@ describe("computeKpis", () => {
     // AUTO_EXPIRED 1 / ONLINE 5.
     expect(kpis.autoExpiryRate).toBeCloseTo(0.2, 5);
     // Confirmed diffs: 120, 60, 60, 60 → median 60 min.
+    expect(kpis.medianConfirmMinutes).toBe(60);
+  });
+
+  it("takes the median over an odd count and ignores negative diffs", () => {
+    const mk = (
+      createdAt: Date,
+      confirmedAt: Date | null,
+    ): {
+      status: "CONFIRMED";
+      source: "ONLINE";
+      startTime: Date;
+      endTime: Date;
+      createdAt: Date;
+      confirmedAt: Date | null;
+      cancelReason: null;
+    } => ({
+      status: "CONFIRMED",
+      source: "ONLINE",
+      startTime: utc("2026-08-29", "10:00"),
+      endTime: utc("2026-08-29", "10:30"),
+      createdAt,
+      confirmedAt,
+      cancelReason: null,
+    });
+    const kpis = computeKpis({
+      appointments: [
+        mk(utc("2026-08-28", "10:00"), utc("2026-08-28", "10:30")), // +30
+        mk(utc("2026-08-28", "10:00"), utc("2026-08-28", "11:00")), // +60
+        mk(utc("2026-08-28", "10:00"), utc("2026-08-28", "12:00")), // +120
+        // Clock-skew fixture: confirmed before created → discarded.
+        mk(utc("2026-08-28", "12:00"), utc("2026-08-28", "10:00")),
+      ],
+      patients: [],
+      workingHours: WORKING_HOURS,
+      from: "2026-08-29",
+      to: "2026-08-29",
+      today: "2026-08-29",
+    });
     expect(kpis.medianConfirmMinutes).toBe(60);
   });
 

@@ -56,17 +56,6 @@ export function getClinicWeekRange(todayLocal: string): {
   to: string;
 } {
   const dow = getClinicDayOfWeek(todayLocal);
-  // Offset back to Saturday: sat 0, sun 1, mon 2, tue 3, wed 4, thu 5, fri 6.
-  const backToSat: Record<string, number> = {
-    sat: 0,
-    sun: 1,
-    mon: 2,
-    tue: 3,
-    wed: 4,
-    thu: 5,
-    fri: 6,
-  };
-  const back = backToSat[dow] ?? 0;
   if (dow === "fri") {
     // Previous completed week: Sat 6 days ago → Thu yesterday.
     return {
@@ -74,6 +63,17 @@ export function getClinicWeekRange(todayLocal: string): {
       to: addClinicDays(todayLocal, -1),
     };
   }
+  // Offset back to Saturday: sat 0, sun 1, mon 2, tue 3, wed 4, thu 5.
+  const backToSat: Record<string, number> = {
+    sat: 0,
+    sun: 1,
+    mon: 2,
+    tue: 3,
+    wed: 4,
+    thu: 5,
+  };
+  const back = backToSat[dow];
+  if (back === undefined) throw new Error(`Jour clinique inconnu: ${dow}`);
   return { from: addClinicDays(todayLocal, -back), to: todayLocal };
 }
 
@@ -120,9 +120,13 @@ export function computeKpis(input: {
   );
 
   const pendingCount = inRange.filter((a) => a.status === "PENDING").length;
+  // "Today" counts the appointments actually on the book: CANCELLED rows are
+  // gone and RESCHEDULED rows are stale (the reschedule created a new row
+  // holding the slot) — same exclusion as bookedMinutes below.
   const todayCount = inRange.filter(
     (a) =>
       a.status !== "CANCELLED" &&
+      a.status !== "RESCHEDULED" &&
       toClinicLocalDateString(a.startTime) === today,
   ).length;
 
@@ -130,9 +134,14 @@ export function computeKpis(input: {
     (p) => p.createdAt >= fromStart && p.createdAt <= toEnd,
   ).length;
 
-  const bookedMinutes = inRange
-    .filter((a) => a.status !== "CANCELLED" && a.status !== "RESCHEDULED")
-    .reduce((sum, a) => sum + (a.endTime.getTime() - a.startTime.getTime()) / 60000, 0);
+  const bookedMinutes = Math.round(
+    inRange
+      .filter((a) => a.status !== "CANCELLED" && a.status !== "RESCHEDULED")
+      .reduce(
+        (sum, a) => sum + (a.endTime.getTime() - a.startTime.getTime()) / 60000,
+        0,
+      ),
+  );
 
   const openMinutes = computeOpenMinutes(workingHours, from, to);
   const utilizationRate = openMinutes > 0 ? bookedMinutes / openMinutes : null;
@@ -150,6 +159,9 @@ export function computeKpis(input: {
   ).length;
   const autoExpiryRate = online > 0 ? autoExpired / online : null;
 
+  // Median time-to-confirmation over every recorded confirmation in range
+  // (any status carrying a confirmedAt stamp). Negative diffs (clock skew in
+  // fixtures) are discarded, never averaged in.
   const confirmDiffsMinutes = inRange
     .filter((a) => a.confirmedAt !== null)
     .map(
@@ -166,7 +178,7 @@ export function computeKpis(input: {
     pendingCount,
     todayCount,
     newPatients,
-    bookedMinutes: Math.round(bookedMinutes),
+    bookedMinutes,
     openMinutes,
     utilizationRate,
     noShowRate,

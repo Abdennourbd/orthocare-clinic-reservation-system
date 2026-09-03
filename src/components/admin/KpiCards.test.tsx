@@ -46,6 +46,18 @@ describe("KpiCards", () => {
     expect(screen.getByText("29 août – 3 sept.")).toBeTruthy();
   });
 
+  it("formats percents in French and sub-hour/exact-hour medians", async () => {
+    const { formatMedian, formatPercent } = await import("./KpiCards");
+    // French decimal comma + non-breaking space before %.
+    expect(formatPercent(120 / 2520)).toBe("4,8 %");
+    expect(formatPercent(0)).toBe("0 %");
+    expect(formatMedian(45)).toBe("45 min");
+    expect(formatMedian(120)).toBe("2 h");
+    // Non-finite rates never leak NaN into the UI.
+    expect(formatPercent(Number.NaN)).toBe("—");
+    expect(formatMedian(Number.NaN)).toBe("—");
+  });
+
   it("renders a dash for every null rate (empty week, never NaN)", () => {
     render(
       <KpiCards

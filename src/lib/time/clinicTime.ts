@@ -7,7 +7,7 @@
  * place that knows the clinic timezone and does date maths on local time.
  */
 
-const CLINIC_TIMEZONE = "Africa/Algiers";
+export const CLINIC_TIMEZONE = "Africa/Algiers";
 
 /**
  * The clinic's fixed offset from UTC, in minutes. Africa/Algiers has no DST,

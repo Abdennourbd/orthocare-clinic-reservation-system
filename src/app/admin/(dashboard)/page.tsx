@@ -1,5 +1,6 @@
 import { getPrisma } from "@/lib/db";
 import {
+  CLINIC_TIMEZONE,
   clinicNoon,
   getClinicDayBoundsUTC,
   toClinicLocalDateString,
@@ -14,7 +15,9 @@ import KpiCards from "@/components/admin/KpiCards";
 
 function formatDayLabel(localDate: string): string {
   return new Intl.DateTimeFormat("fr-FR", {
-    timeZone: "Africa/Algiers",
+    // Single source of truth: re-exported from clinicTime.ts (the only
+    // module that knows the clinic timezone).
+    timeZone: CLINIC_TIMEZONE,
     weekday: "short",
     day: "numeric",
     month: "short",
@@ -52,7 +55,13 @@ export default async function DashboardHome() {
       prisma.appointment.count({ where: { status: "PENDING" } }),
     ]);
 
-  const kpis = computeKpis({
+  // Note: the dashboard's "En attente d'appel" card is the GLOBAL call
+  // queue (every PENDING awaiting a call, like /api/admin/appointments/pending),
+  // while GET /api/admin/kpis returns the week's slice — same KpiCards label,
+  // different scope by design (the API has no view of the global queue).
+  // On Fridays the week shown is the previous completed Sat→Thu, so
+  // "Rendez-vous aujourd'hui" (Friday, closed) reads 0 by design.
+  const weekKpis = computeKpis({
     appointments,
     patients,
     workingHours: (workingHoursSetting?.value ?? {}) as unknown,
@@ -60,8 +69,7 @@ export default async function DashboardHome() {
     to,
     today: todayLocal,
   });
-  // "En attente d'appel" is the global queue, not the week's slice.
-  kpis.pendingCount = globalPending;
+  const kpis = { ...weekKpis, pendingCount: globalPending };
 
   const rangeLabel =
     from === to
