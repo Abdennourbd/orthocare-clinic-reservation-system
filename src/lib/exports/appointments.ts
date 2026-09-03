@@ -111,7 +111,13 @@ export function buildExportRows(
 function escapeCsvCell(value: string): string {
   // RFC 4180: quote when the cell holds the delimiter, a quote, or a newline;
   // embedded quotes double up. Delimiter is ";" (French Excel default).
-  return /[";\n\r]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+  const quoted = /[";\n\r]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+  // OWASP CSV-injection: a cell opening with = + - @ (or tab/CR) runs as a
+  // formula when the CSV is opened in a spreadsheet. Patient names, phones,
+  // service names and (opt-in) notes all flow here verbatim, so neutralize
+  // with a leading single quote. Quoting alone does NOT stop evaluation.
+  // The XLSX path needs no equivalent: aoa_to_sheet writes string cells.
+  return /^[=+\-@\t\r]/.test(quoted) ? `'${quoted}` : quoted;
 }
 
 /** CSV with ";" delimiter + UTF-8 BOM so French Excel opens accents as-is. */

@@ -72,7 +72,7 @@ export async function GET(request: NextRequest) {
       cancelReason: true,
       // Notes are selected only when explicitly requested — otherwise the
       // column is not even read, let alone serialized.
-      ...(includeNotes ? { visitNotes: true } : { visitNotes: false }),
+      visitNotes: includeNotes,
       patient: {
         select: { firstName: true, lastName: true, phone: true, phoneE164: true },
       },

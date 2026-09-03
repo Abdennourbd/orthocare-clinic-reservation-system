@@ -77,21 +77,31 @@ export async function GET(request: NextRequest) {
   );
 
   return withRefreshedSession(
-    ok({
-      date,
-      appointments: appointments.map((a) => ({
-        id: a.id,
-        startTime: a.startTime,
-        endTime: a.endTime,
-        status: a.status,
-        source: a.source,
-        patientFirstName: a.patient.firstName,
-        patientLastName: a.patient.lastName,
-        patientPhone: a.patient.phoneE164 || a.patient.phone,
-        serviceName: localized(a.service.name as never, "fr"),
-        serviceDurationMinutes: a.service.durationMinutes,
-      })),
-    }),
+    ok(
+      {
+        date,
+        appointments: appointments.map((a) => ({
+          id: a.id,
+          startTime: a.startTime,
+          endTime: a.endTime,
+          status: a.status,
+          source: a.source,
+          patientFirstName: a.patient.firstName,
+          patientLastName: a.patient.lastName,
+          patientPhone: a.patient.phoneE164 || a.patient.phone,
+          serviceName: localized(a.service.name as never, "fr"),
+          serviceDurationMinutes: a.service.durationMinutes,
+        })),
+      },
+      {
+        headers: {
+          // PII-bearing JSON: same no-store + nosniff posture as the file
+          // download route (never retained by a shared cache).
+          "Cache-Control": "no-store",
+          "X-Content-Type-Options": "nosniff",
+        },
+      },
+    ),
     guard,
   );
 }

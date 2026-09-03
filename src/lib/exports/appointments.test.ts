@@ -108,6 +108,26 @@ describe("toCSV", () => {
     expect(csv).toContain('"Sa""ra Be;nali"');
     expect(csv).toContain('"ligne1\nligne2"');
   });
+
+  it("neutralizes spreadsheet formula injection (OWASP CSV injection)", () => {
+    const csv = toCSV(
+      buildExportRows(
+        [
+          sampleInput({
+            patient: { firstName: "=HYPERLINK(", lastName: "evil", phone: "0550", phoneE164: "+213550" },
+          }),
+          sampleInput({
+            patient: { firstName: "+cmd", lastName: "x", phone: "0550", phoneE164: "@x" },
+          }),
+        ],
+        { includeNotes: false },
+      ),
+      false,
+    );
+    expect(csv).toContain("'=HYPERLINK(");
+    expect(csv).toContain("'+cmd");
+    expect(csv).not.toMatch(/[;\r\n]=HYPERLINK/);
+  });
 });
 
 describe("toXLSX", () => {

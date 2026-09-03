@@ -26,9 +26,7 @@ export const appointmentsExportQuerySchema = z.object({
   includeNotes: z
     .enum(["true", "false"])
     .default("false")
-    .transform((v) => v === "true")
-    .optional()
-    .transform((v) => v ?? false),
+    .transform((v) => v === "true"),
 });
 
 export const daySheetQuerySchema = z.object({

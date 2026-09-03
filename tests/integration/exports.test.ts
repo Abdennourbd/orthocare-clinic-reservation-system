@@ -110,7 +110,7 @@ async function seedMonth() {
       status: AppointmentStatus.CONFIRMED,
     },
   });
-  return { month, dayWithOne: `${month}-05` };
+  return { month, dayWithOne: `${month}-05`, patientId: patient.id, serviceId: service.id };
 }
 
 describe("GET /api/admin/exports/appointments", () => {
@@ -266,12 +266,50 @@ describe("GET /api/admin/exports/appointments", () => {
     expect(
       (await exportAppointments(getRequest("/api/admin/exports/appointments", cookie))).status,
     ).toBe(400);
+    expect(
+      (
+        await exportAppointments(
+          getRequest("/api/admin/exports/appointments?month=2026-09&format=csv&includeNotes=maybe", cookie),
+        )
+      ).status,
+    ).toBe(400);
+  });
+
+  it("returns a headers-only CSV (still audited with rowCount 0) for an empty month", async () => {
+    const admin = await createStaff(Role.ADMIN);
+    const response = await exportAppointments(
+      getRequest(
+        "/api/admin/exports/appointments?month=1999-01&format=csv",
+        await cookieFor(admin),
+      ),
+    );
+    expect(response.status).toBe(200);
+    const text = await response.text();
+    expect(text.replace(/^\uFEFF/, "").trim().split("\r\n")).toHaveLength(1);
+    const entry = await getPrisma().auditLog.findFirst({
+      where: { action: AuditAction.EXPORT_GENERATED },
+    });
+    expect(entry?.detail).toMatchObject({ scope: "appointments-export", rowCount: 0 });
   });
 });
 
 describe("GET /api/admin/exports/day-sheet", () => {
   it("returns the day's appointments ordered by start time (ADMIN)", async () => {
-    const { dayWithOne } = await seedMonth();
+    const { dayWithOne, patientId, serviceId } = await seedMonth();
+    // Two extra same-day rows, inserted out of order (14:00 then 09:00) —
+    // the response must still come back ascending (09:00, 10:00, 14:00).
+    for (const hhmm of ["14:00", "09:00"]) {
+      await getPrisma().appointment.create({
+        data: {
+          patientId,
+          serviceId,
+          source: AppointmentSource.ONLINE,
+          startTime: localStart(dayWithOne, hhmm),
+          endTime: localStart(dayWithOne, hhmm === "09:00" ? "09:30" : "14:30"),
+          status: AppointmentStatus.CONFIRMED,
+        },
+      });
+    }
     const admin = await createStaff(Role.ADMIN);
     const response = await daySheet(
       getRequest(`/api/admin/exports/day-sheet?date=${dayWithOne}`, await cookieFor(admin)),
@@ -279,10 +317,12 @@ describe("GET /api/admin/exports/day-sheet", () => {
     expect(response.status).toBe(200);
     const body = (await response.json()) as {
       date: string;
-      appointments: Array<{ patientFirstName: string; serviceName: string }>;
+      appointments: Array<{ patientFirstName: string; serviceName: string; startTime: string }>;
     };
     expect(body.date).toBe(dayWithOne);
-    expect(body.appointments).toHaveLength(1);
+    expect(body.appointments).toHaveLength(3);
+    const starts = body.appointments.map((a) => new Date(a.startTime).getTime());
+    expect([...starts].sort((a, b) => a - b)).toEqual(starts);
     expect(body.appointments[0].patientFirstName).toBe("Sara");
     expect(body.appointments[0].serviceName).toBe("Consultation");
   });
@@ -319,6 +359,26 @@ describe("GET /api/admin/exports/day-sheet", () => {
     // Exactly one audit row — the successful ADMIN read only.
     expect(entries).toHaveLength(1);
     expect(entries[0].detail).toMatchObject({ scope: "day-sheet", date: dayWithOne, rowCount: 1 });
+    // Same bulk-extract ruling as the monthly export: counts only, never PII.
+    expect(JSON.stringify(entries[0].detail)).not.toContain("Sara");
+    expect(JSON.stringify(entries[0].detail)).not.toContain("0550");
+  });
+
+  it("returns an empty list (still audited) for a day with no appointments", async () => {
+    await seedMonth();
+    const admin = await createStaff(Role.ADMIN);
+    const month = toClinicLocalDateString(new Date()).slice(0, 7);
+    const emptyDay = `${month}-20`;
+    const response = await daySheet(
+      getRequest(`/api/admin/exports/day-sheet?date=${emptyDay}`, await cookieFor(admin)),
+    );
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { appointments: unknown[] };
+    expect(body.appointments).toHaveLength(0);
+    const entry = await getPrisma().auditLog.findFirst({
+      where: { action: AuditAction.EXPORT_GENERATED },
+    });
+    expect(entry?.detail).toMatchObject({ scope: "day-sheet", rowCount: 0 });
   });
 
   it("400s on an impossible date (after auth)", async () => {

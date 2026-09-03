@@ -47,7 +47,13 @@ function todayLocal(): string {
 function formatTime(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+  // Clinic wall-clock, never the browser's: the printed sheet is a paper
+  // fallback and must read the same on any front-desk PC timezone.
+  return d.toLocaleTimeString("fr-FR", {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Africa/Algiers",
+  });
 }
 
 function formatDayLabel(isoDate: string): string {
@@ -58,6 +64,7 @@ function formatDayLabel(isoDate: string): string {
     day: "numeric",
     month: "long",
     year: "numeric",
+    timeZone: "Africa/Algiers",
   });
 }
 
