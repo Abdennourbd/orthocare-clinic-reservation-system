@@ -41,6 +41,11 @@ import { GET as smsHistoryRoute } from "@/app/api/admin/sms/route";
 import { GET as smsBatchesRoute } from "@/app/api/admin/sms/batches/route";
 import { POST as smsBroadcastPreviewRoute } from "@/app/api/admin/sms/broadcast/preview/route";
 import { POST as smsBroadcastRoute } from "@/app/api/admin/sms/broadcast/route";
+import {
+  GET as waitlistListRoute,
+  POST as waitlistCreateRoute,
+} from "@/app/api/admin/waitlist/route";
+import { DELETE as waitlistDeleteRoute } from "@/app/api/admin/waitlist/[id]/route";
 
 // Task 12 — the authorization matrix (plan.md §Testing strategy):
 //   one table-driven test walking EVERY /api/admin/* route ×
@@ -402,6 +407,39 @@ const ROUTES: RouteRow[] = [
     // No query — optional limit only, so an authorized actor gets 200 with
     // the (empty) batch list.
     handler: smsBatchesRoute,
+  },
+  {
+    method: "GET",
+    scanPath: "/api/admin/waitlist",
+    // Task 17.2 — the front desk (both roles) reads the waitlist.
+    allowed: [Role.ADMIN, Role.RECEPTIONIST],
+    // No query — every filter is optional (active defaults to "true"), so
+    // an authorized actor gets 200 with the (empty) first page. Proves the
+    // guard runs before the read.
+    handler: waitlistListRoute,
+  },
+  {
+    method: "POST",
+    scanPath: "/api/admin/waitlist",
+    // Task 17.2 — the front desk (both roles) adds STAFF-source entries.
+    allowed: [Role.ADMIN, Role.RECEPTIONIST],
+    // requestAs() sends no body — Zod fails after the guard, before any
+    // patient lookup.
+    okStatus: 400,
+    handler: waitlistCreateRoute,
+  },
+  {
+    method: "DELETE",
+    scanPath: "/api/admin/waitlist/[id]",
+    requestPath: "/api/admin/waitlist/does-not-exist",
+    params: { id: "does-not-exist" },
+    // Task 17.2 — the front desk (both roles) deactivates entries.
+    allowed: [Role.ADMIN, Role.RECEPTIONIST],
+    // An authorized actor requesting an unknown id gets the
+    // indistinguishable 404 — proves the guard runs before the DB lookup,
+    // not that the route is broken.
+    okStatus: 404,
+    handler: waitlistDeleteRoute,
   },
 ];
 
