@@ -387,12 +387,12 @@ Task details + rationale live in `tasks/plan.md`. This is the working checklist.
 ## Task 19: CSV/Excel export
 **Description:** Monthly activity report (appointments, patients, statuses) as CSV and XLSX download, plus a **printable day sheet** (`GET /api/admin/exports/day-sheet?date=`) that gives staff a paper fallback if the site is unreachable during clinic hours. An export is a bulk extract of patient data: ADMIN-only, audited with row count and date range, clinical notes excluded unless explicitly requested. Route: `GET /api/admin/exports/appointments?month=&format=csv|xlsx`.
 **Acceptance criteria:**
-- [ ] Export reflects correct data for chosen month
-- [ ] CSV and XLSX both downloadable
-- [ ] **ADMIN-only** route (not merely staff-only); every export audited as `EXPORT_GENERATED` with row count
-- [ ] Clinical notes excluded by default
-- [ ] Day sheet prints legibly on one page
-**Verification:** Download + open in spreadsheet app; compare to KPI numbers; confirm a receptionist account is refused; print the day sheet.
+- [x] Export reflects correct data for chosen month
+- [x] CSV and XLSX both downloadable
+- [x] **ADMIN-only** route (not merely staff-only); every export audited as `EXPORT_GENERATED` with row count
+- [x] Clinical notes excluded by default
+- [x] Day sheet prints legibly on one page
+**Verification:** Download + open in spreadsheet app; compare to KPI numbers; confirm a receptionist account is refused; print the day sheet. ✅ Done (2026-09-03): `npm test` 826/826 green, typecheck + lint + build clean, browser check of `/admin/exports` (download link, day-sheet preview with clinic-local times, live CSV/XLSX/day-sheet 200s, anon redirect, zero console errors, mobile stacks) — see `tasks/task19-summary.md`.
 **Dependencies:** Task 18
 **Estimated scope:** Small (1 day)
 **Skill:** The available **xlsx** skill covers spreadsheet generation directly — use it rather than hand-rolling XLSX output.
