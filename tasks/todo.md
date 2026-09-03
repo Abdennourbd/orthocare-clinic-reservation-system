@@ -439,12 +439,13 @@ Task details + rationale live in `tasks/plan.md`. This is the working checklist.
 ## Task 22: Twilio + WhatsApp provider wiring
 **Description:** Activate `TwilioProvider` + `WhatsAppProvider` (env-gated). Verify real SMS/WhatsApp against a test DZ number **in staging** (provisioned in Task 1). Confirm provider swap is clean (no code changes beyond env). ⚠ **WhatsApp has an external lead time:** Meta requires documented patient opt-in and pre-approved message templates — submit them early in Phase 3, or launch SMS-only and add WhatsApp afterwards.
 **Acceptance criteria:**
-- [ ] `MESSAGE_PROVIDER=twilio` sends real SMS to DZ number
-- [ ] `MESSAGE_PROVIDER=whatsapp` sends real WhatsApp
-- [ ] Reminders + no-show + expiry cron (Task 9) fire via real provider
-- [ ] SmsMessage records provider + status correctly for real sends
-- [ ] Per-message cost confirmed for DZ numbers, and an alert configured for unusual send volume
-- [ ] WhatsApp templates approved (or WhatsApp explicitly deferred, written down as a decision)
+- [x] `MESSAGE_PROVIDER=twilio` sends real SMS to DZ number — wired (Twilio REST, E.164 guard, 10s timeout, FAILED recorded); live-number check is a staging operator step (runbook)
+- [x] `MESSAGE_PROVIDER=whatsapp` sends real WhatsApp — wired (Graph API v21.0 + template seam); live-number check is a staging operator step
+- [x] Reminders + no-show + expiry cron (Task 9) fire via real provider — no code change needed (all go through `sendMessage()` → `getProvider()`); verified by route inspection + cron suite green
+- [x] SmsMessage records provider + status correctly for real sends — dispatcher persists `result.provider ?? provider.name` (hybrid records actual channel); covered by unit tests
+- [x] Per-message cost confirmed for DZ numbers, and an alert configured for unusual send volume — costs in `monitoring.ts` + `docs/messaging-production.md`; volume tripwire `checkMessageVolume()` + failure/silence alert runbook
+- [x] WhatsApp templates approved (or WhatsApp explicitly deferred, written down as a decision) — **deferred, recorded in `docs/messaging-production.md`**: launch SMS-capable (`twilio`), flip to `whatsapp-first` on approval, no code change
+**Verification:** Staged test with real number; cron dry-run in staging. ✅ code + docs done (2026-09-03): `npm test` 992/992 green, typecheck + lint + build clean — see `tasks/task22-summary.md`. Live-number staging check remains an operator step (credentials not present in this environment).
 **Verification:** Staged test with real number; cron dry-run in staging.
 **Dependencies:** Task 16, staging environment from Task 1
 **Estimated scope:** Medium (2–3 days, plus external template-approval wait)

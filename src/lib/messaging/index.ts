@@ -7,6 +7,7 @@ import {
 import { MockProvider } from "./mock";
 import { TwilioProvider } from "./twilio";
 import { WhatsAppProvider } from "./whatsapp";
+import { WhatsAppFirstProvider } from "./hybrid";
 import type { MessageProvider, SendMessageResult } from "./provider";
 import { isTransactional } from "./classify";
 import {
@@ -24,9 +25,12 @@ import {
 const mockProvider = new MockProvider();
 const twilioProvider = new TwilioProvider();
 const whatsappProvider = new WhatsAppProvider();
+const whatsappFirstProvider = new WhatsAppFirstProvider();
 
 /** Select the active provider from `MESSAGE_PROVIDER`. Unknown values fall
- * back to mock (a typo in an env var must never take down a booking). */
+ * back to mock (a typo in an env var must never take down a booking).
+ * `whatsapp-first` is the production channel strategy (plan.md §Messaging):
+ * try WhatsApp, fall back to Twilio SMS. */
 export function getProvider(): MessageProvider {
   const env = (process.env.MESSAGE_PROVIDER ?? "mock").trim().toLowerCase();
   switch (env) {
@@ -34,6 +38,10 @@ export function getProvider(): MessageProvider {
       return twilioProvider;
     case "whatsapp":
       return whatsappProvider;
+    case "whatsapp-first":
+    case "whatsapp_first":
+    case "hybrid":
+      return whatsappFirstProvider;
     case "mock":
       return mockProvider;
     default:
@@ -181,7 +189,7 @@ export async function sendMessage(
         return prisma.smsMessage.update({
           where: { id: existing.id },
           data: {
-            provider: provider.name,
+            provider: retryResult.provider ?? provider.name,
             status: retryResult.status,
             error: retryResult.error ?? null,
             sentAt: retryResult.ok ? new Date() : null,
@@ -195,11 +203,27 @@ export async function sendMessage(
 
   // 4. Deliver, then persist the outcome. A provider that throws is recorded
   // as FAILED (not left SENDING) so a transient network error never leaves a
-  // dangling row and never fails the caller's operation.
+  // dangling row and never fails the caller's operation. When a delegating
+  // provider (the whatsapp-first hybrid) reports the actual channel via
+  // `result.provider`, the row records reality so WhatsApp coverage stays
+  // measurable (plan.md §Messaging).
   const result = await deliver(provider, message.to, message.body);
+  if (!result.ok) {
+    // Structured failure event (observability): stable name + bounded fields.
+    // NEVER the recipient or body — telemetry must not carry patient PII.
+    console.warn(
+      JSON.stringify({
+        event: "message_send_failed",
+        provider: result.provider ?? provider.name,
+        code: result.code ?? "UNKNOWN",
+        type: input.type,
+      }),
+    );
+  }
   return prisma.smsMessage.update({
     where: { id: message.id },
     data: {
+      provider: result.provider ?? provider.name,
       status: result.status,
       error: result.error ?? null,
       sentAt: result.ok ? new Date() : null,

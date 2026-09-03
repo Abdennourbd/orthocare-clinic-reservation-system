@@ -7,7 +7,11 @@ import type { SmsStatus } from "@/generated/prisma/client";
 // so the transactional/non-transactional split is enforced in one place and no
 // feature can bypass it. Real channel wiring is Task 22; mock is the default.
 
-export type MessageProviderName = "mock" | "twilio" | "whatsapp";
+export type MessageProviderName =
+  | "mock"
+  | "twilio"
+  | "whatsapp"
+  | "whatsapp-first";
 
 export type SendMessageParams = {
   /** E.164 recipient, e.g. "+213550123456". */
@@ -20,8 +24,18 @@ export type SendMessageResult = {
   ok: boolean;
   /** `SENT` when delivered, `FAILED` otherwise. */
   status: SmsStatus;
-  /** Human-readable failure reason (only when `ok` is false). */
+  /** Human-readable failure reason (only when `ok` is false). Never carries
+   * secrets or patient PII — it is persisted on the SmsMessage row. */
   error?: string;
+  /** Machine-readable failure code for programmatic branching (e.g. the
+   * hybrid provider falling back on `NOT_ON_WHATSAPP`). Optional and
+   * additive — existing providers omit it. */
+  code?: string;
+  /** Actual channel used for this send. Set by delegating providers (the
+   * `whatsapp-first` hybrid) so the dispatcher records the real channel on
+   * the SmsMessage row. Direct providers omit it (the dispatcher uses
+   * `provider.name`). */
+  provider?: MessageProviderName;
 };
 
 export interface MessageProvider {

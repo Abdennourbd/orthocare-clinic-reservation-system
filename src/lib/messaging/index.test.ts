@@ -37,6 +37,11 @@ describe("getProvider", () => {
     expect(getProvider().name).toBe("whatsapp");
   });
 
+  it("selects the whatsapp-first hybrid by env (production channel strategy)", () => {
+    vi.stubEnv("MESSAGE_PROVIDER", "whatsapp-first");
+    expect(getProvider().name).toBe("whatsapp-first");
+  });
+
   it("falls back to mock for an unknown value (never breaks a booking)", () => {
     vi.stubEnv("MESSAGE_PROVIDER", "pigeon");
     expect(getProvider().name).toBe("mock");
