@@ -38,6 +38,10 @@ export const DEFAULT_MESSAGE_TEMPLATES = {
    * suppressed for opted-out/inactive patients by the dispatcher. */
   delay:
     "Bonjour {firstName}, votre rendez-vous de {time} aujourd'hui est retardé d'environ {delayMinutes} minutes. Ortho'Care Clinic",
+  /** Task 17 slot-freed offer to a waitlist entry. Non-transactional —
+   * suppressed for opted-out/inactive patients by the dispatcher. */
+  waitlist:
+    "Bonjour {firstName}, une place {serviceName} s'est libérée le {date} à {time}. Contactez la clinique vite pour la réserver. Ortho'Care Clinic",
 } as const;
 
 export type MessageTemplateKey = keyof typeof DEFAULT_MESSAGE_TEMPLATES;

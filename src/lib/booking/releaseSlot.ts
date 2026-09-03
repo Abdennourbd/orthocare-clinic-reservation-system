@@ -6,10 +6,21 @@ import {
   type Prisma,
 } from "@/generated/prisma/client";
 import { emitSlotFreed } from "./events";
+import { subscribeWaitlist } from "@/lib/waitlist/notifyWaitlist";
 import {
   AppointmentNotFoundError,
   AppointmentAlreadyReleasedError,
 } from "./errors";
+
+// Task 17.1 — activate the waitlist subscriber in every server process that
+// can free a slot. This module is the single choke point: staff cancel
+// (Task 14), self-service cancel (Task 8) and the expiry cron (Task 9) all
+// route through `releaseSlot()`, and reschedules through `releaseSlotInTx()`
+// (imported from here, so that path loads this module too). Subscribing here
+// — rather than in `events.ts` (kept decoupled) or a new `instrumentation.ts`
+// (no such hook exists in this repo) — guarantees the subscriber is live
+// wherever an emit can happen, without touching every route.
+subscribeWaitlist();
 
 export {
   AppointmentNotFoundError,
