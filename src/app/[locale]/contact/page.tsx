@@ -1,15 +1,21 @@
 import type { Metadata } from "next";
 import { getTranslations } from "next-intl/server";
 import { CLINIC_LOCATION } from "@/lib/settings/clinicLocation";
+import { pageMetadata } from "@/lib/seo/pageMetadata";
 import Reveal from "@/components/public/motion/Reveal";
 import LocationSection from "@/components/public/LocationSection";
 import { PhoneIcon } from "@/components/public/icons";
 
 export const revalidate = 3600;
 
-export async function generateMetadata(): Promise<Metadata> {
-  const t = await getTranslations("Contact");
-  return { title: t("title"), description: t("subtitle") };
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}): Promise<Metadata> {
+  const { locale } = await params;
+  const t = await getTranslations({ locale, namespace: "Contact" });
+  return pageMetadata(locale, "/contact", t("title"), t("subtitle"));
 }
 
 export default async function ContactPage() {

@@ -1,4 +1,5 @@
 import type { MetadataRoute } from "next";
+import { siteBaseUrl } from "@/lib/seo/canonical";
 
 /**
  * robots.txt (Task 23).
@@ -6,7 +7,7 @@ import type { MetadataRoute } from "next";
  * Token URLs carry a capability token — they must never be crawled or indexed.
  */
 export default function robots(): MetadataRoute.Robots {
-  const base = (process.env.APP_URL ?? "http://localhost:3000").replace(/\/+$/, "");
+  const base = siteBaseUrl();
   return {
     rules: [
       {

@@ -3,13 +3,19 @@ import { getTranslations } from "next-intl/server";
 import { listActiveGalleryItems } from "@/lib/public/content";
 import { getAppLocale } from "@/lib/i18n/getLocale";
 import { groupIntoBlocks } from "@/lib/public/galleryBlocks";
+import { pageMetadata } from "@/lib/seo/pageMetadata";
 import Reveal from "@/components/public/motion/Reveal";
 
 export const revalidate = 3600;
 
-export async function generateMetadata(): Promise<Metadata> {
-  const t = await getTranslations("GalleryPage");
-  return { title: t("title"), description: t("subtitle") };
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}): Promise<Metadata> {
+  const { locale } = await params;
+  const t = await getTranslations({ locale, namespace: "GalleryPage" });
+  return pageMetadata(locale, "/gallery", t("title"), t("subtitle"));
 }
 
 export default async function GalleryPage() {

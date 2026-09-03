@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import AppointmentManager from "@/components/public/AppointmentManager/AppointmentManager";
 
 // Self-service token page (plan.md §Self-service link). The page shell is
@@ -7,6 +8,12 @@ import AppointmentManager from "@/components/public/AppointmentManager/Appointme
 // `/:locale/appointment/:token`) protects the token in the URL from leaking
 // in any `Referer` header.
 export const dynamic = "force-dynamic";
+
+// Capability-token URL: never index. (Canonicals/hreflang live only on
+// real pages now — the layout sets none — so no alternates leak here.)
+export const metadata: Metadata = {
+  robots: { index: false, follow: false },
+};
 
 type Props = { params: Promise<{ locale: string; token: string }> };
 

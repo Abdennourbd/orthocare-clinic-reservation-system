@@ -7,7 +7,8 @@
    against staging DB + mock provider.
 3. Confirm `APP_URL=https://<prod-domain>`, `SENTRY_DSN`, `CRON_SECRET`,
    `SESSION_SECRET`, messaging + Blob env vars set in Vercel production env.
-4. Verify 301s: `curl -I https://<prod-domain>/privacy-policy/` → 301 to `/fr/privacy`.
+4. Verify redirects: `curl -I https://<prod-domain>/privacy-policy` → 301/308 to `/fr/privacy`
+   (Next.js `permanent: true` emits 308; Google treats 301/308 equivalently).
    Full mapping audited in `src/lib/seo/redirects.ts` (old WordPress site had 2
    indexed URLs: `/` and `/privacy-policy/`; anchor sections need no redirect).
 5. Submit per-locale sitemaps: `https://<prod-domain>/sitemap.xml` in Google

@@ -6,16 +6,22 @@
  * configs (client/server/edge).
  *
  * Rules:
- * - request bodies / data stripped (may contain names, phones, notes)
- * - self-service tokens in URLs masked: /appointment/<token> -> [REDACTED]
- * - known patient keys removed from extra/contexts/user
+ * - request bodies / data / query_string / cookies stripped or masked
+ * - self-service tokens masked in page AND api URLs:
+ *   /appointment/<token> and /api/appointments/<token> -> [REDACTED]
+ * - known patient keys redacted in extra/contexts/user AND in
+ *   breadcrumbs / exception values / message (free text is untrusted)
+ * - beforeSend must never throw: cloning is throw-proof
  */
 
 type LooseRecord = Record<string, unknown>;
 
+// Matches /appointment/<token>, /api/appointments/<token>, any locale prefix.
+const TOKEN_URL_RE = /\/(?:api\/)?appointments?\/[^/?#\s]+/g;
+
 function maskTokenUrls(value: unknown): unknown {
   if (typeof value === "string") {
-    return value.replace(/\/appointment\/[^/?#\s]+/g, "/appointment/[REDACTED]");
+    return value.replace(TOKEN_URL_RE, (m) => m.replace(/\/[^/]+$/, "/[REDACTED]"));
   }
   if (Array.isArray(value)) return value.map(maskTokenUrls);
   if (value && typeof value === "object") {
@@ -33,13 +39,20 @@ const PATIENT_KEYS = new Set([
   "patientId",
   "firstName",
   "lastName",
+  "name",
   "phone",
   "phoneE164",
   "email",
   "birthDate",
+  "dateOfBirth",
+  "dob",
+  "address",
   "notes",
   "treatment",
   "body",
+  "token",
+  "rawToken",
+  "sessionId",
 ]);
 
 function stripPatientKeys(obj: unknown): unknown {
@@ -58,11 +71,33 @@ function stripPatientKeys(obj: unknown): unknown {
   return obj;
 }
 
+/** Both token masking and patient-key redaction for untrusted free text. */
+function scrubUntrusted(value: unknown): unknown {
+  return stripPatientKeys(maskTokenUrls(value));
+}
+
+function safeClone(event: LooseRecord): LooseRecord {
+  try {
+    if (typeof structuredClone === "function") return structuredClone(event);
+  } catch {
+    // fall through to JSON
+  }
+  try {
+    return JSON.parse(JSON.stringify(event ?? {})) as LooseRecord;
+  } catch {
+    // Non-serializable (circular/BigInt): return a minimal safe shell.
+    const fallback: LooseRecord = {};
+    if (typeof event.transaction === "string") fallback.transaction = event.transaction;
+    if (typeof event.level === "string") fallback.level = event.level;
+    return fallback;
+  }
+}
+
 export type ScrubbedEvent = LooseRecord;
 
 /** Mutates nothing — returns a scrubbed copy safe to send to Sentry. */
 export function scrubEvent(event: LooseRecord): ScrubbedEvent {
-  const copy = JSON.parse(JSON.stringify(event ?? {})) as LooseRecord;
+  const copy = safeClone(event ?? {});
 
   // Strip request bodies (may contain patient form data).
   if (copy.request && typeof copy.request === "object") {
@@ -70,10 +105,21 @@ export function scrubEvent(event: LooseRecord): ScrubbedEvent {
     if ("data" in req) delete req.data;
     if ("body" in req) delete req.body;
     if (typeof req.url === "string") req.url = maskTokenUrls(req.url) as string;
+    if (typeof req.query_string === "string") {
+      req.query_string = maskTokenUrls(req.query_string) as string;
+    }
+    if (req.cookies && typeof req.cookies === "object") {
+      req.cookies = stripPatientKeys(maskTokenUrls(req.cookies)) as LooseRecord;
+    }
     if (typeof req.headers === "object" && req.headers !== null) {
       const headers = req.headers as LooseRecord;
-      for (const hk of ["cookie", "authorization", "x-cron-secret"]) {
-        if (hk in headers) headers[hk] = "[REDACTED]";
+      for (const key of Object.keys(headers)) {
+        const lower = key.toLowerCase();
+        if (lower === "cookie" || lower === "authorization" || lower === "x-cron-secret") {
+          headers[key] = "[REDACTED]";
+        } else if (typeof headers[key] === "string") {
+          headers[key] = maskTokenUrls(headers[key]);
+        }
       }
     }
   }
@@ -82,14 +128,20 @@ export function scrubEvent(event: LooseRecord): ScrubbedEvent {
     copy.transaction = maskTokenUrls(copy.transaction) as string;
   }
 
-  if (Array.isArray(copy.breadcrumbs)) {
-    copy.breadcrumbs = maskTokenUrls(copy.breadcrumbs) as ScrubbedEvent["breadcrumbs"];
+  if (typeof copy.message === "string") {
+    copy.message = scrubUntrusted(copy.message) as string;
   }
 
-  // Exception values may embed patient names from template strings.
-  // We keep the message shape but mask token-like URL fragments inside it.
+  if (Array.isArray(copy.breadcrumbs)) {
+    copy.breadcrumbs = scrubUntrusted(copy.breadcrumbs) as ScrubbedEvent["breadcrumbs"];
+  }
+
   if (copy.exception && typeof copy.exception === "object") {
-    copy.exception = maskTokenUrls(copy.exception) as LooseRecord;
+    copy.exception = scrubUntrusted(copy.exception) as LooseRecord;
+  }
+
+  if (Array.isArray(copy.spans)) {
+    copy.spans = scrubUntrusted(copy.spans) as ScrubbedEvent["spans"];
   }
 
   if (copy.extra && typeof copy.extra === "object") {

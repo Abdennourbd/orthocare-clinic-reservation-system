@@ -6,7 +6,6 @@ import { hasLocale } from "next-intl";
 import { notFound } from "next/navigation";
 import { routing } from "@/i18n/routing";
 import { isRtl } from "@/lib/i18n/config";
-import { getAlternateUrls, getCanonicalUrl } from "@/lib/seo/canonical";
 import Header from "@/components/public/Header";
 import Footer from "@/components/public/Footer";
 import LocalBusinessJsonLd from "@/components/public/LocalBusinessJsonLd";
@@ -39,42 +38,17 @@ export async function generateMetadata({
   params: Promise<{ locale: string }>;
 }): Promise<Metadata> {
   const { locale } = await params;
+  if (!hasLocale(routing.locales, locale)) {
+    notFound();
+  }
   const t = await getTranslations({ locale, namespace: "Metadata" });
-  const base = (process.env.APP_URL ?? "http://localhost:3000").replace(/\/+$/, "");
-  const alternates = getAlternateUrls("/");
-  // getAlternateUrls("/") returns absolute URLs already; rebuild per-locale
-  // paths relative to the homepage so hreflang stays correct.
-  void alternates;
-  const languages: Record<string, string> = {
-    fr: getCanonicalUrl("fr", "/"),
-    ar: getCanonicalUrl("ar", "/"),
-    en: getCanonicalUrl("en", "/"),
-    "x-default": getCanonicalUrl("fr", "/"),
-  };
+  // Layout sets only locale-agnostic defaults. Canonicals, hreflang
+  // alternates and OG urls are per-page via pageMetadata() — the layout
+  // cannot know the child path, and stamping "/" here would canonicalize
+  // every subpage (and every token URL) to the homepage.
   return {
     title: t("title"),
     description: t("description"),
-    metadataBase: new URL(base),
-    alternates: {
-      canonical: getCanonicalUrl(locale, "/"),
-      languages,
-    },
-    openGraph: {
-      title: t("title"),
-      description: t("description"),
-      url: getCanonicalUrl(locale, "/"),
-      siteName: "Ortho'Care Clinic",
-      locale: locale === "ar" ? "ar_DZ" : locale === "en" ? "en_US" : "fr_DZ",
-      alternateLocale: ["fr_DZ", "ar_DZ", "en_US"].filter(
-        (l) => l !== (locale === "ar" ? "ar_DZ" : locale === "en" ? "en_US" : "fr_DZ")
-      ),
-      type: "website",
-    },
-    twitter: {
-      card: "summary_large_image",
-      title: t("title"),
-      description: t("description"),
-    },
   };
 }
 

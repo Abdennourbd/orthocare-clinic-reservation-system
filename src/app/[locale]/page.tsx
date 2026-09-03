@@ -1,3 +1,6 @@
+import type { Metadata } from "next";
+import { getTranslations } from "next-intl/server";
+import { pageMetadata } from "@/lib/seo/pageMetadata";
 import CursorGlow from "@/components/public/motion/CursorGlow";
 import HeroHome from "@/components/public/home/HeroHome";
 import TrustStrip from "@/components/public/home/TrustStrip";
@@ -12,6 +15,16 @@ import LocationSection from "@/components/public/LocationSection";
 import CtaBand from "@/components/public/home/CtaBand";
 
 export const revalidate = 3600;
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}): Promise<Metadata> {
+  const { locale } = await params;
+  const t = await getTranslations({ locale, namespace: "Metadata" });
+  return pageMetadata(locale, "/", t("title"), t("description"));
+}
 
 export default function HomePage() {
   return (

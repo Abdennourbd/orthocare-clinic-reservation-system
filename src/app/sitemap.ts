@@ -22,25 +22,28 @@ const STATIC_PATHS = [
 const LOCALES = ["fr", "ar", "en"] as const;
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  let serviceSlugs: string[] = [];
+  let services: { slug: string; updatedAt: Date }[] = [];
   try {
     const { getPrisma } = await import("@/lib/db");
-    const rows = await getPrisma().service.findMany({
+    services = await getPrisma().service.findMany({
       where: { active: true },
       select: { slug: true, updatedAt: true },
     });
-    serviceSlugs = rows.map((r) => r.slug);
-  } catch {
-    serviceSlugs = [];
+  } catch (err) {
+    // Build without DB (CI): static-only sitemap. Warn so a real prod
+    // misconfiguration doesn't go silently unnoticed.
+    console.warn("[sitemap] DB unreachable, emitting static paths only", err);
+    services = [];
   }
 
-  const paths = [...STATIC_PATHS, ...serviceSlugs.map((s) => `/services/${s}`)];
-  const now = new Date();
+  const updatedBySlug = new Map(services.map((s) => [`/services/${s.slug}`, s.updatedAt]));
+
+  const paths = [...STATIC_PATHS, ...services.map((s) => `/services/${s.slug}`)];
 
   return LOCALES.flatMap((locale) =>
     paths.map((p) => ({
       url: getCanonicalUrl(locale, p),
-      lastModified: now,
+      lastModified: updatedBySlug.get(p) ?? undefined,
       changeFrequency: p === "/" ? "weekly" : "monthly",
       priority: p === "/" ? 1 : 0.7,
       alternates: {

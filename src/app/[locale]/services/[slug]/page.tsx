@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { getTranslations } from "next-intl/server";
 import { Link } from "@/i18n/navigation";
 import { getActiveServiceBySlug, formatPrice } from "@/lib/public/services";
+import { pageMetadata } from "@/lib/seo/pageMetadata";
 import Reveal from "@/components/public/motion/Reveal";
 import { ToothIcon, ArrowRightIcon, ClockIcon } from "@/components/public/icons";
 
@@ -12,10 +13,15 @@ type Props = { params: Promise<{ locale: string; slug: string }> };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { locale, slug } = await params;
-  const t = await getTranslations("ServicesPage");
+  const t = await getTranslations({ locale, namespace: "ServicesPage" });
   const service = await getActiveServiceBySlug(slug, locale);
-  if (!service) return { title: t("title") };
-  return { title: `${service.name} — ${t("title")}`, description: service.description };
+  if (!service) return pageMetadata(locale, "/services", t("title"), t("subtitle"));
+  return pageMetadata(
+    locale,
+    `/services/${slug}`,
+    `${service.name} — ${t("title")}`,
+    service.description
+  );
 }
 
 export default async function ServiceDetailPage({ params }: Props) {

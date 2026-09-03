@@ -1,14 +1,20 @@
 import type { Metadata } from "next";
 import { getTranslations } from "next-intl/server";
 import { Link } from "@/i18n/navigation";
+import { pageMetadata } from "@/lib/seo/pageMetadata";
 import Reveal from "@/components/public/motion/Reveal";
 import { ToothIcon, HeartIcon, ShieldIcon, SparkleIcon } from "@/components/public/icons";
 
 export const revalidate = 3600;
 
-export async function generateMetadata(): Promise<Metadata> {
-  const t = await getTranslations("About");
-  return { title: t("title"), description: t("subtitle") };
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}): Promise<Metadata> {
+  const { locale } = await params;
+  const t = await getTranslations({ locale, namespace: "About" });
+  return pageMetadata(locale, "/about", t("title"), t("subtitle"));
 }
 
 export default async function AboutPage() {

@@ -1,7 +1,9 @@
+import type { Metadata } from "next";
 import { getTranslations } from "next-intl/server";
 import { listActiveServices } from "@/lib/public/services";
 import { readBookingPolicy, readConsentVersion } from "@/lib/booking/policy";
 import { toClinicLocalDateString } from "@/lib/time/clinicTime";
+import { pageMetadata } from "@/lib/seo/pageMetadata";
 import BookingWizard from "@/components/public/BookingWizard/BookingWizard";
 
 // The booking page must always be server-rendered fresh: it bakes clinic-local
@@ -10,6 +12,12 @@ import BookingWizard from "@/components/public/BookingWizard/BookingWizard";
 export const dynamic = "force-dynamic";
 
 type Props = { params: Promise<{ locale: string }> };
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { locale } = await params;
+  const t = await getTranslations({ locale, namespace: "Booking" });
+  return pageMetadata(locale, "/book", t("title"), t("intro"));
+}
 
 export default async function BookPage({ params }: Props) {
   const { locale } = await params;

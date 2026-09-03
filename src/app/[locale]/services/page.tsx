@@ -2,15 +2,21 @@ import type { Metadata } from "next";
 import { getTranslations } from "next-intl/server";
 import { Link } from "@/i18n/navigation";
 import { listActiveServices, formatPrice } from "@/lib/public/services";
+import { pageMetadata } from "@/lib/seo/pageMetadata";
 import { getAppLocale } from "@/lib/i18n/getLocale";
 import Reveal from "@/components/public/motion/Reveal";
 import { ToothIcon, ArrowRightIcon } from "@/components/public/icons";
 
 export const revalidate = 3600;
 
-export async function generateMetadata(): Promise<Metadata> {
-  const t = await getTranslations("ServicesPage");
-  return { title: t("title"), description: t("subtitle") };
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}): Promise<Metadata> {
+  const { locale } = await params;
+  const t = await getTranslations({ locale, namespace: "ServicesPage" });
+  return pageMetadata(locale, "/services", t("title"), t("subtitle"));
 }
 
 export default async function ServicesPage() {

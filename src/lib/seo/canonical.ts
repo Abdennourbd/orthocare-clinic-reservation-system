@@ -12,20 +12,30 @@ export type Locale = (typeof routing.locales)[number];
 const LOCALES: readonly string[] = routing.locales;
 export const DEFAULT_LOCALE = "fr";
 
-function baseUrl(): string {
-  const raw = process.env.APP_URL ?? "http://localhost:3000";
+/** Absolute site origin. Empty/whitespace APP_URL falls back to localhost (dev-safe). */
+export function siteBaseUrl(): string {
+  const raw = (process.env.APP_URL ?? "").trim() || "http://localhost:3000";
   return raw.replace(/\/+$/, "");
 }
 
+function baseUrl(): string {
+  return siteBaseUrl();
+}
+
 function normalizePath(pathname: string): string {
-  if (!pathname.startsWith("/")) return `/${pathname}`;
+  let p = pathname.startsWith("/") ? pathname : `/${pathname}`;
   // Strip any leading locale prefix (/fr, /ar, /en) so callers can pass
   // either a bare path or a full localized path.
   for (const l of LOCALES) {
-    if (pathname === `/${l}`) return "/";
-    if (pathname.startsWith(`/${l}/`)) return pathname.slice(l.length + 1) || "/";
+    if (p === `/${l}`) return "/";
+    if (p.startsWith(`/${l}/`)) {
+      p = p.slice(l.length + 1) || "/";
+      break;
+    }
   }
-  return pathname;
+  // Single canonical spelling: strip trailing slash (except root).
+  if (p.length > 1) p = p.replace(/\/+$/, "");
+  return p;
 }
 
 /** Absolute canonical URL for a locale + path, e.g. https://site/fr/services */

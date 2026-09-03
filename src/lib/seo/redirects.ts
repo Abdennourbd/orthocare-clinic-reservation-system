@@ -1,5 +1,5 @@
 /**
- * Legacy 301 redirects from clinicorthocare.com (Task 23).
+ * Legacy redirects from clinicorthocare.com (Task 23).
  *
  * Source audit (2026-09-04 via live fetch):
  * - https://clinicorthocare.com/page-sitemap.xml lists exactly 2 URLs:
@@ -8,8 +8,10 @@
  *   #transformations, #contact) — no deep pages to map.
  * - Old site is WordPress (AIOSEO); no /wp-*, /blog, or service slugs indexed.
  *
- * Mapping: old FR-only pages -> new /fr/* pages. Unknown paths fall back to
- * the FR homepage so ranking is preserved rather than 404ing.
+ * Mapping: old FR-only pages -> new /fr/* pages. `/` is served by the new
+ * homepageLocale redirect already (no rule needed); only /privacy-policy/*
+ * needs an explicit rule. Note: Next.js `permanent: true` emits 308
+ * (Google treats 301/308 equivalently for ranking transfer).
  */
 
 export type LegacyRedirect = {

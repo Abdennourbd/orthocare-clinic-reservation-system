@@ -1,0 +1,22 @@
+npm notice run orthocare-clinic@0.1.0 dev
+npm notice run next dev
+▲ Next.js 16.3.1 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://192.168.0.111:3000
+- Environments: .env
+✓ Ready in 301ms
+✓ Running next.config.ts took 630ms
+
+(node:256544) Warning: SECURITY WARNING: The SSL modes 'prefer', 'require', and 'verify-ca' are treated as aliases for 'verify-full'.
+In the next major version (pg-connection-string v3.0.0 and pg v9.0.0), these modes will adopt standard libpq semantics, which have weaker security guarantees.
+
+To prepare for this change:
+- If you want the current behavior, explicitly use 'sslmode=verify-full'
+- If you want libpq compatibility now, use 'uselibpqcompat=true&sslmode=require'
+
+See https://www.postgresql.org/docs/current/libpq-ssl.html for libpq SSL mode definitions.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ GET /api/health 200 in 614ms (next.js: 211ms, application-code: 403ms)
+ GET /fr/book 200 in 10.9s (next.js: 130ms, proxy.ts: 199ms, generate-params: 381ms, application-code: 10.2s)
+ HEAD /fr/appointment/testtoken123 200 in 486ms (next.js: 418ms, proxy.ts: 7ms, application-code: 61ms)
+ GET /fr/appointment/testtoken123 200 in 78ms (next.js: 14ms, proxy.ts: 4ms, application-code: 59ms)

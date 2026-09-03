@@ -1,12 +1,18 @@
 import type { Metadata } from "next";
 import { getTranslations } from "next-intl/server";
+import { pageMetadata } from "@/lib/seo/pageMetadata";
 import Reveal from "@/components/public/motion/Reveal";
 
 export const revalidate = 3600;
 
-export async function generateMetadata(): Promise<Metadata> {
-  const t = await getTranslations("Privacy");
-  return { title: t("title"), description: t("intro") };
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}): Promise<Metadata> {
+  const { locale } = await params;
+  const t = await getTranslations({ locale, namespace: "Privacy" });
+  return pageMetadata(locale, "/privacy", t("title"), t("intro"));
 }
 
 export default async function PrivacyPage() {
