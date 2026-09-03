@@ -413,25 +413,25 @@ Task details + rationale live in `tasks/plan.md`. This is the working checklist.
 ## Task 21: Content management + settings
 **Description:** CRUD for services (incl. durations), gallery, testimonials, FAQ; working hours/slot config; **closure dates** (holidays, Eid, vacation, emergency closures); booking policy (lead time, horizon, PENDING expiry); messaging templates. Adding a closure that covers existing appointments shows the affected list and offers bulk cancel-and-notify or reschedule — appointments are never dropped silently. Routes under `/api/admin/services`, `/testimonials`, `/faqs`, `/gallery`, `/settings`, `/closures`.
 **Acceptance criteria:**
-- [ ] Each content type editable; reflects on public site (Task 11 pages)
-- [ ] Service duration changes affect slot engine
-- [ ] Working hours changes affect slot generation
-- [ ] Closure dates block new bookings on those days and surface affected existing appointments for a staff decision
-- [ ] Booking-policy settings (lead time, horizon, PENDING expiry) take effect in the slot engine and the expiry cron
-- [ ] Messaging templates editable; used by SMS Center (Task 16)
-- [ ] ADMIN-only; every settings and closure change audited
-**Verification:** Manual edit → check public page + slots + template render; add a closure covering a booked day and confirm the affected list appears.
+- [x] Each content type editable; reflects on public site (Task 11 pages)
+- [x] Service duration changes affect slot engine
+- [x] Working hours changes affect slot generation
+- [x] Closure dates block new bookings on those days and surface affected existing appointments for a staff decision
+- [x] Booking-policy settings (lead time, horizon, PENDING expiry) take effect in the slot engine and the expiry cron
+- [x] Messaging templates editable; used by SMS Center (Task 16)
+- [x] ADMIN-only; every settings and closure change audited
+**Verification:** ✅ Done (2026-09-03): `npm test` 964/964 green (incl. content-settings suite + authz-matrix 235), typecheck + lint + production build clean, browser check of `/admin/content|settings|closures` (live CRUD, closure create→201→delete→200, zero console errors), `/fr/services` renders live data, receptionist nav hidden + direct URL redirected — see `tasks/task21-summary.md`.
 **Dependencies:** Task 12, Task 3b
 **Estimated scope:** Medium (3–4 days)
 **Skill:** No specialized skill needed — CRUD plus careful UI copy, since the clinic owner will use this unaided. Worth writing the screens in plain language rather than technical labels.
 
 ## Checkpoint: After Tasks 16-21 (Admin ops complete)
-- [ ] SMS center + waitlist + KPIs + exports working
-- [ ] Broadcast preview shows recipient count; double-submit sends once; opted-out patients excluded
-- [ ] Waitlist fires on self-service cancellation **and** on auto-expiry (verified)
-- [ ] Closure dates block bookings and surface affected appointments
-- [ ] Team + content + settings manageable; password reset works end-to-end
-- [ ] Role restrictions enforced (receptionist cannot manage team/settings/broadcasts/exports/audit)
+- [x] SMS center + waitlist + KPIs + exports working
+- [x] Broadcast preview shows recipient count; double-submit sends once; opted-out patients excluded
+- [x] Waitlist fires on self-service cancellation **and** on auto-expiry (verified)
+- [x] Closure dates block bookings and surface affected appointments
+- [x] Team + content + settings manageable; password reset works end-to-end
+- [x] Role restrictions enforced (receptionist cannot manage team/settings/broadcasts/exports/audit)
 - [ ] Review with human before proceeding
 
 ## Phase 6: Production Readiness
