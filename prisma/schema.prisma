@@ -209,6 +209,12 @@ model Appointment {
 
   smsMessages        SmsMessage[]
   selfServiceTokens  SelfServiceToken[]
+
+  // Hot-path indexes (Task 1 hardening): slot-engine window scans, day view,
+  // call queue, expiry cron, KPIs and exports all filter on these.
+  @@index([startTime])
+  @@index([status, createdAt])
+  @@index([startTime, endTime])
 }
 
 // -----------------------------------------------------------------------------
@@ -616,4 +622,7 @@ model AuditLog {
 
   @@index([createdAt])
   @@index([entityType, entityId])
+  // Viewer filters (hardening loop): action + staff timelines on a fast-growing table.
+  @@index([action, createdAt])
+  @@index([userId, createdAt])
 }
