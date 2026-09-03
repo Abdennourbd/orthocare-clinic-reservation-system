@@ -47,6 +47,8 @@ import {
 } from "@/app/api/admin/waitlist/route";
 import { DELETE as waitlistDeleteRoute } from "@/app/api/admin/waitlist/[id]/route";
 import { GET as kpisRoute } from "@/app/api/admin/kpis/route";
+import { GET as appointmentsExportRoute } from "@/app/api/admin/exports/appointments/route";
+import { GET as daySheetRoute } from "@/app/api/admin/exports/day-sheet/route";
 
 // Task 12 — the authorization matrix (plan.md §Testing strategy):
 //   one table-driven test walking EVERY /api/admin/* route ×
@@ -452,6 +454,26 @@ const ROUTES: RouteRow[] = [
     // authorized actor gets 200 with the (empty) aggregates. Proves the
     // guard runs before the read.
     handler: kpisRoute,
+  },
+  {
+    method: "GET",
+    scanPath: "/api/admin/exports/appointments",
+    // Task 19 — bulk extract of patient data: ADMIN only. No query in the
+    // matrix request, so an authorized admin gets 400 (month is required) —
+    // proving the guard runs before validation.
+    allowed: [Role.ADMIN],
+    okStatus: 400,
+    handler: appointmentsExportRoute,
+  },
+  {
+    method: "GET",
+    scanPath: "/api/admin/exports/day-sheet",
+    // Task 19 — printable day sheet carries patient names/phones: ADMIN only.
+    // No query in the matrix request, so an authorized admin gets 400 (date
+    // is required) — proving the guard runs before validation.
+    allowed: [Role.ADMIN],
+    okStatus: 400,
+    handler: daySheetRoute,
   },
 ];
 
