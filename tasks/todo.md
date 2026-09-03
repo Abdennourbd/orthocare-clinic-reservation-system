@@ -341,15 +341,15 @@ Task details + rationale live in `tasks/plan.md`. This is the working checklist.
 ## Task 16: SMS Center
 **Description:** Manual single SMS to a patient; broadcast to all appointments of a day with delay template ("delayed by X min"); send history with shared `batchId`. Broadcasts require a **preview step** showing the exact recipient list and count before sending, and carry an **idempotency key** so a double-click cannot send twice. Cancelled appointments are excluded from broadcast recipients. Routes: `POST /api/admin/sms/single`, `POST /api/admin/sms/broadcast/preview`, `POST /api/admin/sms/broadcast`, `GET /api/admin/sms`, `GET /api/admin/sms/batches`.
 **Acceptance criteria:**
-- [ ] Single manual SMS sends and logs (SmsMessage with patientId)
-- [ ] Broadcast sends to all today's appointments; logged with shared batchId
-- [ ] Delay template renders ("Your appointment today is delayed by X min")
-- [ ] Templates editable from Settings (Task 21)
-- [ ] Broadcast permission: admin-only (receptionist blocked)
-- [ ] Preview shows the recipient count before anything is sent; submitting twice with the same idempotency key sends once
-- [ ] Cancelled appointments excluded; opted-out patients excluded from the delay broadcast
-- [ ] Every send audited (`SMS_SENT`) with `batchId` and recipient count
-**Verification:** Manual send/broadcast; check SmsMessage log; role-gating test; double-submit test.
+- [x] Single manual SMS sends and logs (SmsMessage with patientId)
+- [x] Broadcast sends to all today's appointments; logged with shared batchId
+- [x] Delay template renders ("Your appointment today is delayed by X min")
+- [x] Templates editable from Settings (Task 21)
+- [x] Broadcast permission: admin-only (receptionist blocked)
+- [x] Preview shows the recipient count before anything is sent; submitting twice with the same idempotency key sends once
+- [x] Cancelled appointments excluded; opted-out patients excluded from the delay broadcast
+- [x] Every send audited (`SMS_SENT`) with `batchId` and recipient count
+**Verification:** ✅ Done (2026-09-03): `npm test` 712/712 green (incl. SMS center integration suite + templates + authz-matrix), typecheck + lint + production build clean — see `tasks/task16-summary.md`.
 **Dependencies:** Task 14, Task 13
 **Estimated scope:** Medium (2–3 days)
 **Skill:** Same **messaging-provider** skill as Task 7, plus a **bulk-send safety** mindset (preview, idempotency, cost per message). One misclick here messages every patient of the day — the guardrails are the feature.
