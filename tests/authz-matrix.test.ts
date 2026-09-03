@@ -46,6 +46,7 @@ import {
   POST as waitlistCreateRoute,
 } from "@/app/api/admin/waitlist/route";
 import { DELETE as waitlistDeleteRoute } from "@/app/api/admin/waitlist/[id]/route";
+import { GET as kpisRoute } from "@/app/api/admin/kpis/route";
 
 // Task 12 — the authorization matrix (plan.md §Testing strategy):
 //   one table-driven test walking EVERY /api/admin/* route ×
@@ -440,6 +441,17 @@ const ROUTES: RouteRow[] = [
     // not that the route is broken.
     okStatus: 404,
     handler: waitlistDeleteRoute,
+  },
+  {
+    method: "GET",
+    scanPath: "/api/admin/kpis",
+    // Task 18 — week aggregates are counts/rates only (no names/phones), so
+    // the front desk (both roles) reads them; the read is NOT audited.
+    allowed: [Role.ADMIN, Role.RECEPTIONIST],
+    // No query — from/to default to the current Sat→Thu clinic week, so an
+    // authorized actor gets 200 with the (empty) aggregates. Proves the
+    // guard runs before the read.
+    handler: kpisRoute,
   },
 ];
 
