@@ -149,7 +149,7 @@ export default function WaitlistDashboard() {
               {(
                 [
                   ["true", "Actives"],
-                  ["false", "Notifiées"],
+                  ["false", "Inactives"],
                   ["all", "Toutes"],
                 ] as const
               ).map(([value, label]) => (

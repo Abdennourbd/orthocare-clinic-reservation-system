@@ -166,7 +166,7 @@ export default function WaitlistList({
                     {entry.notifiedAt ? formatNotifiedAt(entry.notifiedAt) : "—"}
                   </td>
                   <td className="px-4 py-2 text-right">
-                    {confirmId !== entry.id && (
+                    {entry.active && confirmId !== entry.id && (
                       <button
                         type="button"
                         onClick={(e) => {

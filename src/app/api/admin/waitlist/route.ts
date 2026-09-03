@@ -110,20 +110,25 @@ export async function GET(request: NextRequest) {
   // `active` is a three-state enum, mapped here to a Prisma filter —
   // "true" (default) shows live entries, "false" the deactivated ones,
   // "all" both. Filters are built ONLY from provided values.
-  const entries = await getPrisma().waitlistEntry.findMany({
-    where: {
-      ...(serviceId ? { serviceId } : {}),
-      ...(active === "true" ? { active: true } : {}),
-      ...(active === "false" ? { active: false } : {}),
-    },
-    // Newest first; secondary sort key `id desc` keeps the cursor walk
-    // deterministic for rows created in the same millisecond (same
-    // reasoning as the audit route).
-    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-    take: limit,
-    ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
-    select: waitlistRowSelect,
-  });
+  let entries;
+  try {
+    entries = await getPrisma().waitlistEntry.findMany({
+      where: {
+        ...(serviceId ? { serviceId } : {}),
+        ...(active === "true" ? { active: true } : {}),
+        ...(active === "false" ? { active: false } : {}),
+      },
+      // Newest first; secondary sort key `id desc` keeps the cursor walk
+      // deterministic for rows created in the same millisecond (same
+      // reasoning as the audit route).
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: limit,
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      select: waitlistRowSelect,
+    });
+  } catch {
+    return errorResponse(400, "INVALID_CURSOR", "Curseur invalide.");
+  }
 
   await logAction(
     { type: AuditActorType.STAFF, userId: guard.user.id },

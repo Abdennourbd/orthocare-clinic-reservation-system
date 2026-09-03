@@ -232,6 +232,25 @@ describe("waitlist slot-freed via releaseSlot/rescheduleSlot (Task 17.4)", () =>
     });
     expect(waitlistEntry).not.toBeNull();
 
+    // Decoys: different date (same service) + different service (same date)
+    // must stay silent + active — the "not for non-matching ones" half.
+    const otherService = await createService("Other Service");
+    const otherDate = addClinicDays(dayWatch, 2);
+    const decoyDate = await createPatient();
+    const decoyService = await createPatient();
+    const eDecoyDate = await createWaitlistEntry(
+      decoyDate.id,
+      service.id,
+      [otherDate],
+      WaitlistSource.STAFF,
+    );
+    const eDecoyService = await createWaitlistEntry(
+      decoyService.id,
+      otherService.id,
+      [dayWatch],
+      WaitlistSource.STAFF,
+    );
+
     // Victim holds the watched day; self-service cancel frees it via the real
     // self-service path (token + selfServiceCancel → releaseSlotInTx + emit).
     const victim = await createPatient();
@@ -255,6 +274,23 @@ describe("waitlist slot-freed via releaseSlot/rescheduleSlot (Task 17.4)", () =>
     });
     expect(after.active).toBe(false);
     expect(after.notifiedAt).toBeInstanceOf(Date);
+
+    // Decoys: silent + still active.
+    for (const [patientId, entryId] of [
+      [decoyDate.id, eDecoyDate.id],
+      [decoyService.id, eDecoyService.id],
+    ] as const) {
+      expect(
+        await getPrisma().smsMessage.count({
+          where: { type: SmsMessageType.WAITLIST, patientId },
+        }),
+      ).toBe(0);
+      const e = await getPrisma().waitlistEntry.findUniqueOrThrow({
+        where: { id: entryId },
+      });
+      expect(e.active).toBe(true);
+      expect(e.notifiedAt).toBeNull();
+    }
   });
 
   it("auto-expiry release fires the waitlist", async () => {
