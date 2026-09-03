@@ -49,6 +49,12 @@ import { DELETE as waitlistDeleteRoute } from "@/app/api/admin/waitlist/[id]/rou
 import { GET as kpisRoute } from "@/app/api/admin/kpis/route";
 import { GET as appointmentsExportRoute } from "@/app/api/admin/exports/appointments/route";
 import { GET as daySheetRoute } from "@/app/api/admin/exports/day-sheet/route";
+import {
+  GET as teamListRoute,
+  POST as teamCreateRoute,
+} from "@/app/api/admin/team/route";
+import { PATCH as teamPatchRoute } from "@/app/api/admin/team/[id]/route";
+import { POST as teamResetRoute } from "@/app/api/admin/team/[id]/reset-password/route";
 
 // Task 12 — the authorization matrix (plan.md §Testing strategy):
 //   one table-driven test walking EVERY /api/admin/* route ×
@@ -474,6 +480,45 @@ const ROUTES: RouteRow[] = [
     allowed: [Role.ADMIN],
     okStatus: 400,
     handler: daySheetRoute,
+  },
+  {
+    method: "GET",
+    scanPath: "/api/admin/team",
+    // Task 20 — team management is ADMIN only. No query — the list returns
+    // 200 for an authorized admin, proving the guard runs before the read.
+    allowed: [Role.ADMIN],
+    handler: teamListRoute,
+  },
+  {
+    method: "POST",
+    scanPath: "/api/admin/team",
+    // Task 20 — requestAs() sends no body, so Zod fails after the guard
+    // (same reasoning as POST /api/admin/patients).
+    allowed: [Role.ADMIN],
+    okStatus: 400,
+    handler: teamCreateRoute,
+  },
+  {
+    method: "PATCH",
+    scanPath: "/api/admin/team/[id]",
+    requestPath: "/api/admin/team/does-not-exist",
+    params: { id: "does-not-exist" },
+    // Task 20 — requestAs() sends no body, so Zod fails after the guard,
+    // before any DB lookup of the id.
+    allowed: [Role.ADMIN],
+    okStatus: 400,
+    handler: teamPatchRoute,
+  },
+  {
+    method: "POST",
+    scanPath: "/api/admin/team/[id]/reset-password",
+    requestPath: "/api/admin/team/does-not-exist/reset-password",
+    params: { id: "does-not-exist" },
+    // Task 20 — requestAs() sends no body, so Zod fails after the guard,
+    // before any DB lookup of the id.
+    allowed: [Role.ADMIN],
+    okStatus: 400,
+    handler: teamResetRoute,
   },
 ];
 
