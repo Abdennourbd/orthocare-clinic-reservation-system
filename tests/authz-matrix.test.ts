@@ -736,10 +736,10 @@ const ROUTES: RouteRow[] = [
     scanPath: "/api/admin/closures/[id]/resolve",
     requestPath: "/api/admin/closures/does-not-exist/resolve",
     params: { id: "does-not-exist" },
-    // Task 21 — the closure lookup runs before Zod, so an authorized admin
-    // requesting an unknown id gets 404 (proves the guard runs first).
+    // Task 21 — requestAs() sends no body, so Zod fails after the guard,
+    // before any DB lookup of the id (same convention as every sibling).
     allowed: [Role.ADMIN],
-    okStatus: 404,
+    okStatus: 400,
     handler: closureResolveRoute,
   },
 ];

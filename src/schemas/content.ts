@@ -79,9 +79,21 @@ export const faqPatchSchema = z
 
 // --- Gallery ---
 
+// Images render as <img src> on the public gallery — only local paths and
+// http(s) URLs are allowed (never javascript:/data:/file: schemes).
+const imageUrlSchema = (required: boolean) => {
+  const base = z.string().trim().max(2000, "URL trop longue.");
+  const withMin = required
+    ? base.min(1, "L'URL de l'image est requise.")
+    : base.min(1, "L'URL ne peut pas être vide.");
+  return withMin.refine((u) => u.startsWith("/") || /^https?:\/\//i.test(u), {
+    message: "Seules les URLs http(s) ou les chemins locaux (/images/…) sont autorisés.",
+  });
+};
+
 export const galleryCreateSchema = z.object({
   key: keySchema,
-  imageUrl: z.string().trim().min(1, "L'URL de l'image est requise.").max(2000, "URL trop longue."),
+  imageUrl: imageUrlSchema(true),
   caption: localizedFieldSchema,
   active: z.boolean().optional(),
 });
@@ -89,7 +101,7 @@ export const galleryCreateSchema = z.object({
 export const galleryPatchSchema = z
   .object({
     key: keySchema.optional(),
-    imageUrl: z.string().trim().min(1).max(2000, "URL trop longue.").optional(),
+    imageUrl: imageUrlSchema(false).optional(),
     caption: localizedFieldSchema.optional(),
     active: z.boolean().optional(),
   })

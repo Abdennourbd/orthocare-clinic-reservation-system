@@ -14,6 +14,7 @@ import { closureResolveSchema } from "@/schemas/closures";
 import { releaseSlot } from "@/lib/booking/releaseSlot";
 import { runSideEffect } from "@/lib/booking/runSideEffect";
 import { sendAppointmentCancelled } from "@/lib/messaging/appointmentChanges";
+import { appointmentOverlapsClosure } from "@/lib/closures/window";
 import {
   AppointmentAlreadyReleasedError,
   AppointmentNotFoundError,
@@ -38,8 +39,14 @@ import {
 // - `keep_for_call`: appointments untouched (staff will phone to reschedule);
 //   the closure still blocks new bookings.
 //
+// Order is load-bearing: requireStaff -> CSRF -> rate limit -> Zod -> domain
+// checks (404 closure) -> DB writes. A 400/404 must NEVER precede a 401/403.
+//
 // `appointmentIds` must cover every still-active overlapping appointment
-// unless `acknowledgedUnresolved: true` is set explicitly.
+// unless `acknowledgedUnresolved: true` is set explicitly. Ids outside the
+// closure's overlapping set are rejected as OUT_OF_SCOPE (never cancelled
+// under a misleading CLOSURE reason). The per-appointment audit row is
+// written only when the cancel actually succeeded.
 
 type Ctx = { params: Promise<Record<string, string>> };
 
@@ -60,12 +67,6 @@ export async function POST(request: NextRequest, context: Ctx) {
     throw e;
   }
 
-  const { id } = await context.params;
-  const closure = await getPrisma().scheduleException.findUnique({ where: { id } });
-  if (!closure) {
-    return errorResponse(404, "NOT_FOUND", "Fermeture introuvable.");
-  }
-
   const parsed = closureResolveSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
     return errorResponse(
@@ -76,17 +77,37 @@ export async function POST(request: NextRequest, context: Ctx) {
   }
   const { action, appointmentIds, acknowledgedUnresolved } = parsed.data;
 
+  const { id } = await context.params;
+  const closure = await getPrisma().scheduleException.findUnique({ where: { id } });
+  if (!closure) {
+    return errorResponse(404, "NOT_FOUND", "Fermeture introuvable.");
+  }
+
   // Recompute the still-active overlapping set (appointments may have been
   // confirmed/cancelled between the POST /closures preview and this call).
-  const overlapping = await getPrisma().appointment.findMany({
+  // Same two-level narrowing as the create route: UTC range in the DB, then
+  // the HH:MM window in TypeScript for partial-day closures.
+  const candidates = await getPrisma().appointment.findMany({
     where: {
       status: { in: [AppointmentStatus.PENDING, AppointmentStatus.CONFIRMED] },
       startTime: { lt: closure.endDate },
       endTime: { gt: closure.startDate },
       ...(closure.serviceId ? { serviceId: closure.serviceId } : {}),
     },
-    select: { id: true },
+    select: { id: true, startTime: true, endTime: true },
   });
+  const overlapping = candidates.filter((a) =>
+    appointmentOverlapsClosure(
+      { startTime: a.startTime, endTime: a.endTime },
+      {
+        startDate: closure.startDate,
+        endDate: closure.endDate,
+        allDay: closure.allDay,
+        startTime: closure.startTime,
+        endTime: closure.endTime,
+      },
+    ),
+  );
   const overlappingIds = new Set(overlapping.map((a) => a.id));
   const unresolved = [...overlappingIds].filter((oid) => !appointmentIds.includes(oid));
   if (unresolved.length > 0 && !acknowledgedUnresolved) {
@@ -116,10 +137,25 @@ export async function POST(request: NextRequest, context: Ctx) {
   const succeeded: string[] = [];
   const failed: Array<{ id: string; reason: string }> = [];
   for (const appointmentId of appointmentIds) {
+    if (!overlappingIds.has(appointmentId)) {
+      // Outside this closure's window — refuse rather than cancel under a
+      // misleading CLOSURE reason (the admin already has the direct cancel
+      // route for deliberate out-of-scope cancels).
+      failed.push({ id: appointmentId, reason: "OUT_OF_SCOPE" });
+      continue;
+    }
     try {
       await releaseSlot(appointmentId, CancelReason.CLOSURE);
       await runSideEffect(() => sendAppointmentCancelled(appointmentId));
       succeeded.push(appointmentId);
+      await logAction(
+        { type: AuditActorType.STAFF, userId: guard.user.id },
+        AuditAction.APPOINTMENT_CANCELLED,
+        "Appointment",
+        appointmentId,
+        { closureId: id, cancelReason: "CLOSURE" },
+        getClientIp(request.headers),
+      );
     } catch (e) {
       if (e instanceof AppointmentNotFoundError) {
         failed.push({ id: appointmentId, reason: "NOT_FOUND" });
@@ -129,14 +165,6 @@ export async function POST(request: NextRequest, context: Ctx) {
         throw e;
       }
     }
-    await logAction(
-      { type: AuditActorType.STAFF, userId: guard.user.id },
-      AuditAction.APPOINTMENT_CANCELLED,
-      "Appointment",
-      appointmentId,
-      { closureId: id, cancelReason: "CLOSURE" },
-      getClientIp(request.headers),
-    );
   }
 
   await logAction(

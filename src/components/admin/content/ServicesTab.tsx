@@ -281,7 +281,7 @@ export default function ServicesTab() {
         ))}
       </ul>
       <p className="mt-3 text-xs text-slate-500">
-        La durée modifie les créneaux proposés dès la prochaine recherche. La suppression est refusée tant que des rendez-vous à venir utilisent ce service — masquez-le plutôt.
+        La durée modifie les créneaux proposés dès la prochaine recherche. La suppression est refusée tant que des rendez-vous sont liés à ce service — masquez-le plutôt.
       </p>
     </section>
   );

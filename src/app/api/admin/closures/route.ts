@@ -15,6 +15,7 @@ import {
 } from "@/lib/content/rateLimits";
 import { closureCreateSchema } from "@/schemas/closures";
 import { getClinicDayBoundsUTC } from "@/lib/time/clinicTime";
+import { appointmentOverlapsClosure } from "@/lib/closures/window";
 import { AuditAction, AuditActorType, AppointmentStatus } from "@/generated/prisma/client";
 
 // Task 21 — GET (list upcoming) + POST (create, returns affected list) for
@@ -117,8 +118,11 @@ export async function POST(request: NextRequest) {
   });
 
   // Affected = active appointments overlapping the closure window. Scoped to
-  // the closure's service when set, whole clinic otherwise.
-  const affected = await getPrisma().appointment.findMany({
+  // the closure's service when set, whole clinic otherwise. The DB query
+  // narrows by UTC range; a partial-day closure then narrows further by its
+  // HH:MM window in TypeScript (same math as the slot engine — a 13:00–14:00
+  // closure must not list the whole day's bookings).
+  const candidates = await getPrisma().appointment.findMany({
     where: {
       status: { in: [AppointmentStatus.PENDING, AppointmentStatus.CONFIRMED] },
       startTime: { lt: endUTC },
@@ -137,6 +141,18 @@ export async function POST(request: NextRequest) {
       },
     },
   });
+  const affected = candidates.filter((a) =>
+    appointmentOverlapsClosure(
+      { startTime: a.startTime, endTime: a.endTime },
+      {
+        startDate: startUTC,
+        endDate: endUTC,
+        allDay,
+        startTime: allDay ? null : (startTime ?? null),
+        endTime: allDay ? null : (endTime ?? null),
+      },
+    ),
+  );
 
   await logAction(
     { type: AuditActorType.STAFF, userId: guard.user.id },

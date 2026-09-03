@@ -4,31 +4,15 @@ npm notice run next dev
 - Local:         http://localhost:3000
 - Network:       http://192.168.0.111:3000
 - Environments: .env
-✓ Ready in 402ms
-✓ Running next.config.ts took 58ms
+✓ Ready in 476ms
+✓ Running next.config.ts took 56ms
+⨯ Another next dev server is already running.
 
- GET /admin/login 200 in 703ms (next.js: 149ms, proxy.ts: 300ms, application-code: 253ms)
-(node:237177) Warning: SECURITY WARNING: The SSL modes 'prefer', 'require', and 'verify-ca' are treated as aliases for 'verify-full'.
-In the next major version (pg-connection-string v3.0.0 and pg v9.0.0), these modes will adopt standard libpq semantics, which have weaker security guarantees.
+- Local:        http://localhost:3003
+- PID:          44951
+- Dir:          /home/abdennour/Projects/orthocare-clinic
+- Log:          .next/dev/logs/next-development.log
 
-To prepare for this change:
-- If you want the current behavior, explicitly use 'sslmode=verify-full'
-- If you want libpq compatibility now, use 'uselibpqcompat=true&sslmode=require'
-
-See https://www.postgresql.org/docs/current/libpq-ssl.html for libpq SSL mode definitions.
-(Use `node --trace-warnings ...` to show where the warning was created)
- POST /api/auth/login 200 in 1791ms (next.js: 95ms, application-code: 1696ms)
- GET /admin/change-password 200 in 262ms (next.js: 43ms, proxy.ts: 9ms, application-code: 210ms)
- POST /api/auth/change-password 200 in 1886ms (next.js: 45ms, application-code: 1841ms)
- GET /admin 200 in 956ms (next.js: 33ms, proxy.ts: 8ms, application-code: 915ms)
- GET /admin/sms 200 in 1585ms (next.js: 455ms, proxy.ts: 7ms, application-code: 1122ms)
- GET /api/admin/sms/batches?limit=50 200 in 936ms (next.js: 297ms, application-code: 639ms)
- GET /api/admin/sms?limit=50 200 in 953ms (next.js: 254ms, application-code: 699ms)
- GET /api/admin/sms/batches?limit=50 200 in 455ms (next.js: 1.9ms, application-code: 453ms)
- GET /api/admin/sms?limit=50 200 in 634ms (next.js: 2.0ms, application-code: 632ms)
- GET /api/admin/patients?q=Amine 200 in 2.4s (next.js: 131ms, application-code: 2.3s)
- POST /api/admin/sms/single 200 in 1426ms (next.js: 138ms, application-code: 1288ms)
- POST /api/admin/sms/broadcast/preview 200 in 2.1s (next.js: 165ms, application-code: 1932ms)
- POST /api/admin/sms/broadcast 200 in 1790ms (next.js: 122ms, application-code: 1668ms)
- GET /api/admin/sms/batches?limit=50 200 in 567ms (next.js: 3ms, application-code: 563ms)
- GET /api/admin/sms?limit=50 200 in 1953ms (next.js: 1.7ms, application-code: 1951ms)
+You can access the existing server at http://localhost:3003,
+or run kill 44951 to stop it and start a new one.
+[?25h

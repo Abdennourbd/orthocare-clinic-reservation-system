@@ -196,11 +196,27 @@ export default function ClosuresDashboard() {
     if (action === "cancel_and_notify" && !window.confirm(`Annuler ${ids.length} rendez-vous et prévenir chaque patient par SMS ?`)) return;
     setResolving(true);
     try {
-      const response = await fetch(`/api/admin/closures/${closureId}/resolve`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action, appointmentIds: ids, acknowledgedUnresolved: true }),
-      });
+      const send = (acknowledgedUnresolved: boolean) =>
+        fetch(`/api/admin/closures/${closureId}/resolve`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action, appointmentIds: ids, acknowledgedUnresolved }),
+        });
+      // First attempt WITHOUT the escape hatch: if the affected list went
+      // stale (a booking landed or left since the preview), the API answers
+      // 409 UNRESOLVED_REMAINING and staff confirm explicitly rather than
+      // silently resolving a subset.
+      let response = await send(false);
+      if (response.status === 409) {
+        const body = (await response.json().catch(() => null)) as {
+          error?: { code?: string; message?: string };
+        } | null;
+        if (body?.error?.code === "UNRESOLVED_REMAINING") {
+          const msg = `${body.error.message ?? "Des rendez-vous restent sans décision."} Continuer quand même ?`;
+          if (!window.confirm(msg)) return;
+          response = await send(true);
+        }
+      }
       if (!response.ok) {
         setNotice(await readError(response, "Traitement impossible."));
         return;

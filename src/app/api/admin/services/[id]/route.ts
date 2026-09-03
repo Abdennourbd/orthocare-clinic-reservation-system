@@ -161,7 +161,21 @@ export async function DELETE(request: NextRequest, context: Ctx) {
     );
   }
 
-  await getPrisma().service.delete({ where: { id } });
+  try {
+    await getPrisma().service.delete({ where: { id } });
+  } catch (e) {
+    // Count-then-delete race: a booking referencing this service landed
+    // between the count above and the delete. The FK is the arbiter — map
+    // its violation back to the same 409 (never an orphan, never a 500).
+    if (isUniqueViolation(e) || isForeignKeyViolation(e)) {
+      return errorResponse(
+        409,
+        "SERVICE_IN_USE",
+        "Ce service a des rendez-vous liés. Désactivez-le plutôt que de le supprimer.",
+      );
+    }
+    throw e;
+  }
 
   await logAction(
     { type: AuditActorType.STAFF, userId: guard.user.id },
@@ -177,4 +191,8 @@ export async function DELETE(request: NextRequest, context: Ctx) {
 
 function isUniqueViolation(e: unknown): boolean {
   return typeof e === "object" && e !== null && (e as { code?: string }).code === "P2002";
+}
+
+function isForeignKeyViolation(e: unknown): boolean {
+  return typeof e === "object" && e !== null && (e as { code?: string }).code === "P2003";
 }

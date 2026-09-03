@@ -177,7 +177,13 @@ export default function SettingsDashboard() {
 
   const saveTemplates = (e: FormEvent) => {
     e.preventDefault();
-    void save("templates", () => patchSettings("messageTemplates", templates));
+    // Empty fields mean "leave unchanged" — the API 400s on empty strings
+    // (an empty template would silently fall back to the default anyway, so
+    // rejecting surfaces the typo instead of hiding it).
+    const nonEmpty = Object.fromEntries(
+      Object.entries(templates).filter(([, v]) => v.trim() !== ""),
+    );
+    void save("templates", () => patchSettings("messageTemplates", nonEmpty));
   };
 
   const saveClinic = (e: FormEvent) => {
