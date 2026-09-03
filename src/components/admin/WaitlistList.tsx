@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { localized } from "@/lib/i18n/localized";
 import { toClinicLocalDateString, formatClinicLocalTime } from "@/lib/time/clinicTime";
 
@@ -75,6 +75,19 @@ export default function WaitlistList({
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const [deletePending, setDeletePending] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const confirmButtonRef = useRef<HTMLButtonElement>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+
+  // Focus the confirm action when the panel opens; Esc cancels.
+  useEffect(() => {
+    if (confirmId) confirmButtonRef.current?.focus();
+  }, [confirmId]);
+
+  function cancelConfirm() {
+    setConfirmId(null);
+    setDeleteError(null);
+    triggerRef.current?.focus();
+  }
 
   async function handleDeleteConfirm() {
     if (!confirmId || deletePending) return;
@@ -156,7 +169,8 @@ export default function WaitlistList({
                     {confirmId !== entry.id && (
                       <button
                         type="button"
-                        onClick={() => {
+                        onClick={(e) => {
+                          triggerRef.current = e.currentTarget;
                           setConfirmId(entry.id);
                           setDeleteError(null);
                         }}
@@ -177,7 +191,12 @@ export default function WaitlistList({
       </div>
 
       {confirmId && (
-        <div className="space-y-2 rounded-md border border-red-200 bg-red-50 px-3 py-2">
+        <div
+          className="space-y-2 rounded-md border border-red-200 bg-red-50 px-3 py-2"
+          onKeyDown={(e) => {
+            if (e.key === "Escape" && !deletePending) cancelConfirm();
+          }}
+        >
           <p role="alert" className="text-sm text-red-800">
             Supprimer cette entrée de la liste d&rsquo;attente ? Cette action est irréversible.
           </p>
@@ -188,6 +207,7 @@ export default function WaitlistList({
           )}
           <div className="flex flex-wrap gap-2">
             <button
+              ref={confirmButtonRef}
               type="button"
               onClick={() => void handleDeleteConfirm()}
               disabled={deletePending}
@@ -200,10 +220,7 @@ export default function WaitlistList({
             </button>
             <button
               type="button"
-              onClick={() => {
-                setConfirmId(null);
-                setDeleteError(null);
-              }}
+              onClick={cancelConfirm}
               disabled={deletePending}
               className="rounded-md border border-red-300 px-3 py-1.5 text-sm font-medium text-red-800
                 hover:bg-red-100 focus-visible:outline-none focus-visible:ring-2

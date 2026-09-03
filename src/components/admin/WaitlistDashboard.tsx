@@ -25,6 +25,9 @@ export default function WaitlistDashboard() {
   const [entries, setEntries] = useState<WaitlistEntry[]>([]);
   const [services, setServices] = useState<WaitlistServiceOption[]>([]);
   const [serviceFilter, setServiceFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"true" | "false" | "all">("true");
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [reloadToken, setReloadToken] = useState(0);
@@ -61,7 +64,7 @@ export default function WaitlistDashboard() {
     (async () => {
       setLoading(true);
       setError(false);
-      const params = new URLSearchParams({ active: "true" });
+      const params = new URLSearchParams({ active: statusFilter });
       if (serviceFilter) params.set("serviceId", serviceFilter);
       try {
         const response = await fetch(`/api/admin/waitlist?${params.toString()}`);
@@ -70,9 +73,13 @@ export default function WaitlistDashboard() {
           setError(true);
           return;
         }
-        const body = (await response.json()) as { entries: WaitlistEntry[] };
+        const body = (await response.json()) as {
+          entries: WaitlistEntry[];
+          nextCursor?: string | null;
+        };
         if (cancelled) return;
         setEntries(body.entries);
+        setNextCursor(body.nextCursor ?? null);
       } catch {
         if (!cancelled) setError(true);
       } finally {
@@ -82,9 +89,29 @@ export default function WaitlistDashboard() {
     return () => {
       cancelled = true;
     };
-  }, [serviceFilter, reloadToken]);
+  }, [serviceFilter, statusFilter, reloadToken]);
 
   const reload = useCallback(() => setReloadToken((t) => t + 1), []);
+
+  const loadMore = useCallback(async () => {
+    if (!nextCursor || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const params = new URLSearchParams({ active: statusFilter });
+      if (serviceFilter) params.set("serviceId", serviceFilter);
+      params.set("cursor", nextCursor);
+      const response = await fetch(`/api/admin/waitlist?${params.toString()}`);
+      if (!response.ok) return;
+      const body = (await response.json()) as {
+        entries: WaitlistEntry[];
+        nextCursor?: string | null;
+      };
+      setEntries((prev) => [...prev, ...body.entries]);
+      setNextCursor(body.nextCursor ?? null);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [nextCursor, loadingMore, serviceFilter, statusFilter]);
   const handleDeleted = useCallback(() => {
     setNotice("Entrée supprimée de la liste d'attente.");
     reload();
@@ -113,6 +140,34 @@ export default function WaitlistDashboard() {
                 </option>
               ))}
             </select>
+          </div>
+          <div className="space-y-1">
+            <span id="waitlist-status-label" className="block text-xs font-medium text-slate-600">
+              Statut
+            </span>
+            <div role="group" aria-labelledby="waitlist-status-label" className="flex overflow-hidden rounded-md border border-slate-300 bg-white text-sm">
+              {(
+                [
+                  ["true", "Actives"],
+                  ["false", "Notifiées"],
+                  ["all", "Toutes"],
+                ] as const
+              ).map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  aria-pressed={statusFilter === value}
+                  onClick={() => setStatusFilter(value)}
+                  className={
+                    statusFilter === value
+                      ? "bg-teal-700 px-3 py-2 font-medium text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-teal-600"
+                      : "px-3 py-2 font-medium text-slate-700 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-teal-600"
+                  }
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
           <button
             type="button"
@@ -164,7 +219,22 @@ export default function WaitlistDashboard() {
               ))}
             </ul>
           ) : (
-            <WaitlistList entries={entries} onDeleted={handleDeleted} />
+            <>
+              <WaitlistList entries={entries} onDeleted={handleDeleted} />
+              {nextCursor && (
+                <button
+                  type="button"
+                  onClick={() => void loadMore()}
+                  disabled={loadingMore}
+                  className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700
+                    hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2
+                    focus-visible:ring-teal-600 focus-visible:ring-offset-2
+                    disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {loadingMore ? "Chargement…" : "Charger plus"}
+                </button>
+              )}
+            </>
           )}
         </div>
       </section>
