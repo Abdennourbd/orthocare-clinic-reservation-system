@@ -22,6 +22,7 @@ const NAV_ITEMS: Array<{
   { href: "/admin/waitlist", label: "Liste d'attente", adminOnly: false },
   { href: "/admin/sms", label: "SMS", adminOnly: false },
   { href: "/admin/exports", label: "Exports", adminOnly: true },
+  { href: "/admin/team", label: "Équipe", adminOnly: true },
   { href: "/admin/audit", label: "Journal d'audit", adminOnly: true },
 ];
 
