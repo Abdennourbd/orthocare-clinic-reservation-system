@@ -10,6 +10,7 @@ import { logAction } from "@/lib/audit/logAction";
 import { getClientIp } from "@/lib/security/clientIp";
 import { checkRateLimit, RateLimitError } from "@/lib/security/rateLimit";
 import { TEAM_READ_RATE_LIMIT, TEAM_WRITE_RATE_LIMIT } from "@/lib/team/rateLimits";
+import { teamRowSelect } from "@/lib/team/select";
 import { teamCreateSchema } from "@/schemas/team";
 import { hashPassword, validatePasswordPolicy } from "@/lib/auth/password";
 import { AuditAction, AuditActorType } from "@/generated/prisma/client";
@@ -21,17 +22,6 @@ import { AuditAction, AuditActorType } from "@/generated/prisma/client";
 // Zod -> policy/domain checks -> DB write. A 400/404/409 must NEVER precede
 // a 401/403. Named-field selects only (never a model spread — a spread would
 // serialize passwordHash).
-
-const teamRowSelect = {
-  id: true,
-  name: true,
-  email: true,
-  role: true,
-  active: true,
-  mustChangePassword: true,
-  lastLoginAt: true,
-  createdAt: true,
-} as const;
 
 export async function GET(request: NextRequest) {
   const guard = await requireStaff(request, { roles: ["ADMIN"] });
@@ -86,8 +76,11 @@ export async function POST(request: NextRequest) {
     return errorResponse(400, "WEAK_PASSWORD", policy.reason);
   }
 
-  const existing = await getPrisma().user.findUnique({
-    where: { email },
+  const existing = await getPrisma().user.findFirst({
+    // Case-insensitive: the schema lowercases new input, but a legacy
+    // mixed-case row must still collide here instead of slipping through to
+    // a unique-violation (or worse, a silent duplicate).
+    where: { email: { equals: email, mode: "insensitive" } },
     select: { id: true },
   });
   if (existing) {
@@ -96,17 +89,29 @@ export async function POST(request: NextRequest) {
 
   // Receptionist only (bounded-design decision): the create path never mints
   // an ADMIN — promotion goes through PATCH (audited as ROLE_CHANGED).
-  const user = await getPrisma().user.create({
-    data: {
-      name,
-      email,
-      passwordHash: await hashPassword(password),
-      role: "RECEPTIONIST",
-      active: true,
-      mustChangePassword: true,
-    },
-    select: teamRowSelect,
-  });
+  let user;
+  try {
+    user = await getPrisma().user.create({
+      data: {
+        name,
+        email,
+        passwordHash: await hashPassword(password),
+        role: "RECEPTIONIST",
+        active: true,
+        mustChangePassword: true,
+      },
+      select: teamRowSelect,
+    });
+  } catch (e) {
+    // Check-then-act race: two concurrent creates with the same email both
+    // pass the lookup above — the unique index is the arbiter, mapped back
+    // to the same 409 the sequential path returns (smsCenter.ts P2002
+    // convention).
+    if (isUniqueViolation(e)) {
+      return errorResponse(409, "EMAIL_TAKEN", "Un compte existe déjà avec cet email.");
+    }
+    throw e;
+  }
 
   await logAction(
     { type: AuditActorType.STAFF, userId: guard.user.id },
@@ -119,4 +124,8 @@ export async function POST(request: NextRequest) {
   );
 
   return withRefreshedSession(ok({ user }, { status: 201 }), guard);
+}
+
+function isUniqueViolation(e: unknown): boolean {
+  return typeof e === "object" && e !== null && (e as { code?: string }).code === "P2002";
 }

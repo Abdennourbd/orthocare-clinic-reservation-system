@@ -66,6 +66,21 @@ export async function POST(
     return errorResponse(404, "NOT_FOUND", "Membre introuvable.");
   }
 
+  // No self-reset: rotating your own password without knowing the current
+  // one bypasses the current-password check of POST /api/auth/change-password
+  // (which is the correct path for changing your own password). Mirrors the
+  // PATCH self-deactivate/self-demote guards.
+  if (target.id === guard.user.id) {
+    return errorResponse(
+      400,
+      "CANNOT_RESET_SELF",
+      "Pour changer votre propre mot de passe, utilisez la page de changement de mot de passe.",
+    );
+  }
+
+  // Note: resetting a DEACTIVATED account is allowed on purpose (pre-stage
+  // a password for a reactivation) — a deactivated account still cannot log
+  // in until PATCH {active:true}, so this opens no access path.
   await getPrisma().user.update({
     where: { id: target.id },
     data: {

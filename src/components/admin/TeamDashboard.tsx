@@ -324,17 +324,17 @@ export default function TeamDashboard({ currentUserId }: { currentUserId: string
               12 caractères minimum.
             </p>
           </div>
+          <div className="flex items-end sm:col-span-3">
+            <button type="submit" disabled={creating} className={buttonPrimaryClass}>
+              {creating ? "Création…" : "Créer le compte"}
+            </button>
+          </div>
         </form>
         {formError ? (
           <p role="alert" className="mt-3 text-sm text-red-700">
             {formError}
           </p>
         ) : null}
-        <div className="mt-4">
-          <button type="button" disabled={creating} onClick={handleCreate} className={buttonPrimaryClass}>
-            {creating ? "Création…" : "Créer le compte"}
-          </button>
-        </div>
       </section>
 
       <section
@@ -462,7 +462,7 @@ export default function TeamDashboard({ currentUserId }: { currentUserId: string
                             ) : (
                               <button
                                 type="button"
-                                disabled={busy}
+                                disabled={busy || isSelf}
                                 onClick={() => {
                                   setResetId(member.id);
                                   setResetPassword("");
@@ -470,7 +470,7 @@ export default function TeamDashboard({ currentUserId }: { currentUserId: string
                                 }}
                                 className={buttonSecondaryClass}
                                 aria-label={`Réinitialiser le mot de passe de ${member.email}`}
-                                aria-expanded={false}
+                                aria-expanded={resetId === member.id}
                               >
                                 Réinitialiser
                               </button>
