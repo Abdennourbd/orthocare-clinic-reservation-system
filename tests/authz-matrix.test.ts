@@ -55,6 +55,48 @@ import {
 } from "@/app/api/admin/team/route";
 import { PATCH as teamPatchRoute } from "@/app/api/admin/team/[id]/route";
 import { POST as teamResetRoute } from "@/app/api/admin/team/[id]/reset-password/route";
+import {
+  GET as servicesListRoute,
+  POST as servicesCreateRoute,
+} from "@/app/api/admin/services/route";
+import {
+  PATCH as servicePatchRoute,
+  DELETE as serviceDeleteRoute,
+} from "@/app/api/admin/services/[id]/route";
+import {
+  GET as testimonialsListRoute,
+  POST as testimonialsCreateRoute,
+} from "@/app/api/admin/testimonials/route";
+import {
+  PATCH as testimonialPatchRoute,
+  DELETE as testimonialDeleteRoute,
+} from "@/app/api/admin/testimonials/[id]/route";
+import {
+  GET as faqsListRoute,
+  POST as faqsCreateRoute,
+} from "@/app/api/admin/faqs/route";
+import {
+  PATCH as faqPatchRoute,
+  DELETE as faqDeleteRoute,
+} from "@/app/api/admin/faqs/[id]/route";
+import {
+  GET as galleryListRoute,
+  POST as galleryCreateRoute,
+} from "@/app/api/admin/gallery/route";
+import {
+  PATCH as galleryPatchRoute,
+  DELETE as galleryDeleteRoute,
+} from "@/app/api/admin/gallery/[id]/route";
+import {
+  GET as settingsGetRoute,
+  PATCH as settingsPatchRoute,
+} from "@/app/api/admin/settings/route";
+import {
+  GET as closuresListRoute,
+  POST as closuresCreateRoute,
+} from "@/app/api/admin/closures/route";
+import { DELETE as closureDeleteRoute } from "@/app/api/admin/closures/[id]/route";
+import { POST as closureResolveRoute } from "@/app/api/admin/closures/[id]/resolve/route";
 
 // Task 12 — the authorization matrix (plan.md §Testing strategy):
 //   one table-driven test walking EVERY /api/admin/* route ×
@@ -519,6 +561,186 @@ const ROUTES: RouteRow[] = [
     allowed: [Role.ADMIN],
     okStatus: 400,
     handler: teamResetRoute,
+  },
+  {
+    method: "GET",
+    scanPath: "/api/admin/services",
+    // Task 21 — services list is ADMIN only. No query — an authorized admin
+    // gets 200 with the list, proving the guard runs before the read.
+    allowed: [Role.ADMIN],
+    handler: servicesListRoute,
+  },
+  {
+    method: "POST",
+    scanPath: "/api/admin/services",
+    // Task 21 — requestAs() sends no body, so Zod fails after the guard.
+    allowed: [Role.ADMIN],
+    okStatus: 400,
+    handler: servicesCreateRoute,
+  },
+  {
+    method: "PATCH",
+    scanPath: "/api/admin/services/[id]",
+    requestPath: "/api/admin/services/does-not-exist",
+    params: { id: "does-not-exist" },
+    // Task 21 — Zod runs before the DB lookup, so an empty body 400s.
+    allowed: [Role.ADMIN],
+    okStatus: 400,
+    handler: servicePatchRoute,
+  },
+  {
+    method: "DELETE",
+    scanPath: "/api/admin/services/[id]",
+    requestPath: "/api/admin/services/does-not-exist",
+    params: { id: "does-not-exist" },
+    // Task 21 — no body to validate; an authorized admin requesting an
+    // unknown id gets 404, proving the guard runs before the lookup.
+    allowed: [Role.ADMIN],
+    okStatus: 404,
+    handler: serviceDeleteRoute,
+  },
+  {
+    method: "GET",
+    scanPath: "/api/admin/testimonials",
+    allowed: [Role.ADMIN],
+    handler: testimonialsListRoute,
+  },
+  {
+    method: "POST",
+    scanPath: "/api/admin/testimonials",
+    allowed: [Role.ADMIN],
+    okStatus: 400,
+    handler: testimonialsCreateRoute,
+  },
+  {
+    method: "PATCH",
+    scanPath: "/api/admin/testimonials/[id]",
+    requestPath: "/api/admin/testimonials/does-not-exist",
+    params: { id: "does-not-exist" },
+    allowed: [Role.ADMIN],
+    okStatus: 400,
+    handler: testimonialPatchRoute,
+  },
+  {
+    method: "DELETE",
+    scanPath: "/api/admin/testimonials/[id]",
+    requestPath: "/api/admin/testimonials/does-not-exist",
+    params: { id: "does-not-exist" },
+    allowed: [Role.ADMIN],
+    okStatus: 404,
+    handler: testimonialDeleteRoute,
+  },
+  {
+    method: "GET",
+    scanPath: "/api/admin/faqs",
+    allowed: [Role.ADMIN],
+    handler: faqsListRoute,
+  },
+  {
+    method: "POST",
+    scanPath: "/api/admin/faqs",
+    allowed: [Role.ADMIN],
+    okStatus: 400,
+    handler: faqsCreateRoute,
+  },
+  {
+    method: "PATCH",
+    scanPath: "/api/admin/faqs/[id]",
+    requestPath: "/api/admin/faqs/does-not-exist",
+    params: { id: "does-not-exist" },
+    allowed: [Role.ADMIN],
+    okStatus: 400,
+    handler: faqPatchRoute,
+  },
+  {
+    method: "DELETE",
+    scanPath: "/api/admin/faqs/[id]",
+    requestPath: "/api/admin/faqs/does-not-exist",
+    params: { id: "does-not-exist" },
+    allowed: [Role.ADMIN],
+    okStatus: 404,
+    handler: faqDeleteRoute,
+  },
+  {
+    method: "GET",
+    scanPath: "/api/admin/gallery",
+    allowed: [Role.ADMIN],
+    handler: galleryListRoute,
+  },
+  {
+    method: "POST",
+    scanPath: "/api/admin/gallery",
+    allowed: [Role.ADMIN],
+    okStatus: 400,
+    handler: galleryCreateRoute,
+  },
+  {
+    method: "PATCH",
+    scanPath: "/api/admin/gallery/[id]",
+    requestPath: "/api/admin/gallery/does-not-exist",
+    params: { id: "does-not-exist" },
+    allowed: [Role.ADMIN],
+    okStatus: 400,
+    handler: galleryPatchRoute,
+  },
+  {
+    method: "DELETE",
+    scanPath: "/api/admin/gallery/[id]",
+    requestPath: "/api/admin/gallery/does-not-exist",
+    params: { id: "does-not-exist" },
+    allowed: [Role.ADMIN],
+    okStatus: 404,
+    handler: galleryDeleteRoute,
+  },
+  {
+    method: "GET",
+    scanPath: "/api/admin/settings",
+    // Task 21 — settings read is ADMIN only. No query — an authorized admin
+    // gets 200 with the settings bundle.
+    allowed: [Role.ADMIN],
+    handler: settingsGetRoute,
+  },
+  {
+    method: "PATCH",
+    scanPath: "/api/admin/settings",
+    // Task 21 — requestAs() sends no body, so the discriminated-union Zod
+    // fails after the guard.
+    allowed: [Role.ADMIN],
+    okStatus: 400,
+    handler: settingsPatchRoute,
+  },
+  {
+    method: "GET",
+    scanPath: "/api/admin/closures",
+    allowed: [Role.ADMIN],
+    handler: closuresListRoute,
+  },
+  {
+    method: "POST",
+    scanPath: "/api/admin/closures",
+    allowed: [Role.ADMIN],
+    okStatus: 400,
+    handler: closuresCreateRoute,
+  },
+  {
+    method: "DELETE",
+    scanPath: "/api/admin/closures/[id]",
+    requestPath: "/api/admin/closures/does-not-exist",
+    params: { id: "does-not-exist" },
+    allowed: [Role.ADMIN],
+    okStatus: 404,
+    handler: closureDeleteRoute,
+  },
+  {
+    method: "POST",
+    scanPath: "/api/admin/closures/[id]/resolve",
+    requestPath: "/api/admin/closures/does-not-exist/resolve",
+    params: { id: "does-not-exist" },
+    // Task 21 — the closure lookup runs before Zod, so an authorized admin
+    // requesting an unknown id gets 404 (proves the guard runs first).
+    allowed: [Role.ADMIN],
+    okStatus: 404,
+    handler: closureResolveRoute,
   },
 ];
 

@@ -11,11 +11,7 @@ import { getClientIp } from "@/lib/security/clientIp";
 import { checkRateLimit, RateLimitError } from "@/lib/security/rateLimit";
 import { CONTENT_WRITE_RATE_LIMIT } from "@/lib/content/rateLimits";
 import { servicePatchSchema } from "@/schemas/services";
-import {
-  AuditAction,
-  AuditActorType,
-  AppointmentStatus,
-} from "@/generated/prisma/client";
+import { AuditAction, AuditActorType } from "@/generated/prisma/client";
 
 // Task 21 — PATCH + DELETE for /api/admin/services/[id]. ADMIN-only.
 //
@@ -149,17 +145,19 @@ export async function DELETE(request: NextRequest, context: Ctx) {
     return errorResponse(404, "NOT_FOUND", "Service introuvable.");
   }
 
-  const activeCount = await getPrisma().appointment.count({
-    where: {
-      serviceId: id,
-      status: { in: [AppointmentStatus.PENDING, AppointmentStatus.CONFIRMED] },
-    },
+  // Hard delete is refused whenever ANY appointment references the service —
+  // Appointment.serviceId is a required FK (ON DELETE RESTRICT), so deleting
+  // a service with history would violate the constraint and destroy the
+  // visit record. The dashboard steers staff toward deactivation
+  // (PATCH {active:false}) instead.
+  const referenceCount = await getPrisma().appointment.count({
+    where: { serviceId: id },
   });
-  if (activeCount > 0) {
+  if (referenceCount > 0) {
     return errorResponse(
       409,
       "SERVICE_IN_USE",
-      "Ce service a des rendez-vous à venir. Désactivez-le plutôt que de le supprimer.",
+      "Ce service a des rendez-vous liés. Désactivez-le plutôt que de le supprimer.",
     );
   }
 
