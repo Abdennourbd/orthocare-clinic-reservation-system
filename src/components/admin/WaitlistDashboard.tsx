@@ -28,6 +28,11 @@ export default function WaitlistDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [reloadToken, setReloadToken] = useState(0);
+  // BUG-1: delete-success notice lives here (not in WaitlistList) so the
+  // reload skeleton (which unmounts the list) cannot wipe it — same ruling
+  // as the create banner in WaitlistForm, which survives because the form
+  // never unmounts.
+  const [notice, setNotice] = useState<string | null>(null);
 
   // Service options load once: the same list feeds the filter dropdown and
   // the create form (passed as props, so the form never fetches twice).
@@ -81,6 +86,7 @@ export default function WaitlistDashboard() {
 
   const reload = useCallback(() => setReloadToken((t) => t + 1), []);
   const handleDeleted = useCallback(() => {
+    setNotice("Entrée supprimée de la liste d'attente.");
     reload();
   }, [reload]);
 
@@ -122,6 +128,14 @@ export default function WaitlistDashboard() {
           Entrées en liste d&rsquo;attente
         </h2>
 
+        {notice && (
+          <p
+            role="status"
+            className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800"
+          >
+            {notice}
+          </p>
+        )}
         <div aria-busy={loading}>
           {error ? (
             <div className="space-y-2 rounded-md border border-red-200 bg-red-50 px-4 py-3">

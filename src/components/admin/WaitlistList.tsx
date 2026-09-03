@@ -75,7 +75,6 @@ export default function WaitlistList({
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const [deletePending, setDeletePending] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   async function handleDeleteConfirm() {
     if (!confirmId || deletePending) return;
@@ -88,7 +87,8 @@ export default function WaitlistList({
       if (response.ok) {
         const removedId = confirmId;
         setConfirmId(null);
-        setSuccessMessage("Entrée supprimée de la liste d'attente.");
+        // BUG-1: success notice is owned by WaitlistDashboard (survives the
+        // reload skeleton); this list only notifies the parent.
         onDeleted?.(removedId);
         return;
       }
@@ -113,14 +113,6 @@ export default function WaitlistList({
 
   return (
     <div className="space-y-3">
-      {successMessage && (
-        <p
-          role="status"
-          className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800"
-        >
-          {successMessage}
-        </p>
-      )}
       <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
         <table className="w-full text-left text-sm">
           <caption className="sr-only">Entrées en liste d&rsquo;attente</caption>
