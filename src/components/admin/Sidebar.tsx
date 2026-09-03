@@ -3,8 +3,8 @@ import type { SessionRole } from "@/lib/auth/session";
 import LogoutButton from "./LogoutButton";
 
 // Task 12 — dashboard sidebar (FR only). Nav is role-gated: ADMIN-only
-// sections (audit for now; team/settings/exports arrive in Tasks 19-21) never
-// render for a receptionist. Keyboard-navigable with visible focus rings.
+// sections never render for a receptionist. Keyboard-navigable with visible
+// focus rings. Task 21 adds Contenu / Fermetures / Réglages (ADMIN-only).
 
 const ROLE_LABEL: Record<SessionRole, string> = {
   ADMIN: "Administrateur",
@@ -22,6 +22,9 @@ const NAV_ITEMS: Array<{
   { href: "/admin/waitlist", label: "Liste d'attente", adminOnly: false },
   { href: "/admin/sms", label: "SMS", adminOnly: false },
   { href: "/admin/exports", label: "Exports", adminOnly: true },
+  { href: "/admin/content", label: "Contenu", adminOnly: true },
+  { href: "/admin/closures", label: "Fermetures", adminOnly: true },
+  { href: "/admin/settings", label: "Réglages", adminOnly: true },
   { href: "/admin/team", label: "Équipe", adminOnly: true },
   { href: "/admin/audit", label: "Journal d'audit", adminOnly: true },
 ];
