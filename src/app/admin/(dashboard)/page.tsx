@@ -1,31 +1,72 @@
 import { getPrisma } from "@/lib/db";
-import { toClinicLocalDateString, getClinicDayBoundsUTC } from "@/lib/time/clinicTime";
+import {
+  clinicNoon,
+  getClinicDayBoundsUTC,
+  toClinicLocalDateString,
+} from "@/lib/time/clinicTime";
+import { computeKpis, getClinicWeekRange } from "@/lib/kpis/aggregations";
+import KpiCards from "@/components/admin/KpiCards";
 
-// Task 12 — dashboard home (placeholder). Real KPIs land in Task 18
-// (`GET /api/admin/kpis`); this page only proves the shell + session guard.
+// Task 18 — dashboard home: today's schedule + the current Sat→Thu clinic
+// week's success metrics (plan.md §Success Metrics), computed on demand from
+// appointments (no extra tables). "Today" and every day boundary go through
+// lib/time/clinicTime.ts — never the server's timezone.
+
+function formatDayLabel(localDate: string): string {
+  return new Intl.DateTimeFormat("fr-FR", {
+    timeZone: "Africa/Algiers",
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  }).format(clinicNoon(localDate));
+}
 
 export default async function DashboardHome() {
   const prisma = getPrisma();
-  // "Today" means the clinic's today (Africa/Algiers), never the server's —
-  // day boundaries always go through lib/time/clinicTime.ts (plan.md §Timezone).
   const todayLocal = toClinicLocalDateString(new Date());
-  const { startUTC, endUTC } = getClinicDayBoundsUTC(todayLocal);
-  const [pendingCount, todayAppointments] = await Promise.all([
-    prisma.appointment.count({ where: { status: "PENDING" } }),
-    prisma.appointment.count({
-      where: {
-        startTime: { gte: startUTC, lt: endUTC },
-        status: { notIn: ["CANCELLED"] },
-      },
-    }),
-  ]);
+  const { from, to } = getClinicWeekRange(todayLocal);
+  const { startUTC: fromStart } = getClinicDayBoundsUTC(from);
+  const { endUTC: toEnd } = getClinicDayBoundsUTC(to);
 
-  const cards = [
-    { label: "Rendez-vous aujourd'hui", value: todayAppointments },
-    { label: "En attente d'appel", value: pendingCount },
-    { label: "Nouveaux patients (mois)", value: "—" },
-    { label: "Taux d'occupation", value: "—" },
-  ];
+  const [appointments, patients, workingHoursSetting, globalPending] =
+    await Promise.all([
+      prisma.appointment.findMany({
+        where: { startTime: { gte: fromStart, lte: toEnd } },
+        select: {
+          status: true,
+          source: true,
+          startTime: true,
+          endTime: true,
+          createdAt: true,
+          confirmedAt: true,
+          cancelReason: true,
+        },
+      }),
+      prisma.patient.findMany({
+        where: { createdAt: { gte: fromStart, lte: toEnd } },
+        select: { createdAt: true },
+      }),
+      prisma.setting.findUnique({ where: { key: "workingHours" } }),
+      // The call queue is global (every PENDING awaiting a call), not just
+      // this week's — same number as /api/admin/appointments/pending.
+      prisma.appointment.count({ where: { status: "PENDING" } }),
+    ]);
+
+  const kpis = computeKpis({
+    appointments,
+    patients,
+    workingHours: (workingHoursSetting?.value ?? {}) as unknown,
+    from,
+    to,
+    today: todayLocal,
+  });
+  // "En attente d'appel" is the global queue, not the week's slice.
+  kpis.pendingCount = globalPending;
+
+  const rangeLabel =
+    from === to
+      ? `Journée du ${formatDayLabel(from)}`
+      : `Semaine du ${formatDayLabel(from)} au ${formatDayLabel(to)}`;
 
   return (
     <div className="space-y-6">
@@ -36,21 +77,11 @@ export default async function DashboardHome() {
         </p>
       </header>
 
-      <section aria-label="Indicateurs clés" className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {cards.map((card) => (
-          <div
-            key={card.label}
-            className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"
-          >
-            <p className="text-sm text-slate-500">{card.label}</p>
-            <p className="mt-1 text-2xl font-semibold text-slate-900">{card.value}</p>
-          </div>
-        ))}
-      </section>
+      <KpiCards kpis={kpis} rangeLabel={rangeLabel} />
 
       <p className="text-sm text-slate-400">
-        Les indicateurs détaillés (taux de no-show, part des réservations en
-        ligne, délai de confirmation) arrivent avec le module KPI.
+        Semaine clinique du samedi au jeudi (vendredi fermé). Les taux sont
+        calculés sur cette période.
       </p>
     </div>
   );
