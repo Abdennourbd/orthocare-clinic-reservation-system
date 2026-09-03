@@ -9,6 +9,7 @@ import { toClinicLocalDateString } from "@/lib/time/clinicTime";
 import { isSlotBookable } from "@/lib/slots/engine";
 import { loadSlotContext } from "./loadSlotContext";
 import { SlotConflictError } from "./errors";
+import { deactivateClaimedWaitlistEntries } from "@/lib/waitlist/claimWaitlist";
 
 export { SlotConflictError, PendingLimitError } from "./errors";
 
@@ -71,7 +72,7 @@ export async function bookSlotInTx(
     throw new SlotConflictError();
   }
 
-  return tx.appointment.create({
+  const appointment = await tx.appointment.create({
     data: {
       patientId: input.patientId,
       serviceId: input.serviceId,
@@ -82,4 +83,14 @@ export async function bookSlotInTx(
       resourceId: input.resourceId ?? null,
     },
   });
+
+  // Task 17 box 6 — claimed-slot cleanup: booking a watched date/service
+  // deactivates the watcher's matching ACTIVE entries in the same tx.
+  await deactivateClaimedWaitlistEntries(tx, {
+    patientId: input.patientId,
+    serviceId: input.serviceId,
+    startUTC: input.startUTC,
+  });
+
+  return appointment;
 }
