@@ -340,7 +340,6 @@ describe("waitlist slot-freed via releaseSlot/rescheduleSlot (Task 17.4)", () =>
       }),
     ).toBe(1);
     // The new day was *booked*, not freed — its waiter stays silent + active.
-    await new Promise((r) => setTimeout(r, 300));
     expect(
       await getPrisma().smsMessage.count({
         where: { type: SmsMessageType.WAITLIST, patientId: waiterY.id },
@@ -360,8 +359,7 @@ describe("waitlist slot-freed via releaseSlot/rescheduleSlot (Task 17.4)", () =>
     const entry = await createWaitlistEntry(waiter.id, service.id, [dayX]);
 
     await releaseSlot(appt.id, CancelReason.STAFF);
-    // Give the fire-and-forget subscriber time to run, then assert silence.
-    await new Promise((r) => setTimeout(r, 500));
+    // releaseSlot awaits the subscriber, so silence here is deterministic.
 
     expect(
       await getPrisma().smsMessage.count({ where: { type: SmsMessageType.WAITLIST } }),
@@ -390,7 +388,6 @@ describe("waitlist slot-freed via releaseSlot/rescheduleSlot (Task 17.4)", () =>
     ).toBe(1);
 
     await releaseSlot(appt2.id, CancelReason.STAFF);
-    await new Promise((r) => setTimeout(r, 500));
     expect(
       await getPrisma().smsMessage.count({
         where: { type: SmsMessageType.WAITLIST, patientId: waiter.id },
@@ -414,7 +411,6 @@ describe("waitlist slot-freed via releaseSlot/rescheduleSlot (Task 17.4)", () =>
     await expect(releaseSlot(appt.id, CancelReason.STAFF)).rejects.toBeInstanceOf(
       AppointmentAlreadyReleasedError,
     );
-    await new Promise((r) => setTimeout(r, 500));
     expect(
       await getPrisma().smsMessage.count({ where: { type: SmsMessageType.WAITLIST } }),
     ).toBe(1);
