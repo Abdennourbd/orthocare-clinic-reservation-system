@@ -61,6 +61,80 @@ const inputClass =
   "rounded-lg border border-cyan-200 bg-white px-3 py-2 text-sm text-cyan-950 " +
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2";
 
+function WeekDaySection({ day, rows, today, gi, setReloadToken }: { day: string, rows: AppointmentRow[], today: string, gi: number, setReloadToken: React.Dispatch<React.SetStateAction<number>> }) {
+  return (
+    <div className="space-y-2">
+      <div className="sticky top-0 z-[1] flex items-center gap-2 bg-white py-1">
+        <span
+          aria-hidden="true"
+          className={`h-6 w-1 rounded-full ${day === today ? "bg-emerald-500" : "bg-cyan-300"}`}
+        />
+        <h3 className="text-sm font-bold text-cyan-950">
+          {dayLabel(day)}
+          {day === today && (
+            <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-900">
+              Aujourd&apos;hui
+            </span>
+          )}
+        </h3>
+        <span className="text-xs text-slate-500">{rows.length}</span>
+      </div>
+      {rows.length === 0 ? (
+        <p className="pl-3 text-xs text-slate-400">— Rien ce jour —</p>
+      ) : (
+        <ul className="space-y-2 border-l-2 border-cyan-100 pl-3">
+          {rows.map((a, ri) => (
+            <WeekAppointmentRow key={a.id} a={a} gi={gi} ri={ri} setReloadToken={setReloadToken} />
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function WeekAppointmentRow({ a, gi, ri, setReloadToken }: { a: AppointmentRow, gi: number, ri: number, setReloadToken: React.Dispatch<React.SetStateAction<number>> }) {
+  const start = new Date(a.startTime);
+  const end = new Date(a.endTime);
+  return (
+    <li
+      className="dash-row space-y-2 rounded-xl border border-slate-200 bg-white p-3 shadow-sm transition-all duration-200 hover:-translate-y-px hover:border-cyan-200 hover:shadow-md"
+      style={{ animationDelay: `${Math.min(gi * 60 + ri * 30, 400)}ms` }}
+    >
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+        <span className="font-mono text-sm font-bold text-cyan-950">
+          {formatClinicLocalTime(start)}–{formatClinicLocalTime(end)}
+        </span>
+        <Link
+          href={`/admin/patients/${a.patient.id}`}
+          className="font-semibold text-slate-900 hover:text-cyan-800 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600"
+        >
+          {a.patient.lastName} {a.patient.firstName}
+        </Link>
+        <a
+          href={`tel:${a.patient.phone.replace(/[\s.]/g, "")}`}
+          className="cursor-pointer text-cyan-800 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600"
+          dir="auto"
+        >
+          {a.patient.phone}
+        </a>
+        <span className="text-slate-700">{localized(a.service.name, "fr")}</span>
+        <span className="text-xs text-slate-500">
+          ({a.service.durationMinutes} min · {SOURCE_LABELS[a.source] ?? a.source})
+        </span>
+        <span className="ml-auto">
+          <AppointmentStatusBadge status={a.status} />
+        </span>
+      </div>
+      <AppointmentActions
+        appointmentId={a.id}
+        status={a.status}
+        startTime={a.startTime}
+        onUpdated={() => setReloadToken((t) => t + 1)}
+      />
+    </li>
+  );
+}
+
 export default function WeekAppointmentsStrip({
   from,
   to,
@@ -232,72 +306,7 @@ export default function WeekAppointmentsStrip({
         ) : (
           <div className="max-h-[560px] space-y-4 overflow-y-auto pr-1">
             {grouped.map(({ day, rows }, gi) => (
-              <div key={day} className="space-y-2">
-                <div className="sticky top-0 z-[1] flex items-center gap-2 bg-white/95 py-1 backdrop-blur">
-                  <span
-                    aria-hidden="true"
-                    className={`h-6 w-1 rounded-full ${day === today ? "bg-emerald-500" : "bg-cyan-300"}`}
-                  />
-                  <h3 className="text-sm font-bold text-cyan-950">
-                    {dayLabel(day)}
-                    {day === today && (
-                      <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-900">
-                        Aujourd&apos;hui
-                      </span>
-                    )}
-                  </h3>
-                  <span className="text-xs text-slate-500">{rows.length}</span>
-                </div>
-                {rows.length === 0 ? (
-                  <p className="pl-3 text-xs text-slate-400">— Rien ce jour —</p>
-                ) : (
-                  <ul className="space-y-2 border-l-2 border-cyan-100 pl-3">
-                    {rows.map((a, ri) => {
-                      const start = new Date(a.startTime);
-                      const end = new Date(a.endTime);
-                      return (
-                        <li
-                          key={a.id}
-                          className="dash-row space-y-2 rounded-xl border border-slate-200 bg-white p-3 shadow-sm transition-all duration-200 hover:-translate-y-px hover:border-cyan-200 hover:shadow-md"
-                          style={{ animationDelay: `${Math.min(gi * 60 + ri * 30, 400)}ms` }}
-                        >
-                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-                            <span className="font-mono text-sm font-bold text-cyan-950">
-                              {formatClinicLocalTime(start)}–{formatClinicLocalTime(end)}
-                            </span>
-                            <Link
-                              href={`/admin/patients/${a.patient.id}`}
-                              className="font-semibold text-slate-900 hover:text-cyan-800 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600"
-                            >
-                              {a.patient.lastName} {a.patient.firstName}
-                            </Link>
-                            <a
-                              href={`tel:${a.patient.phone.replace(/[\s.]/g, "")}`}
-                              className="cursor-pointer text-cyan-800 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600"
-                              dir="auto"
-                            >
-                              {a.patient.phone}
-                            </a>
-                            <span className="text-slate-700">{localized(a.service.name, "fr")}</span>
-                            <span className="text-xs text-slate-500">
-                              ({a.service.durationMinutes} min · {SOURCE_LABELS[a.source] ?? a.source})
-                            </span>
-                            <span className="ml-auto">
-                              <AppointmentStatusBadge status={a.status} />
-                            </span>
-                          </div>
-                          <AppointmentActions
-                            appointmentId={a.id}
-                            status={a.status}
-                            startTime={a.startTime}
-                            onUpdated={() => setReloadToken((t) => t + 1)}
-                          />
-                        </li>
-                      );
-                    })}
-                  </ul>
-                )}
-              </div>
+              <WeekDaySection key={day} day={day} rows={rows} today={today} gi={gi} setReloadToken={setReloadToken} />
             ))}
           </div>
         )}

@@ -77,8 +77,11 @@ export async function GET(request: NextRequest) {
       ...(status ? { status } : {}),
     },
     orderBy: [{ startTime: "asc" }, { id: "asc" }],
+    take: 500, // safety cap
     select: appointmentRowSelect,
   });
+
+  const resultTruncated = appointments.length === 500;
 
   await logActionSafe(
     { type: AuditActorType.STAFF, userId: guard.user.id },
@@ -86,9 +89,9 @@ export async function GET(request: NextRequest) {
     "Appointment",
     "list",
     // Dates + counter + optional enum only — never a patient name/phone.
-    { scope: "range-view", from, to, resultCount: appointments.length, ...(status ? { status } : {}) },
+    { scope: "range-view", from, to, resultCount: appointments.length, resultTruncated, ...(status ? { status } : {}) },
     getClientIp(request.headers),
   );
 
-  return withRefreshedSession(ok({ from, to, appointments }), guard);
+  return withRefreshedSession(ok({ from, to, resultTruncated, appointments }), guard);
 }

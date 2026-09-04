@@ -22,18 +22,38 @@ export function expiryLabel(msRemaining: number): string {
   return rest === 0 ? `expire dans ${h} h` : `expire dans ${h} h ${rest}`;
 }
 
+function ExpiryBadge({ expiresAt }: { expiresAt: string }) {
+  const [msRemaining, setMsRemaining] = useState(() => new Date(expiresAt).getTime() - Date.now());
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      setMsRemaining(new Date(expiresAt).getTime() - Date.now());
+    }, 30000);
+    return () => clearInterval(id);
+  }, [expiresAt]);
+
+  return (
+    <span
+      role="status"
+      className={`ml-auto rounded-full px-2 py-0.5 text-[11px] font-bold ${
+        msRemaining < 0
+          ? "bg-red-100 text-red-900"
+          : msRemaining < 3600_000
+            ? "bg-amber-200 text-amber-950"
+            : "bg-white text-slate-700 ring-1 ring-amber-200"
+      }`}
+    >
+      {expiryLabel(msRemaining)}
+    </span>
+  );
+}
+
 export default function CallQueuePanel() {
   const [rows, setRows] = useState<PendingAppointmentRow[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [reloadToken, setReloadToken] = useState(0);
-  const [, setTick] = useState(0);
-
-  useEffect(() => {
-    const id = setInterval(() => setTick((t) => t + 1), 30000);
-    return () => clearInterval(id);
-  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -136,18 +156,7 @@ export default function CallQueuePanel() {
                     {localized(a.service.name, "fr")} ·{" "}
                     {formatClinicLocalTime(new Date(a.startTime))}
                   </span>
-                  <span
-                    role="status"
-                    className={`ml-auto rounded-full px-2 py-0.5 text-[11px] font-bold ${
-                      a.msRemaining < 0
-                        ? "bg-red-100 text-red-900"
-                        : a.msRemaining < 3600_000
-                          ? "bg-amber-200 text-amber-950"
-                          : "bg-white text-slate-700 ring-1 ring-amber-200"
-                    }`}
-                  >
-                    {expiryLabel(a.msRemaining)}
-                  </span>
+                  <ExpiryBadge expiresAt={a.expiresAt} />
                 </div>
                 <AppointmentActions
                   appointmentId={a.id}

@@ -10,14 +10,31 @@ import { CLINIC_TIMEZONE } from "@/lib/time/clinicTime";
 // Africa/Algiers. Pure CSS entrance (dashboard.css .dash-enter), SVG icons
 // only (no emojis), FR-only strings.
 
+const clockFormatter = new Intl.DateTimeFormat("fr-FR", {
+  timeZone: CLINIC_TIMEZONE,
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hour12: false,
+});
+
 function formatClock(from: Date): string {
-  return new Intl.DateTimeFormat("fr-FR", {
-    timeZone: CLINIC_TIMEZONE,
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  }).format(from);
+  return clockFormatter.format(from);
+}
+
+function ClinicClock({ nowISO }: { nowISO: string }) {
+  const [now, setNow] = useState(() => new Date(nowISO));
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  return (
+    <span role="timer" aria-label="Heure du cabinet" className="font-mono font-semibold text-cyan-950">
+      {formatClock(now)}
+    </span>
+  );
 }
 
 export default function DashboardHeader({
@@ -39,14 +56,6 @@ export default function DashboardHeader({
   isFridayClosed: boolean;
   rangeLabel: string;
 }) {
-  const [now, setNow] = useState(() => new Date(nowISO));
-
-  useEffect(() => {
-    setNow(new Date(nowISO));
-    const id = setInterval(() => setNow(new Date()), 1000);
-    return () => clearInterval(id);
-  }, [nowISO]);
-
   const pct =
     utilizationRate !== null && Number.isFinite(utilizationRate)
       ? Math.max(0, Math.min(100, Math.round(utilizationRate * 100)))
@@ -76,10 +85,7 @@ export default function DashboardHeader({
               <path d="M10 5.5V10l3 2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
             </svg>
             <span>
-              Heure du cabinet{" "}
-              <span role="timer" aria-label="Heure du cabinet" className="font-mono font-semibold text-cyan-950">
-                {formatClock(now)}
-              </span>
+              Heure du cabinet <ClinicClock nowISO={nowISO} />
             </span>
             <span aria-hidden="true" className="text-slate-300">·</span>
             <span>

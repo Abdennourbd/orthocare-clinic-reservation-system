@@ -26,7 +26,7 @@ const TYPE_LABELS: Record<string, string> = {
   BOOKING_RECEIVED: "Demande reçue",
   CONFIRMATION: "Confirmation",
   REMINDER: "Rappel",
-  NO_SHOW: "No-show",
+  NO_SHOW: "Absent",
   MANUAL: "Manuel",
   RESCHEDULE: "Déplacement",
   CANCELLED: "Annulation",
@@ -45,6 +45,9 @@ const STATUS_LABELS: Record<string, string> = {
   SENT: "Envoyé",
   FAILED: "Échec",
   SENDING: "En cours",
+  QUEUED: "En file",
+  DELIVERED: "Reçu",
+  UNDELIVERED: "Non distribué",
 };
 
 export function formatPulseTime(instant: string): string {
@@ -137,7 +140,7 @@ export default function SmsPulsePanel({ patients }: { patients: WeekPatient[] })
                   <span
                     className={`inline-flex items-center rounded-full px-2 py-px text-[11px] font-bold ${STATUS_CLASSES[m.status] ?? "bg-slate-200 text-slate-800"}`}
                   >
-                    {STATUS_LABELS[m.status] ?? m.status}
+                    {STATUS_LABELS[m.status] ?? "Inconnu"}
                   </span>
                   <span className="ml-auto font-mono text-[11px] text-slate-500">
                     {formatPulseTime(m.sentAt ?? m.createdAt)}

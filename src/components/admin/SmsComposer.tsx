@@ -50,7 +50,12 @@ export default function SmsComposer({
         setError(data?.error?.message ?? "Une erreur est survenue. Réessayez.");
         return;
       }
-      if (data?.sent) {
+      if (data === null) {
+        setError("Une erreur inattendue s'est produite lors de la lecture de la réponse.");
+        return;
+      }
+      
+      if (data.sent) {
         const picked = patients.find((p) => p.id === patientId);
         setSuccess(
           picked ? `SMS envoyé à ${picked.firstName} ${picked.lastName}.` : "SMS envoyé.",
