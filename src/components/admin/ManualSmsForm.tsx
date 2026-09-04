@@ -36,10 +36,6 @@ const buttonPrimary =
   "rounded-md bg-teal-700 px-4 py-2 text-sm font-medium text-white hover:bg-teal-800 " +
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 " +
   "focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60";
-const buttonNeutral =
-  "rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 " +
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 " +
-  "focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60";
 
 export default function ManualSmsForm({
   onNotify,

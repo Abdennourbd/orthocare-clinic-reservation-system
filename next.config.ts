@@ -9,6 +9,13 @@ const nextConfig: NextConfig = {
   // 301s from clinicorthocare.com (Task 23). Audited source list lives in
   // src/lib/seo/redirects.ts — old site had 2 indexed URLs (/ + /privacy-policy/).
   redirects: async () => LEGACY_REDIRECTS.map((r) => ({ ...r })),
+  // Gallery images may be admin-uploaded remote URLs (Vercel Blob) or local
+  // /images/* files — next/image optimizes both, remote hosts allow-listed.
+  images: {
+    remotePatterns: [
+      { protocol: "https", hostname: "*.public.blob.vercel-storage.com" },
+    ],
+  },
   // CLAUDE.md and AGENTS.md are hand-maintained here (see CLAUDE.md). Without
   // this flag `next dev` regenerates both on every start and overwrites them.
   agentRules: false,

@@ -67,62 +67,52 @@ export default function HeroHome() {
         style={{ y: shouldReduceMotion ? 0 : yText, opacity }}
         className="relative mx-auto flex max-w-5xl flex-col items-center px-4 py-24 text-center sm:px-6 md:py-36"
       >
-        <motion.span
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-          className="mb-6 inline-flex items-center gap-2 rounded-full border border-teal-200 bg-teal-50/80 px-4 py-1.5 text-sm font-medium text-teal-700"
+        <span
+          style={{ animationDelay: "0ms" }}
+          className="hero-enter mb-6 inline-flex items-center gap-2 rounded-full border border-teal-200 bg-teal-50/80 px-4 py-1.5 text-sm font-medium text-teal-700"
         >
           <SparkleIcon width={16} height={16} />
           {t("heroBadge")}
-        </motion.span>
+        </span>
 
-        <motion.h1
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.05 }}
-          className="max-w-4xl text-4xl font-bold tracking-tight text-zinc-900 sm:text-6xl md:text-7xl"
+        <h1
+          style={{ animationDelay: "50ms" }}
+          className="hero-enter max-w-4xl text-4xl font-bold tracking-tight text-zinc-900 sm:text-6xl md:text-7xl"
         >
           {t("heroTitle")}{" "}
           <span className="bg-gradient-to-r from-teal-600 to-emerald-500 bg-clip-text text-transparent">
             {t("heroTitleAccent")}
           </span>
-        </motion.h1>
+        </h1>
 
-        <motion.p
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.15 }}
-          className="mt-6 max-w-2xl text-lg text-zinc-600 sm:text-xl"
+        <p
+          style={{ animationDelay: "150ms" }}
+          className="hero-enter mt-6 max-w-2xl text-lg text-zinc-600 sm:text-xl"
         >
           {t("heroSubtitle")}
-        </motion.p>
+        </p>
 
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.25 }}
-          className="mt-10 flex flex-col gap-3 sm:flex-row"
+        <div
+          style={{ animationDelay: "250ms" }}
+          className="hero-enter mt-10 flex flex-col gap-3 sm:flex-row"
         >
           <Link
             href="/book"
-            className="rounded-full bg-teal-600 px-8 py-4 text-base font-semibold text-white shadow-lg shadow-teal-600/25 transition-all hover:-translate-y-0.5 hover:bg-teal-700 hover:shadow-xl"
+            className="rounded-full bg-teal-600 px-8 py-4 text-base font-semibold text-white shadow-lg shadow-teal-600/25 transition-all hover:-translate-y-0.5 hover:bg-teal-700 hover:shadow-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2"
           >
             {t("cta")}
           </Link>
           <Link
             href="/services"
-            className="rounded-full border border-zinc-300 bg-white px-8 py-4 text-base font-semibold text-zinc-800 transition-all hover:-translate-y-0.5 hover:bg-zinc-50"
+            className="rounded-full border border-zinc-300 bg-white px-8 py-4 text-base font-semibold text-zinc-800 transition-all hover:-translate-y-0.5 hover:bg-zinc-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2"
           >
             {t("secondaryCta")}
           </Link>
-        </motion.div>
+        </div>
 
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.6, delay: 0.4 }}
-          className="mt-10 flex items-center gap-2 text-sm text-zinc-500"
+        <div
+          style={{ animationDelay: "400ms" }}
+          className="hero-enter mt-10 flex items-center gap-2 text-sm text-zinc-500"
         >
           <span className="flex text-amber-400" aria-hidden>
             {Array.from({ length: 5 }).map((_, i) => (
@@ -130,7 +120,7 @@ export default function HeroHome() {
             ))}
           </span>
           <span>{t("heroRating")}</span>
-        </motion.div>
+        </div>
       </motion.div>
 
       {/* Scroll cue */}

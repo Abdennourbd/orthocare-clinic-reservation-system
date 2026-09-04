@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { unstable_cache } from "next/cache";
 import { getPrisma } from "@/lib/db";
 import { errorResponse, ok } from "@/lib/api/http";
 import { requireStaff, withRefreshedSession } from "@/lib/auth/guard";
@@ -65,35 +66,45 @@ export async function GET(request: NextRequest) {
   }
 
   const prisma = getPrisma();
-  const [appointments, patients, workingHoursSetting] = await Promise.all([
-    prisma.appointment.findMany({
-      where: { startTime: { gte: fromStart, lte: toEnd } },
-      orderBy: [{ startTime: "asc" }, { id: "asc" }],
-      select: {
-        status: true,
-        source: true,
-        startTime: true,
-        endTime: true,
-        createdAt: true,
-        confirmedAt: true,
-        cancelReason: true,
-      },
-    }),
-    prisma.patient.findMany({
-      where: { createdAt: { gte: fromStart, lte: toEnd } },
-      select: { createdAt: true },
-    }),
-    prisma.setting.findUnique({ where: { key: "workingHours" } }),
-  ]);
-
-  const kpis = computeKpis({
-    appointments,
-    patients,
-    workingHours: (workingHoursSetting?.value ?? {}) as unknown,
-    from,
-    to,
-    today: todayLocal,
-  });
+  // Dashboard home hits this on every navigation; the underlying data moves
+  // slowly (bookings, not keystrokes), so a 60s shared cache absorbs the
+  // repeated full-range scans. Keyed by range only — the response carries
+  // counts/rates, never per-staff data, so sharing across sessions is safe.
+  // (Long-range SQL groupBy aggregation is the follow-up if this ever bites.)
+  const kpis = await unstable_cache(
+    async () => {
+      const [appointments, patients, workingHoursSetting] = await Promise.all([
+        prisma.appointment.findMany({
+          where: { startTime: { gte: fromStart, lte: toEnd } },
+          orderBy: [{ startTime: "asc" }, { id: "asc" }],
+          select: {
+            status: true,
+            source: true,
+            startTime: true,
+            endTime: true,
+            createdAt: true,
+            confirmedAt: true,
+            cancelReason: true,
+          },
+        }),
+        prisma.patient.findMany({
+          where: { createdAt: { gte: fromStart, lte: toEnd } },
+          select: { createdAt: true },
+        }),
+        prisma.setting.findUnique({ where: { key: "workingHours" } }),
+      ]);
+      return computeKpis({
+        appointments,
+        patients,
+        workingHours: (workingHoursSetting?.value ?? {}) as unknown,
+        from,
+        to,
+        today: todayLocal,
+      });
+    },
+    ["kpis", from, to, todayLocal],
+    { revalidate: 60 },
+  )();
 
   return withRefreshedSession(ok({ range: { from, to }, kpis }), guard);
 }

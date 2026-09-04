@@ -226,7 +226,7 @@ export default function ClosuresDashboard() {
       // stale (a booking landed or left since the preview), the API answers
       // 409 UNRESOLVED_REMAINING and staff confirm explicitly rather than
       // silently resolving a subset.
-      let response = await send(acknowledgedUnresolved);
+      const response = await send(acknowledgedUnresolved);
       if (response.status === 409 && !acknowledgedUnresolved) {
         const body = (await response.json().catch(() => null)) as {
           error?: { code?: string; message?: string };

@@ -131,9 +131,9 @@ describe("toCSV", () => {
 });
 
 describe("toXLSX", () => {
-  it("round-trips headers + rows through a real workbook", () => {
+  it("round-trips headers + rows through a real workbook", async () => {
     const rows = buildExportRows([sampleInput()], { includeNotes: false });
-    const buffer = toXLSX(rows, false);
+    const buffer = await toXLSX(rows, false);
     expect(buffer.length).toBeGreaterThan(0);
     const workbook = XLSX.read(buffer, { type: "buffer" });
     const sheet = workbook.Sheets[workbook.SheetNames[0]];

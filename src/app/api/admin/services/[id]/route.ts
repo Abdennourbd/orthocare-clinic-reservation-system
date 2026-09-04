@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { revalidateTag } from "next/cache";
 import { getPrisma } from "@/lib/db";
 import { errorResponse, ok } from "@/lib/api/http";
 import {
@@ -95,6 +96,7 @@ export async function PATCH(request: NextRequest, context: Ctx) {
       },
       select: serviceRowSelect,
     });
+    revalidateTag("services", "max");
   } catch (e) {
     if (isUniqueViolation(e)) {
       return errorResponse(409, "SLUG_TAKEN", "Un service existe déjà avec ce slug.");
@@ -163,6 +165,7 @@ export async function DELETE(request: NextRequest, context: Ctx) {
 
   try {
     await getPrisma().service.delete({ where: { id } });
+    revalidateTag("services", "max");
   } catch (e) {
     // Count-then-delete race: a booking referencing this service landed
     // between the count above and the delete. The FK is the arbiter — map

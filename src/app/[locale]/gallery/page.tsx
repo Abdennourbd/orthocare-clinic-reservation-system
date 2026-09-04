@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import { getTranslations } from "next-intl/server";
 import { listActiveGalleryItems } from "@/lib/public/content";
 import { getAppLocale } from "@/lib/i18n/getLocale";
@@ -59,25 +60,31 @@ export default async function GalleryPage() {
                       <span className="absolute start-2 top-2 rounded-full bg-white/90 px-2.5 py-1 text-xs font-semibold text-teal-700 shadow-sm">
                         {t("beforeLabel")}
                       </span>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={block.before.imageUrl}
-                        alt={block.before.caption || ""}
-                        loading="lazy"
-                        className="aspect-[4/3] w-full object-cover transition-transform duration-300 group-hover:scale-105"
-                      />
+                      <div className="relative aspect-[4/3] overflow-hidden">
+                        <Image
+                          src={block.before.imageUrl}
+                          alt={block.before.caption || ""}
+                          fill
+                          loading="lazy"
+                          sizes="(max-width: 640px) 100vw, 50vw"
+                          className="object-cover transition-transform duration-300 group-hover:scale-105"
+                        />
+                      </div>
                     </div>
                     <div className="relative overflow-hidden bg-white">
                       <span className="absolute start-2 top-2 rounded-full bg-teal-600 px-2.5 py-1 text-xs font-semibold text-white shadow-sm">
                         {t("afterLabel")}
                       </span>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={block.after.imageUrl}
-                        alt={block.after.caption || ""}
-                        loading="lazy"
-                        className="aspect-[4/3] w-full object-cover transition-transform duration-300 group-hover:scale-105"
-                      />
+                      <div className="relative aspect-[4/3] overflow-hidden">
+                        <Image
+                          src={block.after.imageUrl}
+                          alt={block.after.caption || ""}
+                          fill
+                          loading="lazy"
+                          sizes="(max-width: 640px) 100vw, 50vw"
+                          className="object-cover transition-transform duration-300 group-hover:scale-105"
+                        />
+                      </div>
                     </div>
                     <figcaption className="col-span-2 space-y-1 border-t border-teal-100 bg-white px-4 py-3 text-sm text-zinc-600">
                       <p>{block.before.caption}</p>
@@ -95,13 +102,16 @@ export default async function GalleryPage() {
                   className="group flex h-full flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm outline-none transition-shadow duration-300 hover:shadow-md focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2"
                 >
                   <div className="overflow-hidden">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={block.item.imageUrl}
-                      alt={block.item.caption || ""}
-                      loading="lazy"
-                      className="aspect-[4/3] w-full object-cover transition-transform duration-300 group-hover:scale-105"
-                    />
+                    <div className="relative aspect-[4/3] overflow-hidden">
+                      <Image
+                        src={block.item.imageUrl}
+                        alt={block.item.caption || ""}
+                        fill
+                        loading="lazy"
+                        sizes="(max-width: 640px) 100vw, 33vw"
+                        className="object-cover transition-transform duration-300 group-hover:scale-105"
+                      />
+                    </div>
                   </div>
                   {block.item.caption && (
                     <figcaption className="border-t border-zinc-100 px-4 py-3 text-sm text-zinc-600">

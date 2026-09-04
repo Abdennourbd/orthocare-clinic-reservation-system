@@ -121,7 +121,7 @@ export async function GET(request: NextRequest) {
     return withRefreshedSession(response, guard);
   }
 
-  const xlsx = toXLSX(rows, includeNotes);
+  const xlsx = await toXLSX(rows, includeNotes);
   const response = new Response(new Uint8Array(xlsx), {
     status: 200,
     headers: {

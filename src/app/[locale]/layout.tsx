@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono, Noto_Sans_Arabic } from "next/font/google";
+import { Geist, Noto_Sans_Arabic } from "next/font/google";
 import { NextIntlClientProvider } from "next-intl";
 import { getMessages, getTranslations } from "next-intl/server";
 import { hasLocale } from "next-intl";
@@ -16,13 +16,9 @@ const geistSans = Geist({
   subsets: ["latin"],
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
-
 // Arabic is a heavy script by default; subsetting to "arabic" keeps the
 // payload small. The font file size is reported by next/font at build time.
+// Loaded ONLY for the ar locale below — fr/en visitors never download it.
 const arabic = Noto_Sans_Arabic({
   variable: "--font-arabic",
   subsets: ["arabic"],
@@ -65,12 +61,16 @@ export default async function LocaleLayout({ children, params }: Props) {
 
   const messages = await getMessages();
   const dir = isRtl(locale) ? "rtl" : "ltr";
+  // Arabic ships only on Arabic pages (2/3 of traffic never downloads Noto
+  // Sans Arabic), and the mono face lives in the admin layout where tables
+  // actually use it — the public layout keeps a single Latin text face.
+  const arabicClass = locale === "ar" ? arabic.variable : "";
 
   return (
     <html
       lang={locale}
       dir={dir}
-      className={`${geistSans.variable} ${geistMono.variable} ${arabic.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${arabicClass} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
         <LocalBusinessJsonLd locale={locale} />

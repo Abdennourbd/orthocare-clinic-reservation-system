@@ -45,12 +45,17 @@ export default function CursorGlow() {
       }}
     >
       <motion.div
-        className="absolute h-[600px] w-[600px] rounded-full bg-teal-400/25 mix-blend-multiply blur-[100px]"
+        className="absolute h-[600px] w-[600px] rounded-full"
         style={{
           x: cursorX,
           y: cursorY,
           translateX: "-50%",
           translateY: "-50%",
+          // Pre-baked radial gradient instead of a runtime 100px blur +
+          // mix-blend-multiply layer: same glow look with no per-frame
+          // re-blend of the whole viewport while the pointer moves.
+          background:
+            "radial-gradient(circle, rgba(45, 212, 191, 0.22) 0%, rgba(45, 212, 191, 0.08) 40%, transparent 70%)",
         }}
       />
     </motion.div>

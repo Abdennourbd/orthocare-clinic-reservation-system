@@ -39,6 +39,86 @@ body {
   animation: step-enter 180ms ease-out both;
 }
 
+/* Hero copy entrance: pure CSS so the LCP element (h1) paints in the SSR
+   HTML at full opacity instead of waiting for the JS bundle to hydrate a
+   framer-motion `initial={{opacity: 0}}` state. Stagger via inline
+   animation-delay. The global reduced-motion guard above collapses it. */
+@keyframes hero-enter {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.hero-enter {
+  animation: hero-enter 600ms ease-out both;
+}
+
+/* Scroll reveal (Reveal.tsx): hidden pre-intersection, animated once by
+   IntersectionObserver; the reduced-motion guard below collapses it. */
+.reveal {
+  opacity: 0;
+  transform: translateY(20px);
+  transition:
+    opacity 500ms ease-out,
+    transform 500ms ease-out;
+}
+
+.reveal.is-visible {
+  opacity: 1;
+  transform: none;
+}
+
+/* Marquee loop (Marquee.tsx): pure CSS scroll, no JS rAF. Pause on
+   hover/focus-within for WCAG 2.2.2 (pausable moving content). */
+@keyframes marquee-scroll {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.marquee-track {
+  animation: marquee-scroll var(--marquee-duration, 20s) linear infinite;
+}
+
+.marquee:hover .marquee-track,
+.marquee:focus-within .marquee-track {
+  animation-play-state: paused;
+}
+
+/* Gentle float (FloatCard.tsx): decorative hover lift + idle bob, CSS only. */
+@keyframes float-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+.float-bob {
+  animation: float-bob 4s ease-in-out infinite;
+}
+
+.float-card {
+  transition:
+    transform 200ms ease-out,
+    box-shadow 200ms ease-out;
+}
+
+.float-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   ::before,

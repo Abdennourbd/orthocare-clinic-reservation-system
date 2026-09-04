@@ -1,3 +1,4 @@
+import Image from "next/image";
 import { getTranslations } from "next-intl/server";
 import { Link } from "@/i18n/navigation";
 import { listActiveGalleryItems } from "@/lib/public/content";
@@ -22,13 +23,14 @@ export default async function GalleryPreview() {
       <div className="mt-12 grid grid-cols-2 gap-4 sm:grid-cols-3 sm:gap-6">
         {items.map((item, i) => (
           <Reveal key={item.id} delay={i * 0.05}>
-            <figure className="group relative overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm transition-shadow duration-300 hover:shadow-md">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
+            <figure className="group relative aspect-square overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm transition-shadow duration-300 hover:shadow-md">
+              <Image
                 src={item.imageUrl}
                 alt={item.caption || ""}
+                fill
                 loading="lazy"
-                className="aspect-square w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                sizes="(max-width: 640px) 50vw, 33vw"
+                className="object-cover transition-transform duration-300 group-hover:scale-105"
               />
               {item.caption && (
                 <figcaption className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent px-4 pb-3 pt-8 text-sm text-white">

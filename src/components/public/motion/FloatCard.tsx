@@ -1,20 +1,33 @@
 "use client";
-import { motion, useReducedMotion } from "framer-motion";
 
-export default function FloatCard({ children, className }: { children: React.ReactNode; className?: string }) {
-  const shouldReduceMotion = useReducedMotion();
+import { useEffect, useState } from "react";
+
+// Hover-lift card WITHOUT framer-motion: pure CSS transition (see
+// `.float-card` in globals.css). The old infinite JS-driven bob is dropped —
+// it kept the main thread busy on every page for decoration. `children` and
+// `className` props unchanged, so call sites keep working.
+export default function FloatCard({
+  children,
+  className,
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
+  const [reducedMotion, setReducedMotion] = useState(false);
+
+  useEffect(() => {
+    if (
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- mount-once preference read
+      setReducedMotion(true);
+    }
+  }, []);
+
   return (
-    <motion.div
-      className={className}
-      animate={shouldReduceMotion ? {} : { y: [0, -10, 0] }}
-      transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-      whileHover={
-        shouldReduceMotion 
-          ? { boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.1)" } 
-          : { y: -5, boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.1)" }
-      }
-    >
+    <div className={`${reducedMotion ? "" : "float-card "}${className ?? ""}`.trim()}>
       {children}
-    </motion.div>
+    </div>
   );
 }

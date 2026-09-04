@@ -1,4 +1,3 @@
-import * as XLSX from "xlsx";
 import {
   formatClinicLocalTime,
   getClinicDayBoundsUTC,
@@ -130,8 +129,11 @@ export function toCSV(rows: ExportRow[], includeNotes: boolean): string {
   return "\uFEFF" + lines.join("\r\n") + "\r\n";
 }
 
-/** XLSX workbook buffer (first sheet = export, header row frozen + filtered). */
-export function toXLSX(rows: ExportRow[], includeNotes: boolean): Buffer {
+/** XLSX workbook buffer (first sheet = export, header row frozen + filtered).
+ * SheetJS (~430 KB) loads lazily on first XLSX export so CSV downloads and
+ * every other importer of this module never pay its parse cost. */
+export async function toXLSX(rows: ExportRow[], includeNotes: boolean): Promise<Buffer> {
+  const XLSX = await import("xlsx");
   const headers = exportHeaders(includeNotes);
   const aoa: string[][] = [
     headers,

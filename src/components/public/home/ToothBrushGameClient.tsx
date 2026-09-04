@@ -120,6 +120,10 @@ export default function ToothBrushGameClient() {
   const [mounted, setMounted] = useState(false);
   const [loadFailed, setLoadFailed] = useState(false);
   const [passes, setPasses] = useState(0);
+  // Viewport-gated: the 640px WebP pair (≈40 KB) loads only when the section
+  // scrolls near the viewport — never on initial page load — and the rAF
+  // loop pauses off-screen and after the win.
+  const [inView, setInView] = useState(false);
 
   const prefersReducedMotion = useReducedMotion();
 
@@ -127,6 +131,27 @@ export default function ToothBrushGameClient() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true);
   }, []);
+
+  useEffect(() => {
+    if (!mounted || prefersReducedMotion) return;
+    const el = wrapRef.current;
+    // wrapRef mounts with the game shell below; guard anyway for safety.
+    if (!el || typeof IntersectionObserver === "undefined") {
+      setInView(true);
+      return;
+    }
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          setInView(true);
+          io.disconnect();
+        }
+      },
+      { rootMargin: "200px" },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [mounted, prefersReducedMotion]);
 
   const start = useCallback(() => {
     const canvas = canvasRef.current;
@@ -272,11 +297,13 @@ export default function ToothBrushGameClient() {
   );
 
   useEffect(() => {
-    if (!mounted || prefersReducedMotion) return;
+    if (!mounted || prefersReducedMotion || !inView) return;
     const before = new window.Image();
     const after = new window.Image();
-    before.src = "/images/beforewhitening.jpeg";
-    after.src = "/images/afterwhitening.jpeg";
+    // 640px WebP pair (≈20 KB each) sized to the 640×400 canvas — the
+    // 2.8 MB originals never ship to the browser for the game.
+    before.src = "/images/beforewhitening-640.webp";
+    after.src = "/images/afterwhitening-640.webp";
     let cancelled = false;
     let loaded = 0;
     let failed = false;
@@ -302,10 +329,12 @@ export default function ToothBrushGameClient() {
     return () => {
       cancelled = true;
     };
-  }, [mounted, prefersReducedMotion, start]);
+  }, [mounted, prefersReducedMotion, inView, start]);
 
   useEffect(() => {
-    if (!mounted || prefersReducedMotion) return;
+    // No loop off-screen or after the win: a 60fps full-canvas redraw for
+    // the life of the page burns mobile CPU/battery for nothing.
+    if (!mounted || prefersReducedMotion || !inView || won) return;
     let raf = 0;
     const loop = (now: number) => {
       drawFrame(now);
@@ -313,7 +342,7 @@ export default function ToothBrushGameClient() {
     };
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
-  }, [mounted, prefersReducedMotion, drawFrame]);
+  }, [mounted, prefersReducedMotion, inView, won, drawFrame]);
 
   const toCanvas = (clientX: number, clientY: number) => {
     const rect = wrapRef.current?.getBoundingClientRect();
@@ -378,7 +407,7 @@ export default function ToothBrushGameClient() {
           <>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src="/images/afterwhitening.jpeg"
+              src="/images/afterwhitening-640.webp"
               alt={t("gameCaption")}
               className="w-full max-w-2xl rounded-2xl object-cover"
             />
@@ -422,7 +451,7 @@ export default function ToothBrushGameClient() {
         {/* Before picture: the stained smile, always underneath */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src="/images/beforewhitening.jpeg"
+          src="/images/beforewhitening-640.webp"
           alt={t("gameCaption")}
           className="absolute inset-0 w-full h-full object-cover"
         />

@@ -12,6 +12,12 @@ import { getClinicWeekRange } from "@/lib/kpis/aggregations";
 import { GET } from "@/app/api/admin/kpis/route";
 import { localStart } from "./helpers/testDates";
 
+// next/cache has no runtime outside Next — stub it like content-settings.test.ts.
+vi.mock("next/cache", () => ({
+  revalidateTag: vi.fn(),
+  unstable_cache: vi.fn((cb) => cb),
+}));
+
 // Task 18 — GET /api/admin/kpis: week Sat→Thu aggregates, both roles,
 // no audit row (counts only). Fixtures are seeded relative to the REAL
 // clinic today so the test stays green regardless of when it runs.

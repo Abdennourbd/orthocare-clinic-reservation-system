@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { revalidateTag } from "next/cache";
 import { getPrisma } from "@/lib/db";
 import { errorResponse, ok } from "@/lib/api/http";
 import {
@@ -100,6 +101,7 @@ export async function POST(request: NextRequest) {
       },
       select: serviceRowSelect,
     });
+    revalidateTag("services", "max");
   } catch (e) {
     if (isUniqueViolation(e)) {
       return errorResponse(409, "SLUG_TAKEN", "Un service existe déjà avec ce slug.");
