@@ -1,22 +1,28 @@
 import { getPrisma } from "@/lib/db";
 import {
+  addClinicDays,
   CLINIC_TIMEZONE,
   clinicNoon,
   getClinicDayBoundsUTC,
+  getClinicDayOfWeek,
   toClinicLocalDateString,
 } from "@/lib/time/clinicTime";
 import { computeKpis, getClinicWeekRange } from "@/lib/kpis/aggregations";
+import { getStaffFromCookies } from "@/lib/auth/guard";
 import KpiCards from "@/components/admin/KpiCards";
+import DashboardHeader from "@/components/admin/DashboardHeader";
+import DashboardClient from "@/components/admin/DashboardClient";
+import "./dashboard.css";
 
-// Task 18 — dashboard home: today's schedule + the current Sat→Thu clinic
-// week's success metrics (plan.md §Success Metrics), computed on demand from
-// appointments (no extra tables). "Today" and every day boundary go through
-// lib/time/clinicTime.ts — never the server's timezone.
+// Dashboard home: dentist-first briefing + week at the chair.
+// Server keeps the KPI aggregates (no PII, no audit row needed); the bento
+// body (week strip / call queue / SMS pulse) fetches its audited reads
+// client-side through the existing APIs + the new range endpoint — one
+// range fetch total. "Today", greetings and every boundary go through
+// lib/time/clinicTime.ts — never the server's or browser's timezone.
 
 function formatDayLabel(localDate: string): string {
   return new Intl.DateTimeFormat("fr-FR", {
-    // Single source of truth: re-exported from clinicTime.ts (the only
-    // module that knows the clinic timezone).
     timeZone: CLINIC_TIMEZONE,
     weekday: "short",
     day: "numeric",
@@ -24,14 +30,33 @@ function formatDayLabel(localDate: string): string {
   }).format(clinicNoon(localDate));
 }
 
+function greetingFor(now: Date, name: string | null): string {
+  const hour = Number(
+    new Intl.DateTimeFormat("fr-FR", {
+      timeZone: CLINIC_TIMEZONE,
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    })
+      .format(now)
+      .slice(0, 2),
+  );
+  const hello = hour < 18 ? "Bonjour" : "Bonsoir";
+  return name ? `${hello}, ${name.split(" ")[0]}` : hello;
+}
+
 export default async function DashboardHome() {
   const prisma = getPrisma();
-  const todayLocal = toClinicLocalDateString(new Date());
+  const now = new Date();
+  const todayLocal = toClinicLocalDateString(now);
   const { from, to } = getClinicWeekRange(todayLocal);
   const { startUTC: fromStart } = getClinicDayBoundsUTC(from);
   const { endUTC: toEnd } = getClinicDayBoundsUTC(to);
+  const tomorrowLocal = addClinicDays(todayLocal, 1);
+  const { startUTC: tomorrowStart } = getClinicDayBoundsUTC(tomorrowLocal);
+  const { endUTC: tomorrowEnd } = getClinicDayBoundsUTC(tomorrowLocal);
 
-  const [appointments, patients, workingHoursSetting, globalPending] =
+  const [appointments, patients, workingHoursSetting, globalPending, tomorrowCount, staff] =
     await Promise.all([
       prisma.appointment.findMany({
         where: { startTime: { gte: fromStart, lte: toEnd } },
@@ -53,6 +78,13 @@ export default async function DashboardHome() {
       // The call queue is global (every PENDING awaiting a call), not just
       // this week's — same number as /api/admin/appointments/pending.
       prisma.appointment.count({ where: { status: "PENDING" } }),
+      prisma.appointment.count({
+        where: {
+          startTime: { gte: tomorrowStart, lte: tomorrowEnd },
+          status: { notIn: ["CANCELLED", "RESCHEDULED"] },
+        },
+      }),
+      getStaffFromCookies(),
     ]);
 
   // Note: the dashboard's "En attente d'appel" card is the GLOBAL call
@@ -75,21 +107,31 @@ export default async function DashboardHome() {
     from === to
       ? `Journée du ${formatDayLabel(from)}`
       : `Semaine du ${formatDayLabel(from)} au ${formatDayLabel(to)}`;
+  const isFridayClosed = getClinicDayOfWeek(todayLocal) === "fri";
 
   return (
-    <div className="space-y-6">
-      <header>
-        <h1 className="text-2xl font-semibold text-slate-900">Tableau de bord</h1>
-        <p className="text-sm text-slate-500">
-          Vue d&apos;ensemble de l&apos;activité de la clinique.
-        </p>
-      </header>
+    <div className="mx-auto w-full max-w-[1400px] space-y-4">
+      <DashboardHeader
+        greeting={greetingFor(now, staff?.name ?? null)}
+        nowISO={now.toISOString()}
+        todayCount={kpis.todayCount}
+        pendingCount={globalPending}
+        tomorrowCount={tomorrowCount}
+        utilizationRate={kpis.utilizationRate}
+        isFridayClosed={isFridayClosed}
+        rangeLabel={rangeLabel}
+      />
 
-      <KpiCards kpis={kpis} rangeLabel={rangeLabel} />
+      <div className="dash-enter" style={{ animationDelay: "60ms" }}>
+        <KpiCards kpis={kpis} rangeLabel={rangeLabel} />
+      </div>
 
-      <p className="text-sm text-slate-400">
+      <DashboardClient from={from} to={to} today={todayLocal} />
+
+      <p className="pb-2 text-xs text-slate-400">
         Semaine clinique du samedi au jeudi (vendredi fermé). Les taux sont
-        calculés sur cette période.
+        calculés sur cette période. Heures affichées en heure du cabinet
+        (Africa/Algiers).
       </p>
     </div>
   );
