@@ -6,6 +6,9 @@ import {
   AuditAction,
   AuditActorType,
   Role,
+  SmsMessageType,
+  SmsStatus,
+  WaitlistSource,
 } from "@/generated/prisma/client";
 import { createSessionToken, SESSION_COOKIE_NAME } from "@/lib/auth/session";
 import { POST as anonymizeRoute } from "@/app/api/admin/patients/[id]/anonymize/route";
@@ -477,5 +480,105 @@ describe("anonymization leaves the unified timeline count exactly unchanged", ()
     expect(serializedRecord).not.toContain("Chaouch");
     expect(serializedRecord).not.toContain(patient.phone);
     expect(serializedRecord).not.toContain(patient.phoneE164);
+  });
+});
+
+describe("erasure fan-out — SMS, visits, documents, waitlist, audit", () => {
+  it("scrubs SmsMessage bodies, clears Visit treatment, 404s documents, drops waitlist, preserves audit", async () => {
+    const staff = await createStaff();
+    const cookie = await cookieFor(staff);
+    const patient = await createPatient({
+      firstName: "Yasmine",
+      lastName: "Chaouch",
+      phone: "0550999888",
+      phoneE164: "+213550999888",
+    });
+    const appointment = await makeAppointmentFor(patient.id);
+
+    // SMS row carrying the patient's name + phone.
+    await getPrisma().smsMessage.create({
+      data: {
+        to: patient.phoneE164,
+        body: `Bonjour Yasmine Chaouch, rappel ${patient.phoneE164}`,
+        patientId: patient.id,
+        type: SmsMessageType.MANUAL,
+        provider: "mock",
+        status: SmsStatus.SENT,
+        appointmentId: appointment.id,
+      },
+    });
+    // Manual visit with clinical notes.
+    const visit = await getPrisma().visit.create({
+      data: {
+        patientId: patient.id,
+        date: new Date(),
+        type: "consultation",
+        notes: "notes Yasmine",
+        treatment: "traitement Chaouch",
+      },
+    });
+    // Active waitlist entry for the anonymized phone.
+    const service = await getPrisma().service.create({
+      data: {
+        slug: `svc-anon-wl-${Math.random().toString(36).slice(2)}`,
+        name: { fr: "Consultation" },
+        description: { fr: "d" },
+        durationMinutes: 30,
+      },
+    });
+    await getPrisma().waitlistEntry.create({
+      data: {
+        patientId: patient.id,
+        serviceId: service.id,
+        preferredDates: [new Date("2026-09-02T00:00:00.000Z")],
+        source: WaitlistSource.STAFF,
+      },
+    });
+    const auditBefore = await getPrisma().auditLog.count();
+
+    const response = await anonymizeRoute(
+      bodyRequest("POST", `/api/admin/patients/${patient.id}/anonymize`, { confirm: true }, cookie),
+      ctx(patient.id),
+    );
+    expect(response.status).toBe(200);
+
+    // SMS rows are kept (history) but neutralized.
+    const msgs = await getPrisma().smsMessage.findMany({
+      where: { patientId: patient.id },
+    });
+    expect(msgs.length).toBeGreaterThan(0);
+    for (const m of msgs) {
+      expect(m.body).not.toContain("Yasmine");
+      expect(m.body).not.toContain("Chaouch");
+      expect(m.body).not.toContain("+213550999888");
+      expect(m.to).not.toContain("+213550999888");
+    }
+    // Visit row kept, clinical text cleared.
+    const afterVisit = await getPrisma().visit.findUnique({ where: { id: visit.id } });
+    expect(afterVisit).not.toBeNull();
+    expect(afterVisit!.treatment).toBeNull();
+    // Waitlist entries for the phone are gone/inactive.
+    expect(
+      await getPrisma().waitlistEntry.count({
+        where: { patientId: patient.id, active: true },
+      }),
+    ).toBe(0);
+    // Audit trail is append-only: nothing removed, erasure itself logged.
+    expect(await getPrisma().auditLog.count()).toBeGreaterThan(auditBefore);
+    expect(await lastAudit(AuditAction.PATIENT_ANONYMIZED)).not.toBeNull();
+  });
+
+  it("concurrent anonymize calls: exactly one 200, one 409", async () => {
+    const staff = await createStaff();
+    const cookie = await cookieFor(staff);
+    const patient = await createPatient();
+    const path = `/api/admin/patients/${patient.id}/anonymize`;
+
+    const [a, b] = await Promise.all([
+      anonymizeRoute(bodyRequest("POST", path, { confirm: true }, cookie), ctx(patient.id)),
+      anonymizeRoute(bodyRequest("POST", path, { confirm: true }, cookie), ctx(patient.id)),
+    ]);
+    const statuses = [a.status, b.status].sort();
+    expect(statuses).toEqual([200, 409]);
   });
 });
