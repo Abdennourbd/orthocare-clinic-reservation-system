@@ -348,7 +348,7 @@ describe("markNoShows", () => {
     const patient = await makePatient();
     const past = await makeAppointment(patient.id, {
       startTime: new Date(NOW.getTime() - 3 * 3600_000),
-      endTime: new Date(NOW.getTime() - 150 * 60_000),
+      endTime: new Date(NOW.getTime() - 13 * 3600_000),
     });
 
     const marked = await markNoShows(NOW);
@@ -414,7 +414,7 @@ describe("markNoShows", () => {
     const patient = await makePatient();
     await makeAppointment(patient.id, {
       startTime: new Date(NOW.getTime() - 3 * 3600_000),
-      endTime: new Date(NOW.getTime() - 150 * 60_000),
+      endTime: new Date(NOW.getTime() - 13 * 3600_000),
     });
 
     await markNoShows(NOW);
@@ -424,11 +424,29 @@ describe("markNoShows", () => {
     expect(await getPrisma().smsMessage.count()).toBe(1);
   });
 
-  it("still marks the no-show but suppresses the SMS for opted-out patients", async () => {
-    const patient = await makePatient({ messagingOptOut: true });
+  it("leaves same-day CONFIRMED appointments alone (12h grace for desk close-out)", async () => {
+    const patient = await makePatient();
+    const recent = await makeAppointment(patient.id, {
+      startTime: new Date(NOW.getTime() - 3 * 3600_000),
+      endTime: new Date(NOW.getTime() - 2 * 3600_000),
+    });
+
+    const marked = await markNoShows(NOW);
+
+    // The appointment ended 2h ago — inside the grace window, so a forgotten
+    // same-day COMPLETED marking is not rewritten and no SMS goes out.
+    expect(marked).toBe(0);
+    const updated = await getPrisma().appointment.findUnique({
+      where: { id: recent.id },
+    });
+    expect(updated!.status).toBe(AppointmentStatus.CONFIRMED);
+    expect(await getPrisma().smsMessage.count()).toBe(0);
+  });
+
+  it("still marks the no-show but suppresses the SMS for opted-out patients", async () => {    const patient = await makePatient({ messagingOptOut: true });
     const past = await makeAppointment(patient.id, {
       startTime: new Date(NOW.getTime() - 3 * 3600_000),
-      endTime: new Date(NOW.getTime() - 150 * 60_000),
+      endTime: new Date(NOW.getTime() - 13 * 3600_000),
     });
 
     const marked = await markNoShows(NOW);
