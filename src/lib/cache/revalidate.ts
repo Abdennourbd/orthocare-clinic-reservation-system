@@ -11,7 +11,7 @@ import { reportError } from "@/lib/monitoring/reportError";
  * Drop-in for `revalidateTag(tag, profile)`: the profile argument is accepted
  * and ignored (this repo always uses "max").
  */
-export function revalidateTagSafe(tag: string, _profile?: string): void {
+export function revalidateTagSafe(tag: string, ..._rest: unknown[]): void {
   try {
     revalidateTag(tag, "max");
   } catch (e) {
