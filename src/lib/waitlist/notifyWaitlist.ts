@@ -71,6 +71,18 @@ export async function handleSlotFreed(
         // entry active (it will be deactivated by the erasure path anyway).
         if (patient.anonymizedAt !== null) continue;
 
+        // Claim FIRST, send second: two concurrent frees on the same watched
+        // date must not double-notify one entry (v1 = one notification per
+        // entry). The WHERE only matches a still-active entry, so exactly one
+        // winner claims it; the loser sees count 0 and moves on BEFORE any
+        // SMS is sent. Claiming after the send would be too late — both
+        // racers would already have messaged.
+        const { count: claimed } = await getPrisma().waitlistEntry.updateMany({
+          where: { id: entry.id, active: true },
+          data: { active: false },
+        });
+        if (claimed === 0) continue;
+
         const message = await sendMessage(
           {
             type: SmsMessageType.WAITLIST,
@@ -88,34 +100,43 @@ export async function handleSlotFreed(
           },
           provider,
         );
-        // Suppressed (opt-out/inactive race): leave active for the next
-        // opportunity, notifiedAt untouched.
-        if (message === null) continue;
+        // Suppressed (opt-out/inactive race): release the claim so the entry
+        // stays active for the next opportunity, notifiedAt untouched.
+        if (message === null) {
+          await getPrisma().waitlistEntry.update({
+            where: { id: entry.id },
+            data: { active: true },
+          });
+          continue;
+        }
 
         await getPrisma().waitlistEntry.update({
           where: { id: entry.id },
-          data: { active: false, notifiedAt: new Date() },
+          data: { notifiedAt: new Date() },
         });
         notified++;
-      } catch (e) {
-        console.error(`waitlist notify failed for entry ${entry.id}`, e);
+      } catch {
+        // PII-safe: entry id only, never the error object (a Prisma or
+        // provider error can serialize patient field values).
+        console.warn(
+          JSON.stringify({ event: "waitlist_notify_entry_failed", entryId: entry.id }),
+        );
       }
     }
     return notified;
-  } catch (e) {
-    console.error("waitlist handleSlotFreed failed", e);
+  } catch {
+    console.warn(JSON.stringify({ event: "waitlist_handle_failed" }));
     return 0;
   }
 }
 
 /**
  * Subscribe to slot-freed events. Returns an unsubscribe function.
- * The handler is fire-and-forget with a `catch` so an emit never rejects.
+ * The handler's promise is returned (NOT fire-and-forget): production emit
+ * paths await it via `emitSlotFreedAsync`, so a notification can never be
+ * silently dropped by a frozen serverless isolate. `handleSlotFreed` never
+ * throws — and the async emitter guards handlers anyway.
  */
 export function subscribeWaitlist(): () => void {
-  return onSlotFreed((event) => {
-    void handleSlotFreed(event).catch((e) => {
-      console.error("waitlist subscriber failed", e);
-    });
-  });
+  return onSlotFreed((event) => handleSlotFreed(event));
 }

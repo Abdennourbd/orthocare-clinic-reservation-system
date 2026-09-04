@@ -2,7 +2,7 @@ import { getPrisma } from "@/lib/db";
 import { AppointmentStatus, CancelReason, type Appointment } from "@/generated/prisma/client";
 import { bookSlotInTx, type BookSlotInput } from "./bookSlot";
 import { releaseSlotInTx } from "./releaseSlot";
-import { emitSlotFreed } from "./events";
+import { emitSlotFreedAsync } from "./events";
 export type RescheduleSlotInput = {
   appointmentId: string;
   newStartUTC: Date;
@@ -55,8 +55,9 @@ export async function rescheduleSlot(
   );
 
   // Emit only AFTER the whole transaction commits, so subscribers never see
-  // a slot-freed event for a reschedule that rolled back.
-  emitSlotFreed({
+  // a slot-freed event for a reschedule that rolled back. Awaited (bounded)
+  // for the serverless-freeze reason documented in releaseSlot.
+  await emitSlotFreedAsync({
     appointmentId: oldAppointment.id,
     serviceId: oldAppointment.serviceId,
     resourceId: oldAppointment.resourceId,

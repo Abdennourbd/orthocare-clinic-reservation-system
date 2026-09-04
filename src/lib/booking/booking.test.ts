@@ -63,7 +63,9 @@ describe("slot-freed event emitter", () => {
 
   it("carries serviceId so waitlist subscribers can match by service", () => {
     const seen: string[] = [];
-    const off = onSlotFreed((event) => seen.push(event.serviceId));
+    const off = onSlotFreed((event) => {
+      seen.push(event.serviceId);
+    });
 
     emitSlotFreed({
       appointmentId: "appt_2",

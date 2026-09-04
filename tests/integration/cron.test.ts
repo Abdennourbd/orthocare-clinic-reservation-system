@@ -497,7 +497,9 @@ describe("expirePendingBookings", () => {
     });
 
     const events: SlotFreedEvent[] = [];
-    const unsubscribe = onSlotFreed((e) => events.push(e));
+    const unsubscribe = onSlotFreed((e) => {
+      events.push(e);
+    });
     try {
       await expirePendingBookings(NOW);
     } finally {

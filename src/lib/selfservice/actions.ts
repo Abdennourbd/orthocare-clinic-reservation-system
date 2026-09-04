@@ -8,7 +8,7 @@ import {
 } from "@/generated/prisma/client";
 import { releaseSlotInTx } from "@/lib/booking/releaseSlot";
 import { rescheduleSlot } from "@/lib/booking/rescheduleSlot";
-import { emitSlotFreed } from "@/lib/booking/events";
+import { emitSlotFreedAsync } from "@/lib/booking/events";
 import { logAction } from "@/lib/audit/logAction";
 import { localized, type LocalizedField } from "@/lib/i18n/localized";
 import {
@@ -65,7 +65,9 @@ export async function selfServiceCancel(
     return r;
   });
 
-  emitSlotFreed({
+  // Awaited (bounded): same serverless-freeze reason as releaseSlot — the
+  // waitlist must be notified before this function returns.
+  await emitSlotFreedAsync({
     appointmentId: released.id,
     serviceId: released.serviceId,
     resourceId: released.resourceId,

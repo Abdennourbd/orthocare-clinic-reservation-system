@@ -181,7 +181,9 @@ describe("releaseSlot", () => {
     const appt = await bookSlot({ patientId, serviceId, startUTC });
 
     const freed: unknown[] = [];
-    const off = onSlotFreed((e) => freed.push(e));
+    const off = onSlotFreed((e) => {
+      freed.push(e);
+    });
 
     const released = await releaseSlot(appt.id, CancelReason.STAFF);
 
@@ -233,7 +235,9 @@ describe("rescheduleSlot", () => {
     const appt = await bookSlot({ patientId, serviceId, startUTC: oldStart });
 
     const freed: unknown[] = [];
-    const off = onSlotFreed((e) => freed.push(e));
+    const off = onSlotFreed((e) => {
+      freed.push(e);
+    });
 
     const { oldAppointment, newAppointment } = await rescheduleSlot({
       appointmentId: appt.id,

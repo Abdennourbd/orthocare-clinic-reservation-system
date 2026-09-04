@@ -5,7 +5,7 @@ import {
   type Appointment,
   type Prisma,
 } from "@/generated/prisma/client";
-import { emitSlotFreed } from "./events";
+import { emitSlotFreedAsync } from "./events";
 import { subscribeWaitlist } from "@/lib/waitlist/notifyWaitlist";
 import {
   AppointmentNotFoundError,
@@ -47,8 +47,10 @@ export async function releaseSlot(
   );
 
   // Emit only after the transaction commits, so subscribers never see a
-  // slot-freed event for a release that failed.
-  emitSlotFreed({
+  // slot-freed event for a release that failed. Awaited (bounded): on
+  // serverless the isolate can freeze after the response flushes, which
+  // would silently drop the waitlist notification.
+  await emitSlotFreedAsync({
     appointmentId: released.id,
     serviceId: released.serviceId,
     resourceId: released.resourceId,

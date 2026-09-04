@@ -5,7 +5,7 @@ import {
   WaitlistSource,
 } from "@/generated/prisma/client";
 import { toClinicLocalDateString } from "@/lib/time/clinicTime";
-import { emitSlotFreed, type SlotFreedEvent } from "@/lib/booking/events";
+import { emitSlotFreedAsync, type SlotFreedEvent } from "@/lib/booking/events";
 import {
   handleSlotFreed,
   subscribeWaitlist,
@@ -332,20 +332,14 @@ describe("handleSlotFreed (Task 17.1)", () => {
 
     const unsubscribe = subscribeWaitlist();
     try {
-      emitSlotFreed(
+      // Production emit paths await the subscriber, so by the time this
+      // resolves the entry must be consumed — no polling needed.
+      await emitSlotFreedAsync(
         slotEvent(service.id, new Date("2026-09-02T10:00:00.000Z")),
       );
-      // The subscriber runs async (fire-and-forget); poll until it lands.
-      const deadline = Date.now() + 5000;
-      let after = await getPrisma().waitlistEntry.findUnique({
+      const after = await getPrisma().waitlistEntry.findUnique({
         where: { id: entry.id },
       });
-      while (after!.active && Date.now() < deadline) {
-        await new Promise((r) => setTimeout(r, 25));
-        after = await getPrisma().waitlistEntry.findUnique({
-          where: { id: entry.id },
-        });
-      }
       expect(after!.active).toBe(false);
       expect(after!.notifiedAt).toBeInstanceOf(Date);
     } finally {
@@ -362,8 +356,31 @@ describe("handleSlotFreed (Task 17.1)", () => {
         source: WaitlistSource.STAFF,
       },
     });
-    emitSlotFreed(slotEvent(service.id, new Date("2026-09-02T10:00:00.000Z")));
-    await new Promise((r) => setTimeout(r, 150));
+    await emitSlotFreedAsync(slotEvent(service.id, new Date("2026-09-02T10:00:00.000Z")));
+    expect(
+      await getPrisma().smsMessage.count({
+        where: { type: SmsMessageType.WAITLIST },
+      }),
+    ).toBe(1);
+  });
+
+  it("notifies exactly once when two frees race on the same watched date", async () => {
+    const service = await createService();
+    const patient = await createPatient();
+    await getPrisma().waitlistEntry.create({
+      data: {
+        patientId: patient.id,
+        serviceId: service.id,
+        preferredDates: [utcMidnight("2026-09-02")],
+        source: WaitlistSource.STAFF,
+      },
+    });
+    const event = slotEvent(service.id, new Date("2026-09-02T10:00:00.000Z"));
+
+    // Two concurrent frees (e.g. two cancellations on the same watched day):
+    // the conditional consume lets exactly one winner through.
+    const [a, b] = await Promise.all([handleSlotFreed(event), handleSlotFreed(event)]);
+    expect(a + b).toBe(1);
     expect(
       await getPrisma().smsMessage.count({
         where: { type: SmsMessageType.WAITLIST },
