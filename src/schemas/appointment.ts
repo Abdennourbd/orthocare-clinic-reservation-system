@@ -31,6 +31,15 @@ export const appointmentListQuerySchema = z.object({
   status: z.enum(appointmentStatusValues, { message: "Statut invalide." }).optional(),
 });
 
+/** Dashboard week strip (range view): clinic-local YYYY-MM-DD bounds, max
+ * 31 days. Both required — the caller (dashboard home) always knows its
+ * Sat→Thu week via getClinicWeekRange(), so no silent default range. */
+export const appointmentRangeQuerySchema = z.object({
+  from: z.string().date("Date de début invalide."),
+  to: z.string().date("Date de fin invalide."),
+  status: z.enum(appointmentStatusValues, { message: "Statut invalide." }).optional(),
+});
+
 export const manualBookingSchema = z.object({
   patientId: z.string().min(1, "Le patient est requis."),
   serviceId: z.string().min(1, "Le service est requis."),
@@ -67,6 +76,7 @@ export const appointmentSearchQuerySchema = z.object({
 });
 
 export type AppointmentListQuery = z.infer<typeof appointmentListQuerySchema>;
+export type AppointmentRangeQuery = z.infer<typeof appointmentRangeQuerySchema>;
 export type ManualBookingInput = z.infer<typeof manualBookingSchema>;
 export type AppointmentStatusChangeInput = z.infer<typeof appointmentStatusChangeSchema>;
 export type AppointmentRescheduleInput = z.infer<typeof appointmentRescheduleSchema>;

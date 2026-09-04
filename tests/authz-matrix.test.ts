@@ -36,6 +36,7 @@ import {
 import { POST as appointmentRescheduleRoute } from "@/app/api/admin/appointments/[id]/reschedule/route";
 import { GET as appointmentsPendingRoute } from "@/app/api/admin/appointments/pending/route";
 import { GET as appointmentsSearchRoute } from "@/app/api/admin/appointments/search/route";
+import { GET as appointmentsRangeRoute } from "@/app/api/admin/appointments/range/route";
 import { POST as smsSingleRoute } from "@/app/api/admin/sms/single/route";
 import { GET as smsHistoryRoute } from "@/app/api/admin/sms/route";
 import { GET as smsBatchesRoute } from "@/app/api/admin/sms/batches/route";
@@ -415,6 +416,14 @@ const ROUTES: RouteRow[] = [
     // No `q` in the query — Zod fails after the guard (q is required).
     okStatus: 400,
     handler: appointmentsSearchRoute,
+  },
+  {
+    method: "GET",
+    scanPath: "/api/admin/appointments/range",
+    allowed: [Role.ADMIN, Role.RECEPTIONIST],
+    // No from/to in the query — Zod fails after the guard (both required).
+    okStatus: 400,
+    handler: appointmentsRangeRoute,
   },
   {
     method: "POST",
