@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { KpiResult } from "@/lib/kpis/aggregations";
 
 // Task 18 — dashboard KPI cards (FR-only). Presentational: the server page
@@ -26,9 +27,9 @@ export default function KpiCards({
   kpis: KpiResult;
   rangeLabel: string;
 }) {
-  const cards: Array<{ label: string; value: string | number }> = [
-    { label: "Rendez-vous aujourd'hui", value: kpis.todayCount },
-    { label: "En attente d'appel", value: kpis.pendingCount },
+  const cards: Array<{ label: string; value: string | number; href?: string }> = [
+    { label: "Rendez-vous aujourd'hui", value: kpis.todayCount, href: "/admin/appointments" },
+    { label: "En attente d'appel", value: kpis.pendingCount, href: "/admin/appointments?tab=queue" },
     { label: "Nouveaux patients", value: kpis.newPatients },
     { label: "Taux d'occupation", value: formatPercent(kpis.utilizationRate) },
     { label: "Taux de no-show", value: formatPercent(kpis.noShowRate) },
@@ -46,6 +47,9 @@ export default function KpiCards({
     },
   ];
 
+  const ring =
+    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2";
+
   return (
     <div className="space-y-2">
       <p className="text-sm text-slate-500">{rangeLabel}</p>
@@ -53,17 +57,32 @@ export default function KpiCards({
         aria-label="Indicateurs clés"
         className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4"
       >
-        {cards.map((card) => (
-          <div
-            key={card.label}
-            className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"
-          >
-            <p className="text-sm text-slate-500">{card.label}</p>
-            <p className="mt-1 text-2xl font-semibold text-slate-900">
-              {card.value}
-            </p>
-          </div>
-        ))}
+        {cards.map((card) => {
+          const body = (
+            <>
+              <p className="text-sm text-slate-500">{card.label}</p>
+              <p className="mt-1 text-2xl font-semibold text-slate-900">
+                {card.value}
+              </p>
+            </>
+          );
+          return card.href ? (
+            <Link
+              key={card.label}
+              href={card.href}
+              className={`block rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition-colors hover:border-teal-300 hover:shadow ${ring}`}
+            >
+              {body}
+            </Link>
+          ) : (
+            <div
+              key={card.label}
+              className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"
+            >
+              {body}
+            </div>
+          );
+        })}
       </section>
     </div>
   );

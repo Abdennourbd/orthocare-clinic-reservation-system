@@ -28,6 +28,14 @@ export default async function DashboardLayout({
 
   return (
     <div className="flex min-h-screen bg-slate-50">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[60]
+          focus:rounded-md focus:bg-teal-700 focus:px-4 focus:py-2 focus:text-sm focus:font-medium
+          focus:text-white"
+      >
+        Aller au contenu
+      </a>
       <Sidebar name={staff.name} role={staff.role} />
       <div className="flex min-w-0 flex-1 flex-col">
         <MobileNav name={staff.name} role={staff.role} />

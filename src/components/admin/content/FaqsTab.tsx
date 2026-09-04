@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
+import ConfirmPanel from "@/components/admin/ConfirmPanel";
 
 // Task 21 — FAQ tab (ADMIN): list, create, show/hide, delete.
 
@@ -54,16 +55,23 @@ export default function FaqsTab() {
   const [answer, setAnswer] = useState("");
   const [creating, setCreating] = useState(false);
   const [rowBusy, setRowBusy] = useState<string | null>(null);
+  // Inline two-step delete confirm (never window.confirm).
+  const [confirmDelete, setConfirmDelete] = useState<Faq | null>(null);
+  const [confirmError, setConfirmError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const load = async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const response = await fetch("/api/admin/faqs");
       if (!response.ok) {
-        setItems(null);
+        setItems([]);
+          setLoadError("Impossible de charger des questions.");
         return;
       }
       const body = (await response.json()) as { faqs: Faq[] };
+      setLoadError(null);
       setItems(body.faqs);
     } finally {
       setLoading(false);
@@ -79,7 +87,10 @@ export default function FaqsTab() {
       try {
         const response = await fetch("/api/admin/faqs");
         if (cancelled || !response.ok) {
-          if (!cancelled) setItems(null);
+          if (!cancelled) {
+            setItems([]);
+            setLoadError("Impossible de charger des questions.");
+          }
           return;
         }
         const body = (await response.json()) as { faqs: Faq[] };
@@ -124,12 +135,14 @@ export default function FaqsTab() {
 
   const toggle = async (f: Faq) => {
     setRowBusy(f.id);
+    setConfirmError(null);
     try {
       await fetch(`/api/admin/faqs/${f.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ active: !f.active }),
       });
+      setNotice(f.active ? "Question masquée." : "Question affichée.");
       await load();
     } finally {
       setRowBusy(null);
@@ -137,11 +150,15 @@ export default function FaqsTab() {
   };
 
   const remove = async (f: Faq) => {
-    if (!window.confirm("Supprimer cette question ?")) return;
     setRowBusy(f.id);
     try {
-      await fetch(`/api/admin/faqs/${f.id}`, { method: "DELETE" });
+      const response = await fetch(`/api/admin/faqs/${f.id}`, { method: "DELETE" });
+      if (!response.ok) {
+        setConfirmError(await readError(response, "Suppression impossible."));
+        return;
+      }
       setNotice("Question supprimée.");
+      setConfirmDelete(null);
       await load();
     } finally {
       setRowBusy(null);
@@ -160,13 +177,21 @@ export default function FaqsTab() {
 
   return (
     <section aria-label="Questions fréquentes">
+      {loadError ? (
+        <div role="alert" className="mb-3 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+          {loadError}{" "}
+          <button type="button" onClick={() => void load()} className="underline">
+            Réessayer
+          </button>
+        </div>
+      ) : null}
       {notice ? (
         <div role="status" className="mb-3 rounded-md border border-teal-200 bg-teal-50 p-3 text-sm text-teal-900">
           {notice}
         </div>
       ) : null}
       <form onSubmit={create} className="mb-6 grid grid-cols-1 gap-3 rounded-lg border border-slate-200 bg-white p-4 sm:grid-cols-2">
-        <h3 className="text-sm font-semibold text-slate-900 sm:col-span-2">Nouvelle question</h3>
+        <h2 className="text-sm font-semibold text-slate-900 sm:col-span-2">Nouvelle question</h2>
         <label className="flex flex-col gap-1 text-sm text-slate-700 sm:col-span-2">
           Clé (identifiant unique)
           <input aria-label="Clé" className={inputClass} value={key} onChange={(e) => setKey(e.target.value)} placeholder="ex. f6" required />
@@ -210,12 +235,28 @@ export default function FaqsTab() {
             <button type="button" className={buttonSecondaryClass} disabled={rowBusy === f.id} onClick={() => void toggle(f)}>
               {f.active ? "Masquer" : "Afficher"}
             </button>
-            <button type="button" className={buttonSecondaryClass} disabled={rowBusy === f.id} onClick={() => void remove(f)}>
+            <button type="button" className={buttonSecondaryClass} disabled={rowBusy === f.id} onClick={() => { setConfirmDelete(f); setConfirmError(null); }}>
               Supprimer
             </button>
           </li>
         ))}
       </ul>
+      {confirmDelete ? (
+        <div className="mt-2">
+          <ConfirmPanel
+            message="Supprimer cette question ?"
+            confirmLabel="Oui, supprimer"
+            pendingLabel="Suppression…"
+            pending={rowBusy === confirmDelete.id}
+            error={confirmError}
+            onConfirm={() => void remove(confirmDelete)}
+            onCancel={() => {
+              setConfirmDelete(null);
+              setConfirmError(null);
+            }}
+          />
+        </div>
+      ) : null}
     </section>
   );
 }

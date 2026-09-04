@@ -1,4 +1,7 @@
+"use client";
+
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import type { SessionRole } from "@/lib/auth/session";
 import LogoutButton from "./LogoutButton";
 
@@ -43,6 +46,12 @@ export function SidebarBody({
   role: SessionRole;
   onNavigate?: () => void;
 }) {
+  // Active-page state shared by the desktop sidebar and the mobile drawer
+  // (same component, so they can never disagree). Exact match for the
+  // dashboard home; prefix match for sections with sub-pages.
+  const pathname = usePathname();
+  const isActive = (href: string) =>
+    href === "/admin" ? pathname === href : pathname.startsWith(href);
   return (
     <>
       <div>
@@ -52,18 +61,26 @@ export function SidebarBody({
 
       <nav aria-label="Navigation principale" className="flex flex-col gap-1">
         {NAV_ITEMS.filter((item) => !item.adminOnly || role === "ADMIN").map(
-          (item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              onClick={onNavigate}
-              className="rounded-md px-3 py-2 text-sm font-medium text-slate-700
-                hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2
-                focus-visible:ring-teal-600 focus-visible:ring-offset-2"
-            >
-              {item.label}
-            </Link>
-          ),
+          (item) => {
+            const active = isActive(item.href);
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={onNavigate}
+                aria-current={active ? "page" : undefined}
+                className={`rounded-md px-3 py-2 text-sm font-medium
+                  hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2
+                  focus-visible:ring-teal-600 focus-visible:ring-offset-2 ${
+                    active
+                      ? "bg-teal-50 text-teal-900"
+                      : "text-slate-700"
+                  }`}
+              >
+                {item.label}
+              </Link>
+            );
+          },
         )}
       </nav>
 

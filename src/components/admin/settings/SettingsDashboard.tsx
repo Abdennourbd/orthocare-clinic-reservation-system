@@ -236,7 +236,7 @@ export default function SettingsDashboard() {
                     <span className="text-xs text-slate-500">Fermé</span>
                     <button
                       type="button"
-                      className="text-xs text-teal-700 underline"
+                      className="text-xs text-teal-700 underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2"
                       onClick={() =>
                         setWorkingHours({ ...workingHours, [d.id]: { open: "10:00", close: "17:00" } })
                       }
@@ -273,7 +273,7 @@ export default function SettingsDashboard() {
                     />
                     <button
                       type="button"
-                      className="text-xs text-slate-500 underline"
+                      className="text-xs text-slate-500 underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2"
                       onClick={() => setWorkingHours({ ...workingHours, [d.id]: { closed: true } })}
                     >
                       Fermer

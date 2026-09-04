@@ -9,7 +9,7 @@ const STATUS_CLASSES: Record<AppointmentStatus, string> = {
   COMPLETED: "bg-emerald-100 text-emerald-900",
   NO_SHOW: "bg-red-100 text-red-900",
   CANCELLED: "bg-slate-200 text-slate-800",
-  RESCHEDULED: "bg-purple-100 text-purple-900",
+  RESCHEDULED: "bg-sky-100 text-sky-900",
 };
 
 export default function AppointmentStatusBadge({ status }: { status: string }) {

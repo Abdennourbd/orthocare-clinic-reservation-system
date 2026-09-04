@@ -48,12 +48,12 @@ afterEach(() => {
 });
 
 async function pickFirstPatient() {
-  fireEvent.change(screen.getByLabelText("Rechercher un patient (nom ou téléphone)"), {
+  fireEvent.change(screen.getByLabelText("Rechercher (nom ou téléphone)"), {
     target: { value: "Alaoui" },
   });
   fireEvent.click(screen.getByRole("button", { name: "Rechercher" }));
   await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
-  fireEvent.click(await screen.findByRole("button", { name: "Sofia Alaoui — +213550123456" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Sofia Alaoui +213550123456" }));
 }
 
 async function fillValidForm() {

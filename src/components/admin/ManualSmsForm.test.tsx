@@ -39,12 +39,12 @@ afterEach(() => {
 });
 
 async function pickFirstPatient() {
-  fireEvent.change(screen.getByLabelText("Rechercher un patient (nom ou téléphone)"), {
+  fireEvent.change(screen.getByLabelText("Rechercher (nom ou téléphone)"), {
     target: { value: "Alaoui" },
   });
   fireEvent.click(screen.getByRole("button", { name: "Rechercher" }));
   await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
-  fireEvent.click(await screen.findByRole("button", { name: "Sofia Alaoui — +213550123456" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Sofia Alaoui +213550123456" }));
 }
 
 describe("ManualSmsForm", () => {
@@ -54,12 +54,12 @@ describe("ManualSmsForm", () => {
     );
     render(<ManualSmsForm onNotify={vi.fn()} />);
 
-    fireEvent.change(screen.getByLabelText("Rechercher un patient (nom ou téléphone)"), {
+    fireEvent.change(screen.getByLabelText("Rechercher (nom ou téléphone)"), {
       target: { value: "Alaoui" },
     });
     // Enter in the input submits the search form — same wiring as
     // AppointmentSearch.
-    const searchForm = (screen.getByLabelText("Rechercher un patient (nom ou téléphone)") as HTMLInputElement)
+    const searchForm = (screen.getByLabelText("Rechercher (nom ou téléphone)") as HTMLInputElement)
       .form;
     expect(searchForm).not.toBeNull();
     fireEvent.submit(searchForm!);
@@ -67,7 +67,7 @@ describe("ManualSmsForm", () => {
     await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
     const [url] = (fetch as ReturnType<typeof vi.fn>).mock.calls[0];
     expect(url).toBe("/api/admin/patients?q=Alaoui");
-    expect(await screen.findByRole("button", { name: "Sofia Alaoui — +213550123456" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Sofia Alaoui +213550123456" })).toBeInTheDocument();
   });
 
   it("searches patients (submit-only), posts { patientId, body } and reports success with the patient name", async () => {
@@ -81,7 +81,7 @@ describe("ManualSmsForm", () => {
 
     // Selected patient renders as a chip with a clear button.
     expect(screen.getByText("Sofia Alaoui")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Retirer" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Changer" })).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Message"), { target: { value: "Bonjour" } });
     fireEvent.click(screen.getByRole("button", { name: "Envoyer" }));

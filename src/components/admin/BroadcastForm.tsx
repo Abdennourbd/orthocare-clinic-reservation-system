@@ -164,7 +164,7 @@ export default function BroadcastForm({
       } else {
         onNotify({
           kind: "success",
-          message: `${data.sentCount} envoyé(s), ${data.suppressedCount} ignoré(s), ${data.failedCount} échec(s) — lot ${data.batchId}`,
+          message: `${data.sentCount} envoyé(s), ${data.suppressedCount} ignoré(s), ${data.failedCount} échec(s) — lot ${String(data.batchId).slice(0, 8)}`,
         });
       }
       // The batch is done either way: drop the preview and its key so a

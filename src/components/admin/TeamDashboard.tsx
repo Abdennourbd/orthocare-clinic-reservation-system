@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
+import ConfirmPanel from "@/components/admin/ConfirmPanel";
+import { CLINIC_TIMEZONE } from "@/lib/time/clinicTime";
 
 // Task 20 — team dashboard (ADMIN only): list staff, create receptionists,
 // deactivate/reactivate, change role, issue a one-time password reset.
@@ -48,7 +50,7 @@ function formatDateTime(iso: string | null): string {
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
-    timeZone: "Africa/Algiers",
+    timeZone: CLINIC_TIMEZONE,
   });
 }
 
@@ -75,6 +77,10 @@ export default function TeamDashboard({ currentUserId }: { currentUserId: string
   const [notice, setNotice] = useState<string | null>(null);
 
   const [confirmId, setConfirmId] = useState<string | null>(null);
+  const [pendingRole, setPendingRole] = useState<{
+    member: TeamMember;
+    role: "ADMIN" | "RECEPTIONIST";
+  } | null>(null);
   const [resetId, setResetId] = useState<string | null>(null);
   const [resetPassword, setResetPassword] = useState("");
   const [rowBusy, setRowBusy] = useState<string | null>(null);
@@ -193,6 +199,15 @@ export default function TeamDashboard({ currentUserId }: { currentUserId: string
 
   async function handleRoleChange(member: TeamMember, role: "ADMIN" | "RECEPTIONIST") {
     if (role === member.role) return;
+    // Stage first, commit on explicit confirm (a select commits instantly —
+    // demoting an admin must never happen on a misclick).
+    setPendingRole({ member, role });
+    setRowError(null);
+  }
+
+  async function confirmRoleChange() {
+    if (!pendingRole) return;
+    const { member, role } = pendingRole;
     setRowBusy(member.id);
     setRowError(null);
     setNotice(null);
@@ -207,6 +222,7 @@ export default function TeamDashboard({ currentUserId }: { currentUserId: string
         return;
       }
       setNotice(`Rôle de ${member.email} : ${role === "ADMIN" ? "administrateur" : "réceptionniste"}.`);
+      setPendingRole(null);
       await load();
     } catch {
       setRowError("Changement de rôle impossible.");
@@ -512,6 +528,29 @@ export default function TeamDashboard({ currentUserId }: { currentUserId: string
               </table>
             </div>
           )}
+          {pendingRole ? (
+            <div className="mt-3">
+              <ConfirmPanel
+                message={`Changer le rôle de ${pendingRole.member.email} en ${
+                  pendingRole.role === "ADMIN" ? "administrateur" : "réceptionniste"
+                } ? ${
+                  pendingRole.role !== pendingRole.member.role &&
+                  pendingRole.member.role === "ADMIN"
+                    ? "Il perdra l'accès à l'équipe, aux paramètres et aux exports."
+                    : "Il obtiendra l'accès complet à l'administration."
+                }`}
+                confirmLabel="Oui, changer le rôle"
+                pendingLabel="Modification…"
+                pending={rowBusy === pendingRole.member.id}
+                error={rowError}
+                onConfirm={() => void confirmRoleChange()}
+                onCancel={() => {
+                  setPendingRole(null);
+                  setRowError(null);
+                }}
+              />
+            </div>
+          ) : null}
         </div>
       </section>
     </div>

@@ -18,7 +18,14 @@ const inputClass =
   "rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 " +
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2";
 
-export default function AppointmentSearch({ reloadToken }: { reloadToken: number }) {
+export default function AppointmentSearch({
+  reloadToken,
+  notifyShell,
+}: {
+  reloadToken: number;
+  /** Shell-level refresh so sibling tabs (still mounted, hidden) stay fresh too. */
+  notifyShell?: () => void;
+}) {
   const [qInput, setQInput] = useState("");
   const [submittedQ, setSubmittedQ] = useState("");
   const [appointments, setAppointments] = useState<AppointmentRow[] | null>(null);
@@ -62,7 +69,10 @@ export default function AppointmentSearch({ reloadToken }: { reloadToken: number
     setSubmittedQ(q);
   }
 
-  const reload = () => setListReloadToken((t) => t + 1);
+  const reload = () => {
+    setListReloadToken((t) => t + 1);
+    notifyShell?.();
+  };
   const hasSearched = submittedQ.length > 0;
 
   return (
@@ -148,9 +158,14 @@ export default function AppointmentSearch({ reloadToken }: { reloadToken: number
                       >
                         {a.patient.lastName} {a.patient.firstName}
                       </Link>
-                      <span className="text-slate-600" dir="auto">
+                      <a
+                        href={`tel:${a.patient.phone.replace(/[\s.]/g, "")}`}
+                        className="text-teal-700 hover:underline focus-visible:outline-none
+                          focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2"
+                        dir="auto"
+                      >
                         {a.patient.phone}
-                      </span>
+                      </a>
                       <span className="text-slate-700">
                         {localized(a.service.name, "fr")}
                       </span>

@@ -1,6 +1,10 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
+import {
+  formatClinicLocalTime,
+  toClinicLocalDateString,
+} from "@/lib/time/clinicTime";
 
 // Task 12 — audit log viewer (ADMIN only). Reads GET /api/admin/audit; the
 // read itself is audited server-side. Filters: action, entityType, pagination.
@@ -19,6 +23,42 @@ interface AuditEntry {
 }
 
 const PAGE_SIZE = 50;
+
+/** One audit row: clinic-local timestamp, null-safe id/detail, expandable details. */
+function AuditRow({ entry }: { entry: AuditEntry }) {
+  const [expanded, setExpanded] = useState(false);
+  const created = new Date(entry.createdAt);
+  const stamp = Number.isNaN(created.getTime())
+    ? entry.createdAt
+    : `${toClinicLocalDateString(created).split("-").reverse().join("/")} ${formatClinicLocalTime(created)}`;
+  const detailText =
+    entry.detail === undefined ? "" : JSON.stringify(entry.detail);
+  return (
+    <tr key={entry.id}>
+      <td className="whitespace-nowrap px-4 py-2 text-slate-600">{stamp}</td>
+      <td className="px-4 py-2 text-slate-700">
+        {entry.userName ?? entry.actorType}
+      </td>
+      <td className="px-4 py-2 font-mono text-xs text-slate-900">{entry.action}</td>
+      <td className="px-4 py-2 text-slate-600">
+        {entry.entityType}#{entry.entityId ? entry.entityId.slice(0, 8) : "—"}
+      </td>
+      <td className="max-w-xs px-4 py-2 font-mono text-xs text-slate-500">
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          aria-expanded={expanded}
+          title={detailText}
+          className={`w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2 ${
+            expanded ? "whitespace-pre-wrap break-all" : "truncate"
+          }`}
+        >
+          {detailText}
+        </button>
+      </td>
+    </tr>
+  );
+}
 
 export default function AuditViewer() {
   const [entries, setEntries] = useState<AuditEntry[]>([]);
@@ -149,21 +189,7 @@ export default function AuditViewer() {
             </thead>
             <tbody className="divide-y divide-slate-100">
               {entries.map((entry) => (
-                <tr key={entry.id}>
-                  <td className="whitespace-nowrap px-4 py-2 text-slate-600">
-                    {new Date(entry.createdAt).toLocaleString("fr-DZ")}
-                  </td>
-                  <td className="px-4 py-2 text-slate-700">
-                    {entry.userName ?? entry.actorType}
-                  </td>
-                  <td className="px-4 py-2 font-mono text-xs text-slate-900">{entry.action}</td>
-                  <td className="px-4 py-2 text-slate-600">
-                    {entry.entityType}#{entry.entityId.slice(0, 8)}
-                  </td>
-                  <td className="max-w-xs truncate px-4 py-2 font-mono text-xs text-slate-500">
-                    {JSON.stringify(entry.detail)}
-                  </td>
-                </tr>
+                <AuditRow key={entry.id} entry={entry} />
               ))}
             </tbody>
           </table>

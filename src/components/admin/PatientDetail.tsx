@@ -307,7 +307,7 @@ export default function PatientDetail({
       {role === "ADMIN" && !isAnonymized && (
         <div className="space-y-4">
           <div className="space-y-2 rounded-lg border border-amber-300 bg-amber-50 p-4">
-            <h3 className="text-sm font-semibold text-amber-900">Désactivation du dossier</h3>
+            <h2 className="text-sm font-semibold text-amber-900">Désactivation du dossier</h2>
             {!patient.active ? (
               <p className="text-sm text-amber-900">Ce dossier est déjà désactivé.</p>
             ) : deactivateConfirm ? (

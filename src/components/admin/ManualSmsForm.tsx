@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import type { SmsBanner } from "./SmsCenter";
+import PatientPicker, { type PatientHit } from "./PatientPicker";
 
 // Task 16 — manual single SMS (POST /api/admin/sms/single): pick an EXISTING
 // active patient via a SUBMIT-ONLY search against GET /api/admin/patients, a
@@ -24,15 +25,6 @@ import type { SmsBanner } from "./SmsCenter";
 // `error.message`. The patient stays selected after a send so a follow-up
 // message to the same patient needs no second search.
 
-interface PatientHit {
-  id: string;
-  firstName: string;
-  lastName: string;
-  phone: string;
-  active: boolean;
-  anonymizedAt: string | null;
-}
-
 const SMS_MAX_LENGTH = 480;
 
 const inputClass =
@@ -54,10 +46,7 @@ export default function ManualSmsForm({
 }: {
   onNotify: (banner: SmsBanner) => void;
 }) {
-  const [query, setQuery] = useState("");
-  const [hits, setHits] = useState<PatientHit[] | null>(null);
-  const [searching, setSearching] = useState(false);
-  const [searchError, setSearchError] = useState(false);
+  // Patient search UI lives in the shared PatientPicker.
   const [selectedPatient, setSelectedPatient] = useState<PatientHit | null>(null);
   const [body, setBody] = useState("");
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -67,34 +56,9 @@ export default function ManualSmsForm({
   // Submit-only patient search (see the header ruling). Mirrors
   // ManualBookingForm's picker: each click/Enter is one audited, rate-limited
   // read — never a per-keystroke fetch.
-  async function searchPatients() {
-    const q = query.trim();
-    if (!q) return;
-    setSearching(true);
-    setSearchError(false);
-    try {
-      const response = await fetch(`/api/admin/patients?q=${encodeURIComponent(q)}`);
-      if (!response.ok) {
-        setSearchError(true);
-        return;
-      }
-      const data = (await response.json()) as { patients: PatientHit[] };
-      // The route already defaults to active patients; the filter also
-      // drops anonymized rows, mirroring ManualBookingForm's picker.
-      setHits(data.patients.filter((p) => p.active && !p.anonymizedAt));
-    } catch {
-      setSearchError(true);
-    } finally {
-      setSearching(false);
-    }
-  }
 
   // Same wiring as AppointmentSearch: the fetch fires from the search form's
   // onSubmit, so Enter in the input and the button are one path.
-  function handleSearchSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    void searchPatients();
-  }
 
   async function submitSms() {
     if (!selectedPatient) return;
@@ -170,97 +134,13 @@ export default function ManualSmsForm({
         </p>
       )}
 
-      <form className="space-y-2" onSubmit={handleSearchSubmit}>
-        <span className={labelClass}>Patient</span>
-        {selectedPatient ? (
-          <div className="flex flex-wrap items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
-            <span className="font-medium text-slate-900">
-              {selectedPatient.firstName} {selectedPatient.lastName}
-            </span>
-            <span className="text-slate-600" dir="auto">
-              {selectedPatient.phone}
-            </span>
-            <button
-              type="button"
-              onClick={() => {
-                setSelectedPatient(null);
-                setQuery("");
-                setHits(null);
-              }}
-              className="ml-auto rounded-md border border-slate-300 px-2 py-1 text-xs font-medium text-slate-700
-                hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2
-                focus-visible:ring-teal-600 focus-visible:ring-offset-2"
-            >
-              Retirer
-            </button>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            <div className="flex flex-wrap items-end gap-2">
-              <div className="min-w-0 flex-1 space-y-1">
-                <label htmlFor="sms-patient-q" className="block text-xs font-medium text-slate-600">
-                  Rechercher un patient (nom ou téléphone)
-                </label>
-                <input
-                  id="sms-patient-q"
-                  value={query}
-                  onChange={(e) => {
-                    setQuery(e.target.value);
-                    setHits(null);
-                    setSearchError(false);
-                  }}
-                  dir="auto"
-                  autoComplete="off"
-                  className={inputClass}
-                />
-              </div>
-              <button
-                type="submit"
-                disabled={searching || !query.trim()}
-                className={buttonNeutral}
-              >
-                {searching ? "Recherche…" : "Rechercher"}
-              </button>
-            </div>
-            {searchError && (
-              <p role="alert" className={errorTextClass}>
-                Recherche impossible. Réessayez.
-              </p>
-            )}
-            {hits && hits.length === 0 && (
-              <p className={errorTextClass} role="status">
-                Aucun patient actif trouvé. Créez d&rsquo;abord le dossier dans « Patients ».
-              </p>
-            )}
-            {hits && hits.length > 0 && (
-              <ul className="space-y-1">
-                {hits.map((p) => (
-                  <li key={p.id}>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSelectedPatient(p);
-                        setHits(null);
-                      }}
-                      className="w-full rounded-md border border-slate-200 px-3 py-1.5 text-left text-sm
-                        text-slate-800 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2
-                        focus-visible:ring-teal-600 focus-visible:ring-offset-2"
-                    >
-                      {p.firstName} {p.lastName}{" "}
-                      <span className="text-slate-600" dir="auto">
-                        — {p.phone}
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        )}
-        {validationError === "Sélectionnez un patient." && (
-          <p className={errorTextClass}>{validationError}</p>
-        )}
-      </form>
+      <PatientPicker
+        idPrefix="sms"
+        legend="Patient"
+        selected={selectedPatient}
+        onSelect={setSelectedPatient}
+        fieldError={validationError === "Sélectionnez un patient." ? validationError : null}
+      />
 
       <form className="space-y-4" onSubmit={handleSubmit} noValidate>
         <fieldset disabled={pending} className="m-0 min-w-0 space-y-4 border-0 p-0">

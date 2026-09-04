@@ -28,7 +28,30 @@ export default function MobileNav({
     // `.current` may point elsewhere by cleanup time.
     const menuButton = menuButtonRef.current;
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
+      if (e.key === "Escape") {
+        setOpen(false);
+        return;
+      }
+      // Focus trap: the drawer is a modal — Tab must cycle inside it,
+      // never escape behind the scrim.
+      if (e.key !== "Tab") return;
+      const dialog = document.getElementById("admin-mobile-nav");
+      if (!dialog) return;
+      const focusables = Array.from(
+        dialog.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), select, input, [tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter((el) => el.offsetParent !== null);
+      if (focusables.length === 0) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
     };
     document.addEventListener("keydown", onKeyDown);
     const prevOverflow = document.body.style.overflow;
@@ -73,11 +96,11 @@ export default function MobileNav({
             id="admin-mobile-nav"
             role="dialog"
             aria-modal="true"
-            aria-label="Navigation principale"
+            aria-labelledby="admin-mobile-nav-title"
             className="absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col gap-6 overflow-y-auto bg-white p-4"
           >
             <div className="flex items-center justify-between">
-              <p className="text-sm font-semibold text-slate-900">Menu</p>
+              <p id="admin-mobile-nav-title" className="text-sm font-semibold text-slate-900">Menu</p>
               <button
                 ref={closeButtonRef}
                 type="button"

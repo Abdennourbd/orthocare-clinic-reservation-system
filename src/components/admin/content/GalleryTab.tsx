@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
+import ConfirmPanel from "@/components/admin/ConfirmPanel";
 
 // Task 21 — gallery tab (ADMIN): list, add by URL, show/hide, delete.
 // v1 is URL-paste only (images already in public/images or the Blob store).
@@ -55,16 +56,23 @@ export default function GalleryTab() {
   const [caption, setCaption] = useState("");
   const [creating, setCreating] = useState(false);
   const [rowBusy, setRowBusy] = useState<string | null>(null);
+  // Inline two-step delete confirm (never window.confirm).
+  const [confirmDelete, setConfirmDelete] = useState<GalleryItem | null>(null);
+  const [confirmError, setConfirmError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const load = async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const response = await fetch("/api/admin/gallery");
       if (!response.ok) {
-        setItems(null);
+        setItems([]);
+          setLoadError("Impossible de charger de la galerie.");
         return;
       }
       const body = (await response.json()) as { gallery: GalleryItem[] };
+      setLoadError(null);
       setItems(body.gallery);
     } finally {
       setLoading(false);
@@ -80,7 +88,10 @@ export default function GalleryTab() {
       try {
         const response = await fetch("/api/admin/gallery");
         if (cancelled || !response.ok) {
-          if (!cancelled) setItems(null);
+          if (!cancelled) {
+            setItems([]);
+            setLoadError("Impossible de charger de la galerie.");
+          }
           return;
         }
         const body = (await response.json()) as { gallery: GalleryItem[] };
@@ -125,12 +136,14 @@ export default function GalleryTab() {
 
   const toggle = async (g: GalleryItem) => {
     setRowBusy(g.id);
+    setConfirmError(null);
     try {
       await fetch(`/api/admin/gallery/${g.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ active: !g.active }),
       });
+      setNotice(g.active ? "Image masquée." : "Image affichée.");
       await load();
     } finally {
       setRowBusy(null);
@@ -138,11 +151,15 @@ export default function GalleryTab() {
   };
 
   const remove = async (g: GalleryItem) => {
-    if (!window.confirm("Supprimer cette image ?")) return;
     setRowBusy(g.id);
     try {
-      await fetch(`/api/admin/gallery/${g.id}`, { method: "DELETE" });
+      const response = await fetch(`/api/admin/gallery/${g.id}`, { method: "DELETE" });
+      if (!response.ok) {
+        setConfirmError(await readError(response, "Suppression impossible."));
+        return;
+      }
       setNotice("Image supprimée.");
+      setConfirmDelete(null);
       await load();
     } finally {
       setRowBusy(null);
@@ -161,13 +178,21 @@ export default function GalleryTab() {
 
   return (
     <section aria-label="Galerie">
+      {loadError ? (
+        <div role="alert" className="mb-3 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+          {loadError}{" "}
+          <button type="button" onClick={() => void load()} className="underline">
+            Réessayer
+          </button>
+        </div>
+      ) : null}
       {notice ? (
         <div role="status" className="mb-3 rounded-md border border-teal-200 bg-teal-50 p-3 text-sm text-teal-900">
           {notice}
         </div>
       ) : null}
       <form onSubmit={create} className="mb-6 grid grid-cols-1 gap-3 rounded-lg border border-slate-200 bg-white p-4 sm:grid-cols-2">
-        <h3 className="text-sm font-semibold text-slate-900 sm:col-span-2">Nouvelle image</h3>
+        <h2 className="text-sm font-semibold text-slate-900 sm:col-span-2">Nouvelle image</h2>
         <label className="flex flex-col gap-1 text-sm text-slate-700">
           Clé (identifiant unique)
           <input aria-label="Clé" className={inputClass} value={key} onChange={(e) => setKey(e.target.value)} placeholder="ex. g13" required />
@@ -212,7 +237,7 @@ export default function GalleryTab() {
                 <button type="button" className={buttonSecondaryClass} disabled={rowBusy === g.id} onClick={() => void toggle(g)}>
                   {g.active ? "Masquer" : "Afficher"}
                 </button>
-                <button type="button" className={buttonSecondaryClass} disabled={rowBusy === g.id} onClick={() => void remove(g)}>
+                <button type="button" className={buttonSecondaryClass} disabled={rowBusy === g.id} onClick={() => { setConfirmDelete(g); setConfirmError(null); }}>
                   Supprimer
                 </button>
               </div>
@@ -220,6 +245,22 @@ export default function GalleryTab() {
           </li>
         ))}
       </ul>
+      {confirmDelete ? (
+        <div className="mt-2">
+          <ConfirmPanel
+            message="Supprimer cette image ?"
+            confirmLabel="Oui, supprimer"
+            pendingLabel="Suppression…"
+            pending={rowBusy === confirmDelete.id}
+            error={confirmError}
+            onConfirm={() => void remove(confirmDelete)}
+            onCancel={() => {
+              setConfirmDelete(null);
+              setConfirmError(null);
+            }}
+          />
+        </div>
+      ) : null}
     </section>
   );
 }

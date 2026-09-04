@@ -32,7 +32,14 @@ function formatRemaining(ms: number): string {
   return "Moins d'une minute restante";
 }
 
-export default function AppointmentCallQueue({ reloadToken }: { reloadToken: number }) {
+export default function AppointmentCallQueue({
+  reloadToken,
+  notifyShell,
+}: {
+  reloadToken: number;
+  /** Shell-level refresh so sibling tabs (still mounted, hidden) stay fresh too. */
+  notifyShell?: () => void;
+}) {
   const [entries, setEntries] = useState<QueueEntry[]>([]);
   const [fetchedAt, setFetchedAt] = useState(0);
   const [now, setNow] = useState(() => Date.now());
@@ -41,7 +48,10 @@ export default function AppointmentCallQueue({ reloadToken }: { reloadToken: num
   const [queueReloadToken, setQueueReloadToken] = useState(0);
   const fetchedAtRef = useRef(0);
 
-  const reload = useCallback(() => setQueueReloadToken((t) => t + 1), []);
+  const reload = useCallback(() => {
+    setQueueReloadToken((t) => t + 1);
+    notifyShell?.();
+  }, [notifyShell]);
 
   useEffect(() => {
     let cancelled = false;
@@ -80,12 +90,30 @@ export default function AppointmentCallQueue({ reloadToken }: { reloadToken: num
     return () => window.clearInterval(timer);
   }, [entries.length]);
 
+  // Refetch when the tab regains focus: a colleague may have handled bookings
+  // in another tab, and the countdown above is only as fresh as the last
+  // fetch. Rate-limit-safe — one request per re-focus, same pool as Actualiser.
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === "visible") reload();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [reload]);
+
   return (
     <section aria-labelledby="call-queue-heading" className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 id="call-queue-heading" className="text-sm font-medium text-slate-700">
-          Réservations en attente d&rsquo;appel — les plus anciennes en premier
-        </h2>
+        <div>
+          <h2 id="call-queue-heading" className="text-sm font-medium text-slate-700">
+            Réservations en attente d&rsquo;appel — les plus anciennes en premier
+          </h2>
+          {fetchedAt > 0 ? (
+            <p className="mt-0.5 text-xs text-slate-500">
+              Actualisé à {formatClinicLocalTime(new Date(fetchedAt))} (heure du cabinet)
+            </p>
+          ) : null}
+        </div>
         <button
           type="button"
           onClick={reload}
@@ -141,6 +169,7 @@ export default function AppointmentCallQueue({ reloadToken }: { reloadToken: num
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
                     <span className="text-xs text-slate-500">Demande du {createdLabel}</span>
                     <span className="font-mono text-sm font-semibold text-slate-900">
+                      {toClinicLocalDateString(new Date(a.startTime)).split("-").reverse().join("/")}{" "}
                       {formatClinicLocalTime(new Date(a.startTime))}
                     </span>
                     <Link
@@ -150,9 +179,14 @@ export default function AppointmentCallQueue({ reloadToken }: { reloadToken: num
                     >
                       {a.patient.lastName} {a.patient.firstName}
                     </Link>
-                    <span className="text-slate-600" dir="auto">
+                    <a
+                      href={`tel:${a.patient.phone.replace(/[\s.]/g, "")}`}
+                      className="text-teal-700 hover:underline focus-visible:outline-none
+                        focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2"
+                      dir="auto"
+                    >
                       {a.patient.phone}
-                    </span>
+                    </a>
                     <span className="text-slate-700">
                       {localized(a.service.name, "fr")}
                     </span>

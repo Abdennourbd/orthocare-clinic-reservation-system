@@ -29,7 +29,14 @@ const inputClass =
   "rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 " +
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2";
 
-export default function AppointmentDayView({ reloadToken }: { reloadToken: number }) {
+export default function AppointmentDayView({
+  reloadToken,
+  notifyShell,
+}: {
+  reloadToken: number;
+  /** Shell-level refresh so sibling tabs (still mounted, hidden) stay fresh too. */
+  notifyShell?: () => void;
+}) {
   const [dateInput, setDateInput] = useState(() => toClinicLocalDateString(new Date()));
   const [date, setDate] = useState(() => toClinicLocalDateString(new Date()));
   const [statusFilter, setStatusFilter] = useState("");
@@ -66,7 +73,10 @@ export default function AppointmentDayView({ reloadToken }: { reloadToken: numbe
     };
   }, [date, statusFilter, listReloadToken, reloadToken]);
 
-  const reload = () => setListReloadToken((t) => t + 1);
+  const reload = () => {
+    setListReloadToken((t) => t + 1);
+    notifyShell?.();
+  };
   const dayLabel = date.split("-").reverse().join("/");
 
   return (
@@ -167,9 +177,14 @@ export default function AppointmentDayView({ reloadToken }: { reloadToken: numbe
                     >
                       {a.patient.lastName} {a.patient.firstName}
                     </Link>
-                    <span className="text-slate-600" dir="auto">
+                    <a
+                      href={`tel:${a.patient.phone.replace(/[\s.]/g, "")}`}
+                      className="text-teal-700 hover:underline focus-visible:outline-none
+                        focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2"
+                      dir="auto"
+                    >
                       {a.patient.phone}
-                    </span>
+                    </a>
                     <span className="text-slate-700">
                       {localized(a.service.name, "fr")}
                     </span>

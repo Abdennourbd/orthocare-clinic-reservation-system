@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import AppointmentDayView from "./AppointmentDayView";
 import AppointmentCallQueue from "./AppointmentCallQueue";
 import AppointmentSearch from "./AppointmentSearch";
@@ -27,7 +28,15 @@ const TABS = [
 type TabKey = (typeof TABS)[number]["key"];
 
 export default function AppointmentsDashboard() {
-  const [tab, setTab] = useState<TabKey>("agenda");
+  // Deep-linkable tab: the dashboard home links its "En attente d'appel"
+  // card here with ?tab=queue so the receptionist's most urgent number is
+  // one click away from the queue itself.
+  const searchParams = useSearchParams();
+  const initialTab: TabKey =
+    searchParams.get("tab") === "queue" || searchParams.get("tab") === "search"
+      ? (searchParams.get("tab") as TabKey)
+      : "agenda";
+  const [tab, setTab] = useState<TabKey>(initialTab);
   const [showBookingForm, setShowBookingForm] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
@@ -102,13 +111,13 @@ export default function AppointmentsDashboard() {
       </nav>
 
       <div hidden={tab !== "agenda"}>
-        <AppointmentDayView reloadToken={reloadToken} />
+        <AppointmentDayView reloadToken={reloadToken} notifyShell={bumpReload} />
       </div>
       <div hidden={tab !== "queue"}>
-        <AppointmentCallQueue reloadToken={reloadToken} />
+        <AppointmentCallQueue reloadToken={reloadToken} notifyShell={bumpReload} />
       </div>
       <div hidden={tab !== "search"}>
-        <AppointmentSearch reloadToken={reloadToken} />
+        <AppointmentSearch reloadToken={reloadToken} notifyShell={bumpReload} />
       </div>
     </div>
   );

@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
+import ConfirmPanel from "@/components/admin/ConfirmPanel";
+import { CLINIC_TIMEZONE } from "@/lib/time/clinicTime";
 
 // Task 21 — closures dashboard (ADMIN): holidays, Eid, vacation, emergency
 // closures. Creating a closure blocks new bookings immediately and returns
@@ -72,13 +74,13 @@ function fr(v: unknown): string {
 function formatDay(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric", timeZone: "Africa/Algiers" });
+  return d.toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric", timeZone: CLINIC_TIMEZONE });
 }
 
 function formatTime(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", timeZone: "Africa/Algiers" });
+  return d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", timeZone: CLINIC_TIMEZONE });
 }
 
 export default function ClosuresDashboard() {
@@ -87,6 +89,7 @@ export default function ClosuresDashboard() {
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -101,16 +104,29 @@ export default function ClosuresDashboard() {
   const [affected, setAffected] = useState<Affected[]>([]);
   const [resolving, setResolving] = useState(false);
   const [rowBusy, setRowBusy] = useState<string | null>(null);
+  // Inline two-step confirm (never window.confirm): the bulk cancel+SMS is
+  // the highest-impact action in the app and must stay keyboard/screen-reader
+  // navigable. The 409-stale-list case becomes a second confirm step with the
+  // server's own message instead of a blocking dialog.
+  const [confirm, setConfirm] = useState<
+    | { kind: "cancel_and_notify"; closureId: string; ids: string[] }
+    | { kind: "continue409"; closureId: string; ids: string[]; message: string }
+    | { kind: "remove"; closure: Closure }
+    | null
+  >(null);
+  const [confirmError, setConfirmError] = useState<string | null>(null);
 
   const load = async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const [cRes, sRes] = await Promise.all([fetch("/api/admin/closures"), fetch("/api/admin/services")]);
       if (cRes.ok) {
         const body = (await cRes.json()) as { closures: Closure[] };
         setClosures(body.closures);
       } else {
-        setClosures(null);
+        setClosures([]);
+        setLoadError("Impossible de charger les fermetures.");
       }
       if (sRes.ok) {
         const body = (await sRes.json()) as { services: Service[] };
@@ -133,9 +149,13 @@ export default function ClosuresDashboard() {
         if (cancelled) return;
         if (cRes.ok) {
           const body = (await cRes.json()) as { closures: Closure[] };
-          if (!cancelled) setClosures(body.closures);
+          if (!cancelled) {
+            setClosures(body.closures);
+            setLoadError(null);
+          }
         } else if (!cancelled) {
-          setClosures(null);
+          setClosures([]);
+          setLoadError("Impossible de charger les fermetures.");
         }
         if (sRes.ok && !cancelled) {
           const body = (await sRes.json()) as { services: Service[] };
@@ -192,33 +212,37 @@ export default function ClosuresDashboard() {
     }
   };
 
-  const resolve = async (action: "cancel_and_notify" | "keep_for_call", closureId: string, ids: string[]) => {
-    if (action === "cancel_and_notify" && !window.confirm(`Annuler ${ids.length} rendez-vous et prévenir chaque patient par SMS ?`)) return;
+  const resolve = async (action: "cancel_and_notify" | "keep_for_call", closureId: string, ids: string[], acknowledgedUnresolved = false) => {
     setResolving(true);
+    setConfirmError(null);
     try {
-      const send = (acknowledgedUnresolved: boolean) =>
+      const send = (ack: boolean) =>
         fetch(`/api/admin/closures/${closureId}/resolve`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action, appointmentIds: ids, acknowledgedUnresolved }),
+          body: JSON.stringify({ action, appointmentIds: ids, acknowledgedUnresolved: ack }),
         });
       // First attempt WITHOUT the escape hatch: if the affected list went
       // stale (a booking landed or left since the preview), the API answers
       // 409 UNRESOLVED_REMAINING and staff confirm explicitly rather than
       // silently resolving a subset.
-      let response = await send(false);
-      if (response.status === 409) {
+      let response = await send(acknowledgedUnresolved);
+      if (response.status === 409 && !acknowledgedUnresolved) {
         const body = (await response.json().catch(() => null)) as {
           error?: { code?: string; message?: string };
         } | null;
         if (body?.error?.code === "UNRESOLVED_REMAINING") {
-          const msg = `${body.error.message ?? "Des rendez-vous restent sans décision."} Continuer quand même ?`;
-          if (!window.confirm(msg)) return;
-          response = await send(true);
+          setConfirm({
+            kind: "continue409",
+            closureId,
+            ids,
+            message: `${body.error.message ?? "Des rendez-vous restent sans décision."} Continuer quand même ?`,
+          });
+          return;
         }
       }
       if (!response.ok) {
-        setNotice(await readError(response, "Traitement impossible."));
+        setConfirmError(await readError(response, "Traitement impossible."));
         return;
       }
       const body = (await response.json()) as { succeeded?: string[]; failed?: Array<{ id: string }> };
@@ -229,21 +253,23 @@ export default function ClosuresDashboard() {
       }
       setAffected([]);
       setLastCreated(null);
+      setConfirm(null);
     } finally {
       setResolving(false);
     }
   };
 
   const remove = async (c: Closure) => {
-    if (!window.confirm("Supprimer cette fermeture ? Les créneaux rouvrent aussitôt.")) return;
     setRowBusy(c.id);
+    setConfirmError(null);
     try {
       const response = await fetch(`/api/admin/closures/${c.id}`, { method: "DELETE" });
       if (!response.ok) {
-        setNotice(await readError(response, "Suppression impossible."));
+        setConfirmError(await readError(response, "Suppression impossible."));
         return;
       }
       setNotice("Fermeture supprimée.");
+      setConfirm(null);
       await load();
     } finally {
       setRowBusy(null);
@@ -272,6 +298,14 @@ export default function ClosuresDashboard() {
       {notice ? (
         <div role="status" className="rounded-md border border-teal-200 bg-teal-50 p-3 text-sm text-teal-900">
           {notice}
+        </div>
+      ) : null}
+      {loadError ? (
+        <div role="alert" className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+          {loadError}{" "}
+          <button type="button" onClick={() => void load()} className="underline">
+            Réessayer
+          </button>
         </div>
       ) : null}
 
@@ -345,9 +379,15 @@ export default function ClosuresDashboard() {
               type="button"
               className={buttonDangerClass}
               disabled={resolving}
-              onClick={() => void resolve("cancel_and_notify", lastCreated.id, affected.map((a) => a.id))}
+              onClick={() =>
+                setConfirm({
+                  kind: "cancel_and_notify",
+                  closureId: lastCreated.id,
+                  ids: affected.map((a) => a.id),
+                })
+              }
             >
-              {resolving ? "Envoi…" : "Tout annuler et prévenir par SMS"}
+              Tout annuler et prévenir par SMS
             </button>
             <button
               type="button"
@@ -358,12 +398,44 @@ export default function ClosuresDashboard() {
               Garder pour rappel téléphonique
             </button>
           </div>
+          {confirm?.kind === "cancel_and_notify" ? (
+            <div className="mt-3">
+              <ConfirmPanel
+                message={`Annuler ${confirm.ids.length} rendez-vous et prévenir chaque patient par SMS ?`}
+                confirmLabel="Oui, tout annuler et prévenir"
+                pendingLabel="Envoi…"
+                pending={resolving}
+                error={confirmError}
+                onConfirm={() => void resolve("cancel_and_notify", confirm.closureId, confirm.ids)}
+                onCancel={() => {
+                  setConfirm(null);
+                  setConfirmError(null);
+                }}
+              />
+            </div>
+          ) : null}
+          {confirm?.kind === "continue409" ? (
+            <div className="mt-3">
+              <ConfirmPanel
+                message={confirm.message}
+                confirmLabel="Continuer quand même"
+                pendingLabel="Envoi…"
+                pending={resolving}
+                error={confirmError}
+                onConfirm={() => void resolve("cancel_and_notify", confirm.closureId, confirm.ids, true)}
+                onCancel={() => {
+                  setConfirm(null);
+                  setConfirmError(null);
+                }}
+              />
+            </div>
+          ) : null}
         </section>
       ) : null}
 
       <section aria-label="Fermetures enregistrées">
         <h2 className="text-sm font-semibold text-slate-900">Fermetures enregistrées</h2>
-        {(closures ?? []).length === 0 ? (
+        {!loadError && (closures ?? []).length === 0 ? (
           <div role="status" className="mt-2 rounded-md border border-slate-200 bg-white p-6 text-center text-sm text-slate-600">
             Aucune fermeture enregistrée.
           </div>
@@ -384,9 +456,25 @@ export default function ClosuresDashboard() {
                   {fr(c.reason)}{c.service ? ` · ${c.service.slug}` : " · toute la clinique"}
                 </p>
               </div>
-              <button type="button" className={buttonSecondaryClass} disabled={rowBusy === c.id} onClick={() => void remove(c)}>
+              <button type="button" className={buttonSecondaryClass} disabled={rowBusy === c.id} onClick={() => setConfirm({ kind: "remove", closure: c })}>
                 Supprimer
               </button>
+              {confirm?.kind === "remove" && confirm.closure.id === c.id ? (
+                <div className="mt-2 w-full">
+                  <ConfirmPanel
+                    message="Supprimer cette fermeture ? Les créneaux rouvrent aussitôt."
+                    confirmLabel="Oui, supprimer"
+                    pendingLabel="Suppression…"
+                    pending={rowBusy === c.id}
+                    error={confirmError}
+                    onConfirm={() => void remove(confirm.closure)}
+                    onCancel={() => {
+                      setConfirm(null);
+                      setConfirmError(null);
+                    }}
+                  />
+                </div>
+              ) : null}
             </li>
           ))}
         </ul>

@@ -3,6 +3,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { localized, type LocalizedField } from "@/lib/i18n/localized";
 import { toClinicLocalDateString, addClinicDays } from "@/lib/time/clinicTime";
+import PatientPicker, { type PatientHit } from "./PatientPicker";
 
 // Task 17.3 — front-desk (STAFF-source) waitlist create
 // (POST /api/admin/waitlist): pick an EXISTING active patient via a
@@ -17,15 +18,6 @@ import { toClinicLocalDateString, addClinicDays } from "@/lib/time/clinicTime";
 // live booking policy): min is the clinic's today, max the +90d horizon
 // default. Past dates are refused with a French message before any network
 // call. Nothing patient-identifying is logged to the console.
-
-interface PatientHit {
-  id: string;
-  firstName: string;
-  lastName: string;
-  phone: string;
-  active: boolean;
-  anonymizedAt: string | null;
-}
 
 export interface WaitlistServiceOption {
   id: string;
@@ -61,10 +53,7 @@ export default function WaitlistForm({
   services?: WaitlistServiceOption[];
   onCreated?: () => void;
 }) {
-  const [query, setQuery] = useState("");
-  const [hits, setHits] = useState<PatientHit[] | null>(null);
-  const [searching, setSearching] = useState(false);
-  const [searchError, setSearchError] = useState(false);
+  // Patient search UI lives in the shared PatientPicker.
   const [selectedPatient, setSelectedPatient] = useState<PatientHit | null>(null);
 
   const [fetchedServices, setFetchedServices] = useState<WaitlistServiceOption[]>([]);
@@ -106,30 +95,7 @@ export default function WaitlistForm({
     };
   }, [servicesProp]);
 
-  async function searchPatients() {
-    const q = query.trim();
-    if (!q) return;
-    setSearching(true);
-    setSearchError(false);
-    try {
-      const response = await fetch(`/api/admin/patients?q=${encodeURIComponent(q)}`);
-      if (!response.ok) {
-        setSearchError(true);
-        return;
-      }
-      const data = (await response.json()) as { patients: PatientHit[] };
-      setHits(data.patients.filter((p) => p.active && !p.anonymizedAt));
-    } catch {
-      setSearchError(true);
-    } finally {
-      setSearching(false);
-    }
-  }
 
-  function handleSearchSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    void searchPatients();
-  }
 
   function handleAddDate() {
     const value = dateInput;
@@ -157,8 +123,6 @@ export default function WaitlistForm({
 
   function resetForm() {
     setSelectedPatient(null);
-    setQuery("");
-    setHits(null);
     setServiceId("");
     setDateInput("");
     setDates([]);
@@ -229,93 +193,17 @@ export default function WaitlistForm({
         </p>
       )}
 
-      <form className="space-y-2" onSubmit={handleSearchSubmit}>
-        <span className={labelClass}>Patient</span>
-        {selectedPatient ? (
-          <div className="flex flex-wrap items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
-            <span className="font-medium text-slate-900">
-              {selectedPatient.firstName} {selectedPatient.lastName}
-            </span>
-            <span className="text-slate-600" dir="auto">
-              {selectedPatient.phone}
-            </span>
-            <button
-              type="button"
-              onClick={() => {
-                setSelectedPatient(null);
-                setQuery("");
-                setHits(null);
-              }}
-              className="ml-auto rounded-md border border-slate-300 px-2 py-1 text-xs font-medium text-slate-700
-                hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2
-                focus-visible:ring-teal-600 focus-visible:ring-offset-2"
-            >
-              Retirer
-            </button>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            <div className="flex flex-wrap items-end gap-2">
-              <div className="min-w-0 flex-1 space-y-1">
-                <label htmlFor="waitlist-patient-q" className="block text-xs font-medium text-slate-600">
-                  Rechercher un patient (nom ou téléphone)
-                </label>
-                <input
-                  id="waitlist-patient-q"
-                  value={query}
-                  onChange={(e) => {
-                    setQuery(e.target.value);
-                    setHits(null);
-                    setSearchError(false);
-                  }}
-                  dir="auto"
-                  autoComplete="off"
-                  className={inputClass}
-                />
-              </div>
-              <button type="submit" disabled={searching || !query.trim()} className={buttonNeutral}>
-                {searching ? "Recherche…" : "Rechercher"}
-              </button>
-            </div>
-            {searchError && (
-              <p role="alert" className={errorTextClass}>
-                Recherche impossible. Réessayez.
-              </p>
-            )}
-            {hits && hits.length === 0 && (
-              <p className={errorTextClass} role="status">
-                Aucun patient actif trouvé. Créez d&rsquo;abord le dossier dans « Patients ».
-              </p>
-            )}
-            {hits && hits.length > 0 && (
-              <ul className="space-y-1">
-                {hits.map((p) => (
-                  <li key={p.id}>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSelectedPatient(p);
-                        setHits(null);
-                      }}
-                      className="w-full rounded-md border border-slate-200 px-3 py-1.5 text-left text-sm
-                        text-slate-800 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2
-                        focus-visible:ring-teal-600 focus-visible:ring-offset-2"
-                    >
-                      {p.firstName} {p.lastName}{" "}
-                      <span className="text-slate-600" dir="auto">
-                        — {p.phone}
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        )}
-        {validationErrors.includes("Sélectionnez un patient.") && (
-          <p className={errorTextClass}>Sélectionnez un patient.</p>
-        )}
-      </form>
+      <PatientPicker
+        idPrefix="waitlist"
+        legend="Patient"
+        selected={selectedPatient}
+        onSelect={setSelectedPatient}
+        fieldError={
+          validationErrors.includes("Sélectionnez un patient.")
+            ? "Sélectionnez un patient."
+            : null
+        }
+      />
 
       <form className="space-y-4" onSubmit={handleSubmit} noValidate>
         <fieldset disabled={pending} className="m-0 min-w-0 space-y-4 border-0 p-0">

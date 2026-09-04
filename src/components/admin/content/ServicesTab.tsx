@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
+import ConfirmPanel from "@/components/admin/ConfirmPanel";
 
 // Task 21 — services tab (ADMIN): list, create, edit duration/price/active,
 // delete (blocked when upcoming appointments exist). FR plain language:
@@ -63,6 +64,9 @@ export default function ServicesTab() {
   const [price, setPrice] = useState("");
   const [creating, setCreating] = useState(false);
   const [rowBusy, setRowBusy] = useState<string | null>(null);
+  // Inline two-step delete confirm (never window.confirm).
+  const [confirmDelete, setConfirmDelete] = useState<Service | null>(null);
+  const [confirmError, setConfirmError] = useState<string | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -173,15 +177,16 @@ export default function ServicesTab() {
   };
 
   const remove = async (s: Service) => {
-    if (!window.confirm(`Supprimer « ${fr(s.name)} » ? Préférez la désactivation si un doute.`)) return;
     setRowBusy(s.id);
+    setConfirmError(null);
     try {
       const response = await fetch(`/api/admin/services/${s.id}`, { method: "DELETE" });
       if (!response.ok) {
-        setNotice(await readError(response, "Suppression impossible."));
+        setConfirmError(await readError(response, "Suppression impossible."));
         return;
       }
       setNotice("Service supprimé.");
+      setConfirmDelete(null);
       await load();
     } finally {
       setRowBusy(null);
@@ -215,7 +220,7 @@ export default function ServicesTab() {
       ) : null}
 
       <form onSubmit={create} className="mb-6 grid grid-cols-1 gap-3 rounded-lg border border-slate-200 bg-white p-4 sm:grid-cols-2">
-        <h3 className="text-sm font-semibold text-slate-900 sm:col-span-2">Nouveau service</h3>
+        <h2 className="text-sm font-semibold text-slate-900 sm:col-span-2">Nouveau service</h2>
         <label className="flex flex-col gap-1 text-sm text-slate-700">
           Identifiant (slug)
           <input aria-label="Identifiant" className={inputClass} value={slug} onChange={(e) => setSlug(e.target.value)} placeholder="ex. consultation" required />
@@ -274,12 +279,28 @@ export default function ServicesTab() {
             <button type="button" className={buttonSecondaryClass} disabled={rowBusy === s.id} onClick={() => void toggleActive(s)}>
               {s.active ? "Masquer" : "Afficher"}
             </button>
-            <button type="button" className={buttonSecondaryClass} disabled={rowBusy === s.id} onClick={() => void remove(s)}>
+            <button type="button" className={buttonSecondaryClass} disabled={rowBusy === s.id} onClick={() => { setConfirmDelete(s); setConfirmError(null); }}>
               Supprimer
             </button>
           </li>
         ))}
       </ul>
+      {confirmDelete ? (
+        <div className="mt-2">
+          <ConfirmPanel
+            message={`Supprimer « ${fr(confirmDelete.name)} » ? Préférez la désactivation si un doute.`}
+            confirmLabel="Oui, supprimer"
+            pendingLabel="Suppression…"
+            pending={rowBusy === confirmDelete.id}
+            error={confirmError}
+            onConfirm={() => void remove(confirmDelete)}
+            onCancel={() => {
+              setConfirmDelete(null);
+              setConfirmError(null);
+            }}
+          />
+        </div>
+      ) : null}
       <p className="mt-3 text-xs text-slate-500">
         La durée modifie les créneaux proposés dès la prochaine recherche. La suppression est refusée tant que des rendez-vous sont liés à ce service — masquez-le plutôt.
       </p>

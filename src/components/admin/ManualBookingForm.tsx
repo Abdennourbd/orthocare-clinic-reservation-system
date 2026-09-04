@@ -4,6 +4,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { manualBookingSchema } from "@/schemas/appointment";
 import { clinicLocalToUTC, toClinicLocalDateString } from "@/lib/time/clinicTime";
 import type { AppointmentRow } from "./appointmentTypes";
+import PatientPicker, { type PatientHit } from "./PatientPicker";
 
 // Task 14 step 5 — manual booking (POST /api/admin/appointments): pick an
 // EXISTING active patient (submit-only search against GET /api/admin/patients,
@@ -13,15 +14,6 @@ import type { AppointmentRow } from "./appointmentTypes";
 // clinicLocalToUTC (lib/time/clinicTime.ts — the only tz-aware module).
 // Client-side validation uses the SHARED manualBookingSchema, never a
 // re-declared copy. A 409 SLOT_CONFLICT is shown inline.
-
-interface PatientHit {
-  id: string;
-  firstName: string;
-  lastName: string;
-  phone: string;
-  active: boolean;
-  anonymizedAt: string | null;
-}
 
 interface ServiceHit {
   id: string;
@@ -50,11 +42,7 @@ export default function ManualBookingForm({
   onSuccess: (appointment: AppointmentRow) => void;
   onCancel?: () => void;
 }) {
-  // Patient step
-  const [patientQuery, setPatientQuery] = useState("");
-  const [patientHits, setPatientHits] = useState<PatientHit[] | null>(null);
-  const [patientSearching, setPatientSearching] = useState(false);
-  const [patientSearchError, setPatientSearchError] = useState(false);
+  // Patient step (search UI lives in the shared PatientPicker).
   const [selectedPatient, setSelectedPatient] = useState<PatientHit | null>(null);
 
   // Reference data
@@ -93,25 +81,6 @@ export default function ManualBookingForm({
     };
   }, []);
 
-  async function searchPatients() {
-    const q = patientQuery.trim();
-    if (!q) return;
-    setPatientSearching(true);
-    setPatientSearchError(false);
-    try {
-      const response = await fetch(`/api/admin/patients?q=${encodeURIComponent(q)}`);
-      if (!response.ok) {
-        setPatientSearchError(true);
-        return;
-      }
-      const body = (await response.json()) as { patients: PatientHit[] };
-      setPatientHits(body.patients.filter((p) => p.active && !p.anonymizedAt));
-    } catch {
-      setPatientSearchError(true);
-    } finally {
-      setPatientSearching(false);
-    }
-  }
 
   async function submitBooking() {
     if (!selectedPatient) return;
@@ -184,94 +153,13 @@ export default function ManualBookingForm({
 
       <form className="space-y-4" onSubmit={handleSubmit} noValidate>
         <fieldset disabled={pending} className="m-0 min-w-0 space-y-4 border-0 p-0">
-          <div className="space-y-2">
-            <span className={labelClass}>Patient (dossier existant actif)</span>
-            {selectedPatient ? (
-              <div className="flex flex-wrap items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
-                <span className="font-medium text-slate-900">
-                  {selectedPatient.lastName} {selectedPatient.firstName}
-                </span>
-                <span className="text-slate-600" dir="auto">
-                  {selectedPatient.phone}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSelectedPatient(null);
-                    setPatientHits(null);
-                    setPatientQuery("");
-                  }}
-                  className="ml-auto rounded-md border border-slate-300 px-2 py-1 text-xs font-medium text-slate-700
-                    hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2
-                    focus-visible:ring-teal-600 focus-visible:ring-offset-2"
-                >
-                  Changer
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                <div className="flex flex-wrap items-end gap-2">
-                  <div className="space-y-1">
-                    <label htmlFor="booking-patient-q" className="block text-xs font-medium text-slate-600">
-                      Rechercher (nom ou téléphone)
-                    </label>
-                    <input
-                      id="booking-patient-q"
-                      value={patientQuery}
-                      onChange={(e) => setPatientQuery(e.target.value)}
-                      dir="auto"
-                      autoComplete="off"
-                      className={inputClass}
-                    />
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => void searchPatients()}
-                    disabled={patientSearching || !patientQuery.trim()}
-                    className={buttonNeutral}
-                  >
-                    {patientSearching ? "Recherche…" : "Rechercher"}
-                  </button>
-                </div>
-                {patientSearchError && (
-                  <p role="alert" className={errorTextClass}>
-                    Recherche impossible. Réessayez.
-                  </p>
-                )}
-                {patientHits && patientHits.length === 0 && (
-                  <p className={errorTextClass} role="status">
-                    Aucun patient actif trouvé. Créez d&rsquo;abord le dossier dans « Patients ».
-                  </p>
-                )}
-                {patientHits && patientHits.length > 0 && (
-                  <ul className="space-y-1">
-                    {patientHits.map((p) => (
-                      <li key={p.id}>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSelectedPatient(p);
-                            setPatientHits(null);
-                          }}
-                          className="w-full rounded-md border border-slate-200 px-3 py-1.5 text-left text-sm
-                            text-slate-800 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2
-                            focus-visible:ring-teal-600 focus-visible:ring-offset-2"
-                        >
-                          <span className="font-medium">
-                            {p.lastName} {p.firstName}
-                          </span>{" "}
-                          <span className="text-slate-600" dir="auto">
-                            {p.phone}
-                          </span>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            )}
-            {fieldErrors.patientId && <p className={errorTextClass}>{fieldErrors.patientId}</p>}
-          </div>
+          <PatientPicker
+            idPrefix="booking"
+            legend="Patient (dossier existant actif)"
+            selected={selectedPatient}
+            onSelect={setSelectedPatient}
+            fieldError={fieldErrors.patientId}
+          />
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-1">

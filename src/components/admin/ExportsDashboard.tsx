@@ -1,6 +1,11 @@
 "use client";
 
 import { useMemo, useState, type FormEvent } from "react";
+import {
+  CLINIC_TIMEZONE,
+  formatClinicLocalTime,
+  toClinicLocalDateString,
+} from "@/lib/time/clinicTime";
 
 // Task 19 — exports dashboard (ADMIN only): monthly CSV/XLSX download +
 // printable day sheet. FR-only, like every admin screen. The monthly export
@@ -37,11 +42,9 @@ const buttonSecondaryClass =
   "disabled:cursor-not-allowed disabled:opacity-50";
 
 function todayLocal(): string {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, "0");
-  const d = String(now.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
+  // Clinic-local day, not the browser's: between 00:00–01:00 the browser
+  // date is already tomorrow while the clinic is still on today.
+  return toClinicLocalDateString(new Date());
 }
 
 function formatTime(iso: string): string {
@@ -49,11 +52,7 @@ function formatTime(iso: string): string {
   if (Number.isNaN(d.getTime())) return "—";
   // Clinic wall-clock, never the browser's: the printed sheet is a paper
   // fallback and must read the same on any front-desk PC timezone.
-  return d.toLocaleTimeString("fr-FR", {
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: "Africa/Algiers",
-  });
+  return formatClinicLocalTime(d);
 }
 
 function formatDayLabel(isoDate: string): string {
@@ -64,7 +63,7 @@ function formatDayLabel(isoDate: string): string {
     day: "numeric",
     month: "long",
     year: "numeric",
-    timeZone: "Africa/Algiers",
+    timeZone: CLINIC_TIMEZONE,
   });
 }
 
@@ -335,7 +334,7 @@ export default function ExportsDashboard() {
               </div>
               <p className="mt-2 text-xs text-slate-500">
                 {sheetRows.length} rendez-vous — imprimé le{" "}
-                {new Date().toLocaleDateString("fr-FR")}.
+                {toClinicLocalDateString(new Date()).split("-").reverse().join("/")}.
               </p>
             </div>
           )}
