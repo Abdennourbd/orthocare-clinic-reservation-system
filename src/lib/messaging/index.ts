@@ -111,13 +111,27 @@ export async function sendMessage(
   // still reachable by every marketing/reminder-class send. Transactional
   // messages (e.g. a booking confirmation the patient is actively waiting
   // on) still always send, same as an opt-out.
-  if (!isTransactional(input.type)) {
-    const patient = await prisma.patient.findUnique({
+  //
+  // WhatsApp documented-opt-in (Meta requirement, plan.md §Messaging): when
+  // the active provider can send WhatsApp, a patient WITHOUT `whatsappOptIn`
+  // must never be messaged on WhatsApp — the send falls back to SMS instead
+  // (SMS has its own opt-out above). The patient row is fetched once and
+  // shared by both gates.
+  const whatsappCapable = provider.name === "whatsapp" || provider.name === "whatsapp-first";
+  let patient: { messagingOptOut: boolean; active: boolean; whatsappOptIn: boolean } | null = null;
+  if (!isTransactional(input.type) || whatsappCapable) {
+    patient = await prisma.patient.findUnique({
       where: { id: input.patientId },
-      select: { messagingOptOut: true, active: true },
+      select: { messagingOptOut: true, active: true, whatsappOptIn: true },
     });
+  }
+  if (!isTransactional(input.type)) {
     if (patient?.messagingOptOut || patient?.active === false) return null;
   }
+  // Missing row or explicit false → SMS. Opt-in is explicit-true only: a
+  // missing patient record must never produce a WhatsApp send.
+  const effectiveProvider: MessageProvider =
+    whatsappCapable && patient?.whatsappOptIn !== true ? twilioProvider : provider;
 
   // 2. Resolve the body: a free-text override (Task 16 manual sends) is used
   // verbatim — validated defensively even though the route's Zod schema
@@ -157,7 +171,7 @@ export async function sendMessage(
         type: input.type,
         templateId,
         batchId: input.batchId,
-        provider: provider.name,
+        provider: effectiveProvider.name,
         status: SmsStatus.SENDING,
         appointmentId: input.appointmentId,
         sentById: input.sentById,
@@ -185,11 +199,11 @@ export async function sendMessage(
           });
           if (patient?.messagingOptOut || patient?.active === false) return null;
         }
-        const retryResult = await deliver(provider, existing.to, existing.body);
+        const retryResult = await deliver(effectiveProvider, existing.to, existing.body);
         return prisma.smsMessage.update({
           where: { id: existing.id },
           data: {
-            provider: retryResult.provider ?? provider.name,
+            provider: retryResult.provider ?? effectiveProvider.name,
             status: retryResult.status,
             error: retryResult.error ?? null,
             sentAt: retryResult.ok ? new Date() : null,
@@ -207,14 +221,14 @@ export async function sendMessage(
   // provider (the whatsapp-first hybrid) reports the actual channel via
   // `result.provider`, the row records reality so WhatsApp coverage stays
   // measurable (plan.md §Messaging).
-  const result = await deliver(provider, message.to, message.body);
+  const result = await deliver(effectiveProvider, message.to, message.body);
   if (!result.ok) {
     // Structured failure event (observability): stable name + bounded fields.
     // NEVER the recipient or body — telemetry must not carry patient PII.
     console.warn(
       JSON.stringify({
         event: "message_send_failed",
-        provider: result.provider ?? provider.name,
+        provider: result.provider ?? effectiveProvider.name,
         code: result.code ?? "UNKNOWN",
         type: input.type,
       }),
@@ -223,7 +237,7 @@ export async function sendMessage(
   return prisma.smsMessage.update({
     where: { id: message.id },
     data: {
-      provider: result.provider ?? provider.name,
+      provider: result.provider ?? effectiveProvider.name,
       status: result.status,
       error: result.error ?? null,
       sentAt: result.ok ? new Date() : null,

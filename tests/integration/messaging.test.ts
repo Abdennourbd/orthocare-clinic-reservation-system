@@ -598,3 +598,75 @@ describe("sendAppointmentRescheduled — CONFIRMED requirement", () => {
     ).toBe(0);
   });
 });
+
+describe("sendMessage — WhatsApp documented opt-in", () => {
+  function stubHybrid(spy: { calls: number }): MessageProvider {
+    return {
+      name: "whatsapp-first",
+      async send() {
+        spy.calls += 1;
+        return { ok: true, status: SmsStatus.SENT, provider: "whatsapp" as const };
+      },
+    };
+  }
+
+  const baseInput = (patientId: string) => ({
+    type: SmsMessageType.CONFIRMATION,
+    patientId,
+    to: "+213551122334",
+    templateKey: "bookingReceived" as const,
+    vars,
+  });
+
+  it("falls back to SMS when the patient has not opted in to WhatsApp", async () => {
+    const patient = await makePatient({ whatsappOptIn: false });
+    const spy = { calls: 0 };
+
+    const msg = await sendMessage(baseInput(patient.id), stubHybrid(spy));
+
+    expect(spy.calls).toBe(0);
+    expect(msg).not.toBeNull();
+    expect(msg!.provider).toBe("twilio");
+  });
+
+  it("falls back to SMS for non-transactional types without opt-in (not suppressed)", async () => {
+    const patient = await makePatient({ whatsappOptIn: false, messagingOptOut: false });
+    const spy = { calls: 0 };
+
+    const msg = await sendMessage(
+      { ...baseInput(patient.id), type: SmsMessageType.WAITLIST },
+      stubHybrid(spy),
+    );
+
+    expect(spy.calls).toBe(0);
+    expect(msg).not.toBeNull();
+    expect(msg!.provider).toBe("twilio");
+  });
+
+  it("uses WhatsApp-first when the patient opted in", async () => {
+    const patient = await makePatient({ whatsappOptIn: true });
+    const spy = { calls: 0 };
+
+    const msg = await sendMessage(baseInput(patient.id), stubHybrid(spy));
+
+    expect(spy.calls).toBe(1);
+    expect(msg).not.toBeNull();
+    expect(msg!.provider).toBe("whatsapp");
+  });
+
+  it("keeps non-WhatsApp providers untouched regardless of opt-in", async () => {
+    const patient = await makePatient({ whatsappOptIn: false });
+    const mock = {
+      name: "mock" as const,
+      async send() {
+        return { ok: true, status: SmsStatus.SENT };
+      },
+    };
+
+    const msg = await sendMessage(baseInput(patient.id), mock);
+
+    expect(msg).not.toBeNull();
+    expect(msg!.provider).toBe("mock");
+    expect(msg!.status).toBe(SmsStatus.SENT);
+  });
+});
