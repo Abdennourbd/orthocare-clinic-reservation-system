@@ -17,11 +17,18 @@ export async function readBookingPolicy(): Promise<BookingPolicy> {
     where: { key: "bookingPolicy" },
   });
   const value = (setting?.value ?? {}) as BookingPolicyValue;
+  // Type-guarded: a wrongly-typed admin value (e.g. a string where a number
+  // belongs) falls back to the default instead of poisoning lead-time,
+  // horizon and expiry checks downstream.
+  const num = (v: unknown, fallback: number): number =>
+    typeof v === "number" && Number.isFinite(v) ? v : fallback;
+  const str = (v: unknown, fallback: string): string =>
+    typeof v === "string" && v.length > 0 ? v : fallback;
   return {
-    pendingExpiryHours: value.pendingExpiryHours ?? 24,
-    minLeadTimeMinutes: value.minLeadTimeMinutes ?? 120,
-    maxHorizonDays: value.maxHorizonDays ?? 90,
-    clinicTimezone: value.clinicTimezone ?? "Africa/Algiers",
+    pendingExpiryHours: num(value.pendingExpiryHours, 24),
+    minLeadTimeMinutes: num(value.minLeadTimeMinutes, 120),
+    maxHorizonDays: num(value.maxHorizonDays, 90),
+    clinicTimezone: str(value.clinicTimezone, "Africa/Algiers"),
   };
 }
 

@@ -4,6 +4,11 @@ import {
   listActiveTestimonials,
   listActiveGalleryItems,
 } from "../src/lib/public/content";
+import {
+  listActiveServices,
+  getActiveServiceBySlug,
+  formatPrice,
+} from "../src/lib/public/services";
 import { getPrisma } from "../src/lib/db";
 
 // Content queries are exercised against the REAL test database (project test
@@ -97,5 +102,61 @@ describe("Public Content", () => {
     expect(items).toEqual([
       { id: expect.any(String), imageUrl: "/image1.jpg", caption: "Légende 1 FR" },
     ]);
+  });
+});
+
+describe("Public Services", () => {
+  beforeEach(async () => {
+    await getPrisma().service.createMany({
+      data: [
+        {
+          slug: "consultation",
+          name: { fr: "Consultation FR", en: "Consultation EN" },
+          description: { fr: "D FR", en: "D EN" },
+          durationMinutes: 30,
+          price: 2000,
+          currency: "DZD",
+          active: true,
+        },
+        {
+          slug: "hidden",
+          name: { fr: "Caché" },
+          description: { fr: "D" },
+          durationMinutes: 15,
+          active: false,
+        },
+      ],
+    });
+  });
+
+  it("lists active services localized, inactive excluded", async () => {
+    const items = await listActiveServices("en");
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({
+      slug: "consultation",
+      name: "Consultation EN",
+      durationMinutes: 30,
+      price: 2000,
+      currency: "DZD",
+    });
+  });
+
+  it("falls back to FR when the requested locale field is missing", async () => {
+    const items = await listActiveServices("ar");
+    expect(items[0].name).toBe("Consultation FR");
+  });
+
+  it("resolves a service by slug, null for unknown or inactive", async () => {
+    expect((await getActiveServiceBySlug("consultation", "fr"))?.name).toBe(
+      "Consultation FR",
+    );
+    expect(await getActiveServiceBySlug("nope", "fr")).toBeNull();
+    expect(await getActiveServiceBySlug("hidden", "fr")).toBeNull();
+  });
+
+  it("formats prices with locale grouping, free for null/zero", () => {
+    expect(formatPrice(null, "DZD", "Gratuit", "fr")).toBe("Gratuit");
+    expect(formatPrice(0, "DZD", "Gratuit", "fr")).toBe("Gratuit");
+    expect(formatPrice(2000, "DZD", "Gratuit", "fr")).toContain("DZD");
   });
 });
