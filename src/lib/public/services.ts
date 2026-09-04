@@ -54,7 +54,9 @@ export async function getActiveServiceBySlug(
 // Same dev-bypass convention as public/content.ts: the admin services routes
 // invalidate the `services` tag on every write, so cached reads stay fresh
 // in production without an hourly staleness window on booking data.
-const isDev = process.env.NODE_ENV === "development";
+// Cached ONLY in production: in dev AND test the real implementation would
+// serve stale cross-test data (in-process cache shared across suites).
+const useCache = process.env.NODE_ENV === "production";
 
 async function fetchServiceList(locale: string): Promise<PublicService[]> {
   const rows = await getPrisma().service.findMany({
@@ -73,21 +75,21 @@ async function fetchServiceBySlug(
   return toPublicService(row, locale);
 }
 
-const cachedServiceList = isDev
-  ? fetchServiceList
-  : (locale: string) =>
+const cachedServiceList = useCache
+  ? (locale: string) =>
       unstable_cache(fetchServiceList, ["service-list"], {
         tags: ["services"],
         revalidate: 3600,
-      })(locale);
+      })(locale)
+  : fetchServiceList;
 
-const cachedServiceBySlug = isDev
-  ? fetchServiceBySlug
-  : (slug: string, locale: string) =>
+const cachedServiceBySlug = useCache
+  ? (slug: string, locale: string) =>
       unstable_cache(fetchServiceBySlug, ["service-by-slug"], {
         tags: ["services"],
         revalidate: 3600,
-      })(slug, locale);
+      })(slug, locale)
+  : fetchServiceBySlug;
 
 /** Format a service price in the requested locale; free/unspecified → freeLabel. */
 export function formatPrice(
