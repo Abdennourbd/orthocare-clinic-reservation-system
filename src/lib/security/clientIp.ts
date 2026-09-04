@@ -20,6 +20,14 @@
  * We deliberately do NOT read `x-forwarded-for` by default: in a deployment
  * where clients hit the origin directly (e.g. local dev / self-host), it is
  * forgeable and must not be trusted for rate limiting.
+ *
+ * DEPLOYMENT INVARIANT (hard requirement, not a universal truth): this helper
+ * is only correct when the edge proxy OVERWRITES `x-real-ip` /
+ * `x-vercel-forwarded-for` (Vercel does). Behind a proxy that merely forwards
+ * client headers without overwriting them, an attacker can mint a fresh IP
+ * per request and bypass every per-IP limit. Per-phone caps and the PENDING
+ * cap mitigate this, but the proxy MUST sanitize these headers in any
+ * non-Vercel deployment.
  */
 
 const FORWARDED_HEADERS = ["x-vercel-forwarded-for", "x-real-ip"] as const;

@@ -9,7 +9,7 @@ import {
   type SessionRole,
 } from "@/lib/auth/session";
 import { verifyPassword, DUMMY_HASH } from "@/lib/auth/password";
-import { logAction } from "@/lib/audit/logAction";
+import { logActionSafe } from "@/lib/audit/logAction";
 import { loginSchema } from "@/schemas/auth";
 import { AuditAction, AuditActorType } from "@/generated/prisma/client";
 
@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
   const now = new Date();
   if (user.lockedUntil && user.lockedUntil > now) {
     await verifyPassword(DUMMY_HASH, password);
-    await logAction(
+    await logActionSafe(
       { type: AuditActorType.STAFF, userId: user.id },
       AuditAction.LOGIN_LOCKED,
       "User",
@@ -108,7 +108,7 @@ export async function POST(request: NextRequest) {
         data: { lockedUntil },
       });
     }
-    await logAction(
+    await logActionSafe(
       { type: AuditActorType.STAFF, userId: user.id },
       AuditAction.LOGIN_FAILED,
       "User",
@@ -117,7 +117,7 @@ export async function POST(request: NextRequest) {
       ip,
     );
     if (lockedUntil) {
-      await logAction(
+      await logActionSafe(
         { type: AuditActorType.STAFF, userId: user.id },
         AuditAction.LOGIN_LOCKED,
         "User",
@@ -134,7 +134,7 @@ export async function POST(request: NextRequest) {
     where: { id: user.id },
     data: { failedLoginCount: 0, lockedUntil: null, lastLoginAt: now },
   });
-  await logAction(
+  await logActionSafe(
     { type: AuditActorType.STAFF, userId: user.id },
     AuditAction.LOGIN_SUCCESS,
     "User",

@@ -1,5 +1,5 @@
 import { getPrisma } from "@/lib/db";
-import { logAction, type AuditActor } from "@/lib/audit/logAction";
+import { logActionSafe, type AuditActor } from "@/lib/audit/logAction";
 import { AuditAction } from "@/generated/prisma/client";
 
 // Task 13 step 6 — irreversible erasure. plan.md §Data retention & erasure:
@@ -200,7 +200,7 @@ export async function anonymizePatient(
     };
   });
 
-  await logAction(
+  await logActionSafe(
     actor,
     AuditAction.PATIENT_ANONYMIZED,
     "Patient",

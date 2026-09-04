@@ -9,13 +9,14 @@ import {
 import { releaseSlotInTx } from "@/lib/booking/releaseSlot";
 import { rescheduleSlot } from "@/lib/booking/rescheduleSlot";
 import { emitSlotFreedAsync } from "@/lib/booking/events";
-import { logAction } from "@/lib/audit/logAction";
+import { logActionSafe } from "@/lib/audit/logAction";
 import { localized, type LocalizedField } from "@/lib/i18n/localized";
 import {
   sendAppointmentCancelled,
   sendAppointmentRescheduled,
 } from "@/lib/messaging/appointmentChanges";
 import { notifyCancellation } from "@/lib/messaging/notifications";
+import { reportError } from "@/lib/monitoring/reportError";
 import { verifySelfServiceToken } from "./tokens";
 
 export { SlotConflictError } from "@/lib/booking/errors";
@@ -86,7 +87,7 @@ export async function selfServiceCancel(
       reason: "patient-self-service",
     }),
   );
-  await logAction(
+  await logActionSafe(
     { type: AuditActorType.PATIENT },
     AuditAction.SELF_SERVICE_CANCELLED,
     "Appointment",
@@ -151,7 +152,7 @@ export async function selfServiceReschedule(
     sendAppointmentRescheduled(appointment.id, newAppointment.id),
   );
 
-  await logAction(
+  await logActionSafe(
     { type: AuditActorType.PATIENT },
     AuditAction.SELF_SERVICE_RESCHEDULED,
     "Appointment",
@@ -177,7 +178,7 @@ async function safe<T>(fn: () => Promise<T>): Promise<T | null> {
   try {
     return await fn();
   } catch (e) {
-    console.error("self-service side effect failed", e);
+    reportError("self_service_side_effect_failed", e);
     return null;
   }
 }

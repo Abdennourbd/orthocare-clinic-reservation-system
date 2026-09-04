@@ -55,9 +55,13 @@ export async function GET(request: Request): Promise<Response> {
   let service;
   let engineInput;
   try {
-    ({ service, engineInput } = await getPrisma().$transaction((tx) =>
-      loadDaySlotContext(tx, { serviceId, localDateString: date, nowUTC }),
-    ));
+    // Pure reads — no interactive transaction (which pins a pooled connection
+    // per request for no consistency benefit on a read-only overview).
+    ({ service, engineInput } = await loadDaySlotContext(getPrisma(), {
+      serviceId,
+      localDateString: date,
+      nowUTC,
+    }));
   } catch (e) {
     // Only a missing/inactive service is a 404; anything else (DB outage,
     // bad slot config) must surface as a real error, not be masked.

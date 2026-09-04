@@ -377,8 +377,63 @@ describe("POST /api/admin/sms/broadcast", () => {
     expect(await getPrisma().smsBroadcast.count()).toBe(1);
   });
 
-  it("a DIFFERENT idempotencyKey the same day is a new batch (2 more DELAY rows) — designed behavior", async () => {
-    await seedBroadcastDay();
+  it("resumes an INCOMPLETE batch with the same key instead of stranding the tail", async () => {
+    const seed = await seedBroadcastDay();
+    const admin = await createStaff(Role.ADMIN);
+    const cookie = await cookieFor(admin);
+    const { POST: broadcastRoute } = await import("@/app/api/admin/sms/broadcast/route");
+
+    // Simulate a run that died mid-loop after the first of 2 recipients:
+    // one DELAY row sent, batch counters showing 1 of 2 processed.
+    const partial = await getPrisma().smsBroadcast.create({
+      data: {
+        date: seed.today,
+        delayMinutes: 15,
+        idempotencyKey: "resume-key-001",
+        recipientCount: 2,
+        sentCount: 1,
+        suppressedCount: 0,
+        failedCount: 0,
+        sentById: admin.id,
+      },
+    });
+    await getPrisma().smsMessage.create({
+      data: {
+        to: "+213550000001",
+        body: "partial",
+        type: SmsMessageType.DELAY,
+        batchId: partial.id,
+        provider: "mock",
+        status: SmsStatus.SENT,
+        sentById: admin.id,
+      },
+    });
+
+    const retry = await broadcastRoute(
+      postRequest(
+        "/api/admin/sms/broadcast",
+        { delayMinutes: 15, idempotencyKey: "resume-key-001" },
+        cookie,
+      ),
+    );
+    expect(retry.status).toBe(200);
+    const body = await retry.json();
+    expect(body.batchId).toBe(partial.id);
+    expect(body.alreadySent).toBe(false);
+    // Only the remaining recipient was messaged: 1 old + 1 new row.
+    expect(
+      await getPrisma().smsMessage.count({
+        where: { batchId: partial.id, type: SmsMessageType.DELAY },
+      }),
+    ).toBe(2);
+    const batch = await getPrisma().smsBroadcast.findUnique({
+      where: { id: partial.id },
+    });
+    expect(batch!.sentCount).toBe(2);
+    expect(await getPrisma().smsBroadcast.count()).toBe(1);
+  });
+
+  it("a DIFFERENT idempotencyKey the same day is a new batch (2 more DELAY rows) — designed behavior", async () => {    await seedBroadcastDay();
     const admin = await createStaff(Role.ADMIN);
     const cookie = await cookieFor(admin);
     const { POST: broadcastRoute } = await import("@/app/api/admin/sms/broadcast/route");

@@ -3,7 +3,7 @@ import { z } from "zod";
 import { getPrisma } from "@/lib/db";
 import { errorResponse, ok } from "@/lib/api/http";
 import { requireStaff, withRefreshedSession } from "@/lib/auth/guard";
-import { logAction } from "@/lib/audit/logAction";
+import { logActionSafe } from "@/lib/audit/logAction";
 import { getClientIp } from "@/lib/security/clientIp";
 import { checkRateLimit, RateLimitError } from "@/lib/security/rateLimit";
 import { localized, type LocalizedField } from "@/lib/i18n/localized";
@@ -165,7 +165,7 @@ export async function GET(
   const start = (page - 1) * limit;
   const paged = items.slice(start, start + limit);
 
-  await logAction(
+  await logActionSafe(
     { type: AuditActorType.STAFF, userId: guard.user.id },
     AuditAction.PATIENT_RECORD_VIEWED,
     "Patient",

@@ -6,7 +6,7 @@ import {
   requireStaff,
   withRefreshedSession,
 } from "@/lib/auth/guard";
-import { logAction } from "@/lib/audit/logAction";
+import { logActionSafe } from "@/lib/audit/logAction";
 import { getClientIp } from "@/lib/security/clientIp";
 import { checkRateLimit, RateLimitError } from "@/lib/security/rateLimit";
 import { bookSlot, SlotConflictError } from "@/lib/booking/bookSlot";
@@ -91,7 +91,7 @@ export async function GET(request: NextRequest) {
     select: appointmentRowSelect,
   });
 
-  await logAction(
+  await logActionSafe(
     { type: AuditActorType.STAFF, userId: guard.user.id },
     AuditAction.PATIENT_RECORD_VIEWED,
     "Appointment",
@@ -211,7 +211,7 @@ export async function POST(request: NextRequest) {
     }),
   ]);
 
-  await logAction(
+  await logActionSafe(
     { type: AuditActorType.STAFF, userId: guard.user.id },
     // No dedicated creation action exists; the appointment is created
     // CONFIRMED, so APPOINTMENT_CONFIRMED is the semantically correct trace.

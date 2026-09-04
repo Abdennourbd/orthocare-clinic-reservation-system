@@ -6,7 +6,7 @@ import {
   requireStaff,
   withRefreshedSession,
 } from "@/lib/auth/guard";
-import { logAction } from "@/lib/audit/logAction";
+import { logActionSafe } from "@/lib/audit/logAction";
 import { getClientIp } from "@/lib/security/clientIp";
 import { checkRateLimit, RateLimitError } from "@/lib/security/rateLimit";
 import { sendMessage } from "@/lib/messaging/index";
@@ -87,7 +87,7 @@ export async function POST(request: NextRequest) {
   });
 
   if (message !== null) {
-    await logAction(
+    await logActionSafe(
       { type: AuditActorType.STAFF, userId: guard.user.id },
       AuditAction.SMS_SENT,
       "SmsMessage",

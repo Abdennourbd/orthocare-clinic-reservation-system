@@ -9,7 +9,7 @@ import {
   validatePasswordPolicy,
   verifyPassword,
 } from "@/lib/auth/password";
-import { logAction } from "@/lib/audit/logAction";
+import { logActionSafe } from "@/lib/audit/logAction";
 import { changePasswordSchema } from "@/schemas/auth";
 import { AuditAction, AuditActorType } from "@/generated/prisma/client";
 
@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
     },
   });
 
-  await logAction(
+  await logActionSafe(
     { type: AuditActorType.STAFF, userId: user.id },
     AuditAction.PASSWORD_RESET,
     "User",

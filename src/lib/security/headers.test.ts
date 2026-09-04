@@ -73,9 +73,11 @@ describe("production vs development CSP", () => {
     const rule = mod.SECURITY_HEADERS.find(
       (r: { source: string }) => r.source === "/(.*)",
     );
+    if (!rule) throw new Error("missing global header rule");
     const header = rule.headers.find(
       (h: { key: string }) => h.key === "Content-Security-Policy",
     );
+    if (!header) throw new Error("missing CSP header");
     return header.value as string;
   }
 

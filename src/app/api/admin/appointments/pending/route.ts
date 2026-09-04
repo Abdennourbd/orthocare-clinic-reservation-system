@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { getPrisma } from "@/lib/db";
 import { errorResponse, ok } from "@/lib/api/http";
 import { requireStaff, withRefreshedSession } from "@/lib/auth/guard";
-import { logAction } from "@/lib/audit/logAction";
+import { logActionSafe } from "@/lib/audit/logAction";
 import { getClientIp } from "@/lib/security/clientIp";
 import { checkRateLimit, RateLimitError } from "@/lib/security/rateLimit";
 import { APPOINTMENTS_READ_RATE_LIMIT } from "@/lib/booking/rateLimits";
@@ -44,10 +44,14 @@ export async function GET(request: NextRequest) {
   // disagree about when a pending booking dies.
   const policy = await readBookingPolicy();
 
-  // Named fields only, never a model spread.
+  // Named fields only, never a model spread. Bounded: the queue UI pages
+  // through the oldest first, and an unhealthy backlog (lapsed expiry cron)
+  // must not turn the receptionist's most-opened screen into an unbounded
+  // scan — the [status, createdAt] index serves this exact filter+order.
   const pending = await getPrisma().appointment.findMany({
     where: { status: AppointmentStatus.PENDING },
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    take: 200,
     select: {
       id: true,
       createdAt: true,
@@ -79,7 +83,7 @@ export async function GET(request: NextRequest) {
     };
   });
 
-  await logAction(
+  await logActionSafe(
     { type: AuditActorType.STAFF, userId: guard.user.id },
     AuditAction.PATIENT_RECORD_VIEWED,
     "Appointment",

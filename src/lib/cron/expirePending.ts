@@ -10,7 +10,7 @@ import { localized, type LocalizedField } from "@/lib/i18n/localized";
 import { sendMessage } from "@/lib/messaging";
 import { localParts } from "@/lib/messaging/format";
 import { notifyPendingExpired } from "@/lib/messaging/notifications";
-import { logAction, SYSTEM_ACTOR } from "@/lib/audit/logAction";
+import { logActionSafe, SYSTEM_ACTOR } from "@/lib/audit/logAction";
 import { readBookingPolicy } from "@/lib/booking/policy";
 import {
   releaseSlot,
@@ -90,7 +90,7 @@ export async function expirePendingBookings(nowUTC: Date = new Date()): Promise<
       cancelReason: CancelReason.AUTO_EXPIRED,
     });
 
-    await logAction(SYSTEM_ACTOR, AuditAction.APPOINTMENT_AUTO_CANCELLED, "Appointment", a.id, {
+    await logActionSafe(SYSTEM_ACTOR, AuditAction.APPOINTMENT_AUTO_CANCELLED, "Appointment", a.id, {
       cancelReason: CancelReason.AUTO_EXPIRED,
     });
     expired++;

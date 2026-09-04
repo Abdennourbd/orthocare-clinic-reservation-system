@@ -8,7 +8,7 @@ import {
 import { localized, type LocalizedField } from "@/lib/i18n/localized";
 import { sendMessage } from "@/lib/messaging";
 import { localParts } from "@/lib/messaging/format";
-import { logAction, SYSTEM_ACTOR } from "@/lib/audit/logAction";
+import { logActionSafe, SYSTEM_ACTOR } from "@/lib/audit/logAction";
 
 // Task 9 — reminder cron (`/api/cron/reminders`).
 //
@@ -70,7 +70,7 @@ export async function sendReminders(nowUTC: Date = new Date()): Promise<number> 
         where: { id: a.id },
         data: { reminderSentAt: nowUTC },
       });
-      await logAction(SYSTEM_ACTOR, AuditAction.SMS_SENT, "Appointment", a.id, {
+      await logActionSafe(SYSTEM_ACTOR, AuditAction.SMS_SENT, "Appointment", a.id, {
         messageType: SmsMessageType.REMINDER,
       });
       sent++;

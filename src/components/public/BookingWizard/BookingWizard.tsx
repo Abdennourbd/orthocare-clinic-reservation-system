@@ -146,13 +146,22 @@ export default function BookingWizard({
   const [submitting, setSubmitting] = useState(false);
   const [appointmentRef, setAppointmentRef] = useState<string | null>(null);
 
-  /** Per-day slot cache: a browsed day never refetches. */
+  /** Per-day slot cache, keyed by service+date: a browsed day never refetches,
+   *  and a stale in-flight fetch for a PREVIOUS service can never overwrite
+   *  the current service's slots (different key namespace). */
   const slotsCache = useRef<Map<string, SlotResponse>>(new Map());
   /** Mirrors `activeDate` so async slot fetches know which day to render. */
   const activeDateRef = useRef(activeDate);
   useEffect(() => {
     activeDateRef.current = activeDate;
   }, [activeDate]);
+  /** Mirrors `serviceId` so stale in-flight fetches for a previous service
+   *  never pollute the current service's watch suggestions. */
+  const serviceIdRef = useRef(serviceId);
+  useEffect(() => {
+    serviceIdRef.current = serviceId;
+  }, [serviceId]);
+  const cacheKey = (svcId: string, d: string) => `${svcId}:${d}`;
 
   const selectedService = useMemo(
     () => services.find((s) => s.id === serviceId) ?? null,
@@ -170,8 +179,11 @@ export default function BookingWizard({
         );
         if (!res.ok) throw new Error(`slots: ${res.status}`);
         const body: SlotResponse = await res.json();
-        slotsCache.current.set(d, body);
-        if (body.available.length === 0) {
+        // Keyed by service: a stale response for a previous service lands in
+        // its own namespace and can never overwrite the current one. Watch
+        // suggestions only count when the fetch is still current.
+        slotsCache.current.set(cacheKey(svcId, d), body);
+        if (body.available.length === 0 && svcId === serviceIdRef.current) {
           setSuggestedWatchDates((prev) =>
             prev.includes(d) ? prev : [...prev, d],
           );
@@ -187,7 +199,7 @@ export default function BookingWizard({
   /** Render the slots for the active day (cache hit → instant). */
   const loadSlots = useCallback(
     async (svcId: string, d: string) => {
-      const cached = slotsCache.current.get(d);
+      const cached = slotsCache.current.get(cacheKey(svcId, d));
       if (cached) {
         setSlotsError(false);
         setSlot(null);
@@ -223,7 +235,7 @@ export default function BookingWizard({
       );
       await Promise.all(
         days.map(async (d) => {
-          const cached = slotsCache.current.get(d);
+          const cached = slotsCache.current.get(cacheKey(svcId, d));
           if (cached) {
             if (d === activeDateRef.current) {
               setSlots(cached);
@@ -240,7 +252,7 @@ export default function BookingWizard({
         }),
       );
       // If the active day's slots never loaded (all failed), stop the spinner.
-      if (!slotsCache.current.has(activeDateRef.current)) {
+      if (!slotsCache.current.has(cacheKey(svcId, activeDateRef.current))) {
         setSlotsError(true);
         setSlots(null);
         setSlotsLoading(false);

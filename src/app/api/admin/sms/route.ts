@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { getPrisma } from "@/lib/db";
 import { errorResponse, ok } from "@/lib/api/http";
 import { requireStaff, withRefreshedSession } from "@/lib/auth/guard";
-import { logAction } from "@/lib/audit/logAction";
+import { logActionSafe } from "@/lib/audit/logAction";
 import { getClientIp } from "@/lib/security/clientIp";
 import { checkRateLimit, RateLimitError } from "@/lib/security/rateLimit";
 import { SMS_READ_RATE_LIMIT } from "@/lib/messaging/rateLimits";
@@ -79,7 +79,7 @@ export async function GET(request: NextRequest) {
     select: smsMessageRowSelect,
   });
 
-  await logAction(
+  await logActionSafe(
     { type: AuditActorType.STAFF, userId: guard.user.id },
     AuditAction.PATIENT_RECORD_VIEWED,
     "SmsMessage",

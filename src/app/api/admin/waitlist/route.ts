@@ -6,7 +6,7 @@ import {
   requireStaff,
   withRefreshedSession,
 } from "@/lib/auth/guard";
-import { logAction } from "@/lib/audit/logAction";
+import { logActionSafe } from "@/lib/audit/logAction";
 import { getClientIp } from "@/lib/security/clientIp";
 import { checkRateLimit, RateLimitError } from "@/lib/security/rateLimit";
 import {
@@ -130,7 +130,7 @@ export async function GET(request: NextRequest) {
     return errorResponse(400, "INVALID_CURSOR", "Curseur invalide.");
   }
 
-  await logAction(
+  await logActionSafe(
     { type: AuditActorType.STAFF, userId: guard.user.id },
     AuditAction.PATIENT_RECORD_VIEWED,
     "WaitlistEntry",
@@ -237,7 +237,7 @@ export async function POST(request: NextRequest) {
     select: waitlistRowSelect,
   });
 
-  await logAction(
+  await logActionSafe(
     { type: AuditActorType.STAFF, userId: guard.user.id },
     AuditAction.WAITLIST_ENTRY_ADDED,
     "WaitlistEntry",

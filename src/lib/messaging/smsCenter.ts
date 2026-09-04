@@ -14,7 +14,7 @@ import {
   formatClinicLocalTime,
   getClinicDayBoundsUTC,
 } from "@/lib/time/clinicTime";
-import { logAction } from "@/lib/audit/logAction";
+import { logActionSafe } from "@/lib/audit/logAction";
 
 // Task 16 — SMS Center domain: the day-view delay broadcast.
 //
@@ -176,23 +176,63 @@ export async function previewBroadcast(
 }
 
 /**
+ * Open the batch row for a broadcast: create it, or on idempotency-key
+ * collision return the existing row. A COMPLETE existing batch means
+ * `alreadySent`; an INCOMPLETE one resumes from the first unprocessed
+ * recipient offset.
+ */
+async function openBroadcast(
+  prisma: ReturnType<typeof getPrisma>,
+  input: { date: string; delayMinutes: number; idempotencyKey: string; sentById: string },
+  recipientCount: number,
+): Promise<
+  | { alreadySent: true; broadcast: SmsBroadcast }
+  | { alreadySent: false; broadcast: SmsBroadcast; startOffset: number }
+> {
+  try {
+    const broadcast = await prisma.smsBroadcast.create({
+      data: {
+        date: input.date,
+        delayMinutes: input.delayMinutes,
+        idempotencyKey: input.idempotencyKey,
+        recipientCount,
+        sentById: input.sentById,
+      },
+    });
+    return { alreadySent: false, broadcast, startOffset: 0 };
+  } catch (e) {
+    if (!isUniqueViolation(e)) throw e;
+    const existing = await prisma.smsBroadcast.findFirst({
+      where: { idempotencyKey: input.idempotencyKey },
+    });
+    if (!existing) throw e;
+    const done =
+      existing.sentCount + existing.suppressedCount + existing.failedCount;
+    if (done >= existing.recipientCount) {
+      return { alreadySent: true, broadcast: existing };
+    }
+    return { alreadySent: false, broadcast: existing, startOffset: done };
+  }
+}
+
+/**
  * Run the delay broadcast for `date` with `delayMinutes`.
  *
  * Algorithm:
- *  1. loadAudience → recipientCount.
+ *  1. loadAudience → recipientCount (deterministic startTime order).
  *  2. Create the SmsBroadcast row (unique idempotencyKey). On P2002 the batch
- *     was already sent — return the existing row's counts with
- *     `alreadySent: true` and ZERO sends.
+ *     was already started — if its counters show every recipient processed,
+ *     return the existing counts with `alreadySent: true` and ZERO sends;
+ *     if it is INCOMPLETE (a previous run died mid-loop on a serverless
+ *     timeout), RESUME from the first unprocessed recipient instead of
+ *     abandoning the tail. The deterministic audience order makes the offset
+ *     (`sent+suppressed+failed`) stable across attempts.
  *  3. Send sequentially (NOT Promise.all — one provider request at a time is
  *     gentle on the provider's rate limits; a whole clinic's phones firing at
  *     once would trip them). The dispatcher owns the opt-out gate: DELAY is
  *     non-transactional, so opted-out/inactive patients come back as null.
  *  4. Persist the three counters on the batch row.
  *  5. Audit (ids/counters/enums only — never names/phones/bodies).
- *
- * Create-then-send means a crash mid-send leaves the batch with partial
- * counts — acceptable for v1: the idempotency key still prevents a resend by
- * a retrying client, and the counter update makes the partial state visible.
  */
 export async function runBroadcast(input: {
   date: string;
@@ -210,39 +250,24 @@ export async function runBroadcast(input: {
   const audience = await loadAudience(input.date);
   const recipientCount = audience.recipients.length;
 
-  let broadcast: SmsBroadcast;
-  try {
-    broadcast = await prisma.smsBroadcast.create({
-      data: {
-        date: input.date,
-        delayMinutes: input.delayMinutes,
-        idempotencyKey: input.idempotencyKey,
-        recipientCount,
-        sentById: input.sentById,
-      },
-    });
-  } catch (e) {
-    if (isUniqueViolation(e)) {
-      const existing = await prisma.smsBroadcast.findFirst({
-        where: { idempotencyKey: input.idempotencyKey },
-      });
-      if (existing) {
-        return {
-          batchId: existing.id,
-          sentCount: existing.sentCount,
-          suppressedCount: existing.suppressedCount,
-          failedCount: existing.failedCount,
-          alreadySent: true,
-        };
-      }
-    }
-    throw e;
+  const opened = await openBroadcast(prisma, input, recipientCount);
+  if (opened.alreadySent) {
+    return {
+      batchId: opened.broadcast.id,
+      sentCount: opened.broadcast.sentCount,
+      suppressedCount: opened.broadcast.suppressedCount,
+      failedCount: opened.broadcast.failedCount,
+      alreadySent: true,
+    };
   }
+  const { broadcast, startOffset } = opened;
 
-  let sentCount = 0;
-  let suppressedCount = 0;
-  let failedCount = 0;
-  for (const recipient of audience.recipients) {
+  // Counters resume from the existing row so a resumed run accumulates
+  // (a fresh run starts from zeros, which is what a new row holds).
+  let sentCount = broadcast.sentCount;
+  let suppressedCount = broadcast.suppressedCount;
+  let failedCount = broadcast.failedCount;
+  for (const recipient of audience.recipients.slice(startOffset)) {
     // NEVER pass appointmentId here: the (appointmentId, type) unique index
     // would turn a second delay broadcast on the same day into silent
     // no-ops (see SmsMessage comment in schema.prisma).
@@ -274,7 +299,7 @@ export async function runBroadcast(input: {
     data: { sentCount, suppressedCount, failedCount },
   });
 
-  await logAction(
+  await logActionSafe(
     { type: AuditActorType.STAFF, userId: input.sentById },
     AuditAction.SMS_SENT,
     "SmsBroadcast",

@@ -6,7 +6,7 @@ import {
   requireStaff,
   withRefreshedSession,
 } from "@/lib/auth/guard";
-import { logAction } from "@/lib/audit/logAction";
+import { logActionSafe } from "@/lib/audit/logAction";
 import { getClientIp } from "@/lib/security/clientIp";
 import { checkRateLimit, RateLimitError } from "@/lib/security/rateLimit";
 import {
@@ -114,7 +114,7 @@ export async function PATCH(request: NextRequest) {
     create: { key, value: storedValue },
   });
 
-  await logAction(
+  await logActionSafe(
     { type: AuditActorType.STAFF, userId: guard.user.id },
     AuditAction.SETTINGS_UPDATED,
     "Setting",

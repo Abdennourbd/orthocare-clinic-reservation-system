@@ -4,6 +4,7 @@ import { onSlotFreed, type SlotFreedEvent } from "@/lib/booking/events";
 import { toClinicLocalDateString } from "@/lib/time/clinicTime";
 import { localized, type LocalizedField } from "@/lib/i18n/localized";
 import { sendMessage } from "@/lib/messaging";
+import { reportError } from "@/lib/monitoring/reportError";
 import { localParts } from "@/lib/messaging/format";
 import type { MessageProvider } from "@/lib/messaging/provider";
 
@@ -115,17 +116,15 @@ export async function handleSlotFreed(
           data: { notifiedAt: new Date() },
         });
         notified++;
-      } catch {
-        // PII-safe: entry id only, never the error object (a Prisma or
-        // provider error can serialize patient field values).
-        console.warn(
-          JSON.stringify({ event: "waitlist_notify_entry_failed", entryId: entry.id }),
-        );
+      } catch (e) {
+        // PII-safe: entry id only, never the patient or the error object
+        // (a Prisma/provider error can serialize field values).
+        reportError("waitlist_notify_entry_failed", e);
       }
     }
     return notified;
-  } catch {
-    console.warn(JSON.stringify({ event: "waitlist_handle_failed" }));
+  } catch (e) {
+    reportError("waitlist_handle_failed", e);
     return 0;
   }
 }

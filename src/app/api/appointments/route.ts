@@ -7,6 +7,7 @@ import { SlotConflictError, PendingLimitError } from "@/lib/booking/bookSlot";
 import { validateWatchDates } from "@/lib/booking/watchDates";
 import { readBookingPolicy, readConsentVersion } from "@/lib/booking/policy";
 import { notifyBookingCreated } from "@/lib/messaging/notifyBookingCreated";
+import { reportError } from "@/lib/monitoring/reportError";
 import { ok, errorResponse } from "@/lib/api/http";
 import { isSameSiteOrigin } from "@/lib/security/origin";
 
@@ -142,7 +143,7 @@ export async function POST(request: Request): Promise<Response> {
     try {
       await notifyBookingCreated(appointment.id);
     } catch (e) {
-      console.error("notifyBookingCreated failed", e);
+      reportError("notify_booking_created_failed", e);
     }
 
     return ok(

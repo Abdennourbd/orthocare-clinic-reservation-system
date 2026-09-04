@@ -92,9 +92,18 @@ async function loadDayData(
   const { startUTC: dayStartUTC, endUTC: dayEndUTC } =
     getClinicDayBoundsUTC(localDateString);
 
-  const workingHoursSetting = await tx.setting.findUnique({ where: { key: "workingHours" } });
-  const slotConfigSetting = await tx.setting.findUnique({ where: { key: "slotConfig" } });
-  const bookingPolicySetting = await tx.setting.findUnique({ where: { key: "bookingPolicy" } });
+  // One round trip for all three settings (they change only when an admin
+  // edits them). A single findMany is used instead of three findUniques —
+  // and instead of Promise.all, which interactive-transaction clients do
+  // not support for concurrent queries on the same pinned connection.
+  const settings = await tx.setting.findMany({
+    where: { key: { in: ["workingHours", "slotConfig", "bookingPolicy"] } },
+  });
+  // Row-shaped lookups so the `as*()` calls below keep working unchanged.
+  const byKey = new Map(settings.map((s) => [s.key, { value: s.value }]));
+  const workingHoursSetting = byKey.get("workingHours");
+  const slotConfigSetting = byKey.get("slotConfig");
+  const bookingPolicySetting = byKey.get("bookingPolicy");
 
   const slotConfig = asSlotConfig(slotConfigSetting?.value);
 

@@ -6,7 +6,7 @@ import {
   requireStaff,
   withRefreshedSession,
 } from "@/lib/auth/guard";
-import { logAction } from "@/lib/audit/logAction";
+import { logActionSafe } from "@/lib/audit/logAction";
 import { getClientIp } from "@/lib/security/clientIp";
 import { checkRateLimit, RateLimitError } from "@/lib/security/rateLimit";
 import { normalizePhoneE164 } from "@/lib/phone/normalize";
@@ -205,7 +205,7 @@ export async function GET(request: NextRequest) {
     }),
   ]);
 
-  await logAction(
+  await logActionSafe(
     { type: AuditActorType.STAFF, userId: guard.user.id },
     AuditAction.PATIENT_RECORD_VIEWED,
     "Patient",
@@ -290,7 +290,7 @@ export async function POST(request: NextRequest) {
     // See the header comment: this read of other patients' identity must be
     // audited exactly like GET's search is. `detail` is counters/enums
     // only — never a candidate's name or phone, never the submitted values.
-    await logAction(
+    await logActionSafe(
       { type: AuditActorType.STAFF, userId: guard.user.id },
       AuditAction.PATIENT_RECORD_VIEWED,
       "Patient",
@@ -329,7 +329,7 @@ export async function POST(request: NextRequest) {
   if (phoneMatches.length > 0 && parsed.data.phoneSharingAcknowledged !== true) {
     // Same audit discipline as the NAME branch above — counters and enums
     // only, never the candidate's or the submitted patient's name/phone.
-    await logAction(
+    await logActionSafe(
       { type: AuditActorType.STAFF, userId: guard.user.id },
       AuditAction.PATIENT_RECORD_VIEWED,
       "Patient",
@@ -397,7 +397,7 @@ export async function POST(request: NextRequest) {
     select: patientListSelect,
   });
 
-  await logAction(
+  await logActionSafe(
     { type: AuditActorType.STAFF, userId: guard.user.id },
     AuditAction.PATIENT_CREATED,
     "Patient",

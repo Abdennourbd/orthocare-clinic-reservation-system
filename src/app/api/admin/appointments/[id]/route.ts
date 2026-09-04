@@ -6,7 +6,7 @@ import {
   requireStaff,
   withRefreshedSession,
 } from "@/lib/auth/guard";
-import { logAction } from "@/lib/audit/logAction";
+import { logActionSafe } from "@/lib/audit/logAction";
 import { getClientIp } from "@/lib/security/clientIp";
 import { checkRateLimit, RateLimitError } from "@/lib/security/rateLimit";
 import { releaseSlot } from "@/lib/booking/releaseSlot";
@@ -106,7 +106,7 @@ export async function GET(
   // A single appointment exposes a patient's identity (name + phone) —
   // audited like every other read of patient-identifying data in this route
   // family. Detail is a scope label only.
-  await logAction(
+  await logActionSafe(
     { type: AuditActorType.STAFF, userId: guard.user.id },
     AuditAction.PATIENT_RECORD_VIEWED,
     "Appointment",
@@ -192,7 +192,7 @@ export async function PATCH(
   if (action === "CONFIRM" && existing.status === AppointmentStatus.CONFIRMED) {
     // The no-op still exposes patient PII in its response — audited like the
     // GET detail above, with an idempotentConfirm marker.
-    await logAction(
+    await logActionSafe(
       { type: AuditActorType.STAFF, userId: guard.user.id },
       AuditAction.PATIENT_RECORD_VIEWED,
       "Appointment",
@@ -288,7 +288,7 @@ export async function PATCH(
     await runSideEffect(() => SMS_SENDERS[senderName](id));
   }
 
-  await logAction(
+  await logActionSafe(
     { type: AuditActorType.STAFF, userId: guard.user.id },
     transition.auditAction,
     "Appointment",

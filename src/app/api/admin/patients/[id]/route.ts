@@ -6,7 +6,7 @@ import {
   requireStaff,
   withRefreshedSession,
 } from "@/lib/auth/guard";
-import { logAction } from "@/lib/audit/logAction";
+import { logActionSafe } from "@/lib/audit/logAction";
 import { getClientIp } from "@/lib/security/clientIp";
 import { checkRateLimit, RateLimitError } from "@/lib/security/rateLimit";
 import { normalizePhoneE164 } from "@/lib/phone/normalize";
@@ -105,7 +105,7 @@ export async function GET(
     return errorResponse(404, "NOT_FOUND", "Patient introuvable.");
   }
 
-  await logAction(
+  await logActionSafe(
     { type: AuditActorType.STAFF, userId: guard.user.id },
     AuditAction.PATIENT_RECORD_VIEWED,
     "Patient",
@@ -264,7 +264,7 @@ export async function PATCH(
       dualMatches.length > 0 &&
       (data.duplicateAcknowledged !== true || data.phoneSharingAcknowledged !== true)
     ) {
-      await logAction(
+      await logActionSafe(
         { type: AuditActorType.STAFF, userId: guard.user.id },
         AuditAction.PATIENT_RECORD_VIEWED,
         "Patient",
@@ -293,7 +293,7 @@ export async function PATCH(
     }
 
     if (nameChanged && nameMatches.length > 0 && data.duplicateAcknowledged !== true) {
-      await logAction(
+      await logActionSafe(
         { type: AuditActorType.STAFF, userId: guard.user.id },
         AuditAction.PATIENT_RECORD_VIEWED,
         "Patient",
@@ -321,7 +321,7 @@ export async function PATCH(
     }
 
     if (phoneChanged && phoneMatches.length > 0 && data.phoneSharingAcknowledged !== true) {
-      await logAction(
+      await logActionSafe(
         { type: AuditActorType.STAFF, userId: guard.user.id },
         AuditAction.PATIENT_RECORD_VIEWED,
         "Patient",
@@ -391,7 +391,7 @@ export async function PATCH(
     select: patientRecordSelect,
   });
 
-  await logAction(
+  await logActionSafe(
     { type: AuditActorType.STAFF, userId: guard.user.id },
     AuditAction.PATIENT_UPDATED,
     "Patient",

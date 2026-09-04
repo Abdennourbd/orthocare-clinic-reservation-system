@@ -8,7 +8,7 @@ import { localized, type LocalizedField } from "@/lib/i18n/localized";
 import { sendMessage } from "@/lib/messaging";
 import { localParts } from "@/lib/messaging/format";
 import { notifyNoShowAlert } from "@/lib/messaging/notifications";
-import { logAction, SYSTEM_ACTOR } from "@/lib/audit/logAction";
+import { logActionSafe, SYSTEM_ACTOR } from "@/lib/audit/logAction";
 
 // Task 9 — no-show follow-up cron (`/api/cron/no-show-followup`).
 //
@@ -81,7 +81,7 @@ export async function markNoShows(nowUTC: Date = new Date()): Promise<number> {
       startTime: a.startTime.toISOString(),
     });
 
-    await logAction(SYSTEM_ACTOR, AuditAction.APPOINTMENT_NO_SHOW, "Appointment", a.id, {
+    await logActionSafe(SYSTEM_ACTOR, AuditAction.APPOINTMENT_NO_SHOW, "Appointment", a.id, {
       noShowAt: nowUTC.toISOString(),
     });
     marked++;

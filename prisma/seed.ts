@@ -5,6 +5,7 @@ import * as argon2 from "argon2";
 import dotenv from "dotenv";
 import { CLINIC_IDENTITY } from "../src/lib/settings/clinicIdentity";
 import { normalizeName } from "../src/lib/patients/duplicates";
+import { validatePasswordPolicy } from "../src/lib/auth/password";
 
 dotenv.config();
 
@@ -21,6 +22,10 @@ async function main() {
   let adminUserId = null;
   if (!adminPassword || adminPassword.length < 12) {
     console.warn("ADMIN_INITIAL_PASSWORD must be at least 12 characters. Skipping admin user creation.");
+  } else if (!validatePasswordPolicy(adminPassword).ok) {
+    // A guessable seed password defeats the forced rotation: reject obvious
+    // defaults up front instead of creating a weak admin account.
+    console.warn("ADMIN_INITIAL_PASSWORD fails the password policy (too common?). Skipping admin user creation.");
   } else {
     const passwordHash = await argon2.hash(adminPassword);
     const admin = await prisma.user.upsert({

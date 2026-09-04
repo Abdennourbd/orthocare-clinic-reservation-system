@@ -3,7 +3,7 @@ import { z } from "zod";
 import { getPrisma } from "@/lib/db";
 import { errorResponse, ok } from "@/lib/api/http";
 import { requireStaff, withRefreshedSession } from "@/lib/auth/guard";
-import { logAction } from "@/lib/audit/logAction";
+import { logActionSafe } from "@/lib/audit/logAction";
 import { AuditAction, AuditActorType, type Prisma } from "@/generated/prisma/client";
 
 // Task 12 — ADMIN-only audit viewer API (plan.md §Audit logging).
@@ -72,7 +72,7 @@ export async function GET(request: NextRequest) {
     }),
   ]);
 
-  await logAction(
+  await logActionSafe(
     { type: AuditActorType.STAFF, userId: guard.user.id },
     AuditAction.AUDIT_VIEWED,
     "AuditLog",

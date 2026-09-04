@@ -6,7 +6,7 @@ import {
   requireStaff,
   withRefreshedSession,
 } from "@/lib/auth/guard";
-import { logAction } from "@/lib/audit/logAction";
+import { logActionSafe } from "@/lib/audit/logAction";
 import { getClientIp } from "@/lib/security/clientIp";
 import { checkRateLimit, RateLimitError } from "@/lib/security/rateLimit";
 import {
@@ -14,7 +14,7 @@ import {
   CLOSURES_WRITE_RATE_LIMIT,
 } from "@/lib/content/rateLimits";
 import { closureCreateSchema } from "@/schemas/closures";
-import { getClinicDayBoundsUTC } from "@/lib/time/clinicTime";
+import { getClinicDayBoundsUTC, toClinicLocalDateString } from "@/lib/time/clinicTime";
 import { appointmentOverlapsClosure } from "@/lib/closures/window";
 import { AuditAction, AuditActorType, AppointmentStatus } from "@/generated/prisma/client";
 
@@ -53,8 +53,15 @@ export async function GET(request: NextRequest) {
     throw e;
   }
 
+  // Bounded list: expired closures fall out of the window (history lives in
+  // the audit trail), and `take` caps the payload if the table ever grows.
+  const { startUTC: todayStartUTC } = getClinicDayBoundsUTC(
+    toClinicLocalDateString(new Date()),
+  );
   const closures = await getPrisma().scheduleException.findMany({
+    where: { endDate: { gte: todayStartUTC } },
     orderBy: { startDate: "asc" },
+    take: 200,
     select: closureRowSelect,
   });
 
@@ -154,7 +161,7 @@ export async function POST(request: NextRequest) {
     ),
   );
 
-  await logAction(
+  await logActionSafe(
     { type: AuditActorType.STAFF, userId: guard.user.id },
     AuditAction.CLOSURE_CREATED,
     "ScheduleException",

@@ -1,5 +1,6 @@
 import type { Prisma } from "@/generated/prisma/client";
 import { toClinicLocalDateString } from "@/lib/time/clinicTime";
+import { reportError } from "@/lib/monitoring/reportError";
 
 // Task 17 — book-on-claim cleanup (user-approved box 6 ruling).
 //
@@ -47,7 +48,7 @@ export async function deactivateClaimedWaitlistEntries(
     });
     return claimedIds.length;
   } catch (e) {
-    console.error("waitlist claim cleanup failed", e);
+    reportError("waitlist_claim_cleanup_failed", e);
     return 0;
   }
 }

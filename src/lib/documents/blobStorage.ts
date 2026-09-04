@@ -2,6 +2,7 @@ import { del, get, put } from "@vercel/blob";
 import { randomUUID } from "node:crypto";
 import { BlobNotConfiguredError, BlobOperationError } from "@/lib/documents/errors";
 import type { AllowedExtension, AllowedMimeType } from "@/lib/documents/mime";
+import { reportError } from "@/lib/monitoring/reportError";
 
 // Task 15 step 2 — the ONLY module in this repo allowed to `import … from
 // "@vercel/blob"` (task-15.md §Contexte "Comment tester un upload sans
@@ -39,10 +40,7 @@ function readToken(): string {
  * the SDK error's own message, which may itself echo the pathname
  * (`blobKey`) it operated on. Never the token, ever. */
 function logOperationFailure(operation: "put" | "get" | "delete", error: unknown): void {
-  console.error("[documents] blobStorage operation failed", {
-    operation,
-    errorName: error instanceof Error ? error.name : typeof error,
-  });
+  reportError(`documents_blob_${operation}_failed`, error);
 }
 
 /** A valid Prisma cuid: lower-case alphanumerics only, no `/`, `\`, `.` or
