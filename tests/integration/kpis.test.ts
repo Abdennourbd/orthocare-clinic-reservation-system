@@ -88,6 +88,9 @@ async function seedWeek() {
       lastNameNormalized: "kpi",
       phone: "0550111222",
       phoneE164: "+213550111222",
+      // Pin inside the week: on Fridays (clinic closed) "now" falls outside
+      // the default Sat→Thu range and newPatients would read 0.
+      createdAt: localStart(from, "10:00"),
     },
   });
 
