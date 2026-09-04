@@ -25,6 +25,20 @@ type HeaderRule = NonNullable<
 >;
 type Header = HeaderRule[number];
 
+/**
+ * `unsafe-eval` exists only for `next dev` (eval-source-map); production
+ * builds never need it, so the production CSP drops it. `unsafe-inline`
+ * stays in both: Next.js emits inline RSC scripts without a nonce unless
+ * nonce plumbing is configured (a follow-up, not this task).
+ * Evaluated at import time — `next.config.ts` loads this module at startup
+ * with the deployment's real NODE_ENV.
+ */
+function scriptSrc(): string {
+  return process.env.NODE_ENV === "production"
+    ? "script-src 'self' 'unsafe-inline'"
+    : "script-src 'self' 'unsafe-inline' 'unsafe-eval'";
+}
+
 export const SECURITY_HEADERS: Header[] = [
   {
     source: "/(.*)",
@@ -40,7 +54,7 @@ export const SECURITY_HEADERS: Header[] = [
         key: "Content-Security-Policy",
         value: [
           "default-src 'self'",
-          "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+          scriptSrc(),
           "style-src 'self' 'unsafe-inline'",
           "img-src 'self' data:",
           "font-src 'self'",
@@ -101,7 +115,7 @@ export const NO_REFERRER_HEADERS: Header[] = [
         key: "Content-Security-Policy",
         value: [
           "default-src 'self'",
-          "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+          scriptSrc(),
           "style-src 'self' 'unsafe-inline'",
           "img-src 'self' data:",
           "font-src 'self'",

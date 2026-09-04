@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi, afterEach } from "vitest";
 import { NO_REFERRER_HEADERS, SECURITY_HEADERS } from "./headers";
 
 type HeaderRule = {
@@ -57,5 +57,36 @@ describe("NO_REFERRER_HEADERS (self-service token pages)", () => {
 
   it("matches the token-page route only", () => {
     expect(TOKEN_RULE.source).toBe("/:locale/appointment/:token(.*)");
+  });
+});
+
+describe("production vs development CSP", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
+
+  async function cspFor(env: string): Promise<string> {
+    vi.stubEnv("NODE_ENV", env);
+    vi.resetModules();
+    const mod = await import("./headers");
+    const rule = mod.SECURITY_HEADERS.find(
+      (r: { source: string }) => r.source === "/(.*)",
+    );
+    const header = rule.headers.find(
+      (h: { key: string }) => h.key === "Content-Security-Policy",
+    );
+    return header.value as string;
+  }
+
+  it("drops unsafe-eval in production (dev-only need)", async () => {
+    const csp = await cspFor("production");
+    expect(csp).not.toContain("unsafe-eval");
+    expect(csp).toContain("script-src 'self' 'unsafe-inline'");
+  });
+
+  it("keeps unsafe-eval outside production (next dev needs it)", async () => {
+    const csp = await cspFor("development");
+    expect(csp).toContain("unsafe-eval");
   });
 });
