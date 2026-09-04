@@ -237,6 +237,20 @@ describe("POST /api/admin/sms/single", () => {
     expect(await getPrisma().smsMessage.count()).toBe(0);
   });
 
+  it("opted-out patient -> 404 and NO SmsMessage row (opt-out enforced on manual sends)", async () => {
+    const admin = await createStaff(Role.ADMIN);
+    const cookie = await cookieFor(admin);
+    const patient = await createPatient({ firstName: "Lina", lastName: "Belaid", phone: "0550400105", messagingOptOut: true });
+    const { POST: singleRoute } = await import("@/app/api/admin/sms/single/route");
+
+    const response = await singleRoute(
+      postRequest("/api/admin/sms/single", { patientId: patient.id, body: "Ne doit jamais partir." }, cookie),
+    );
+    expect(response.status).toBe(404);
+    expect((await response.json()).error.code).toBe("NOT_FOUND");
+    expect(await getPrisma().smsMessage.count()).toBe(0);
+  });
+
   it("empty body -> 400 VALIDATION_ERROR, no row", async () => {
     const admin = await createStaff(Role.ADMIN);
     const cookie = await cookieFor(admin);
@@ -383,8 +397,9 @@ describe("POST /api/admin/sms/broadcast", () => {
     const cookie = await cookieFor(admin);
     const { POST: broadcastRoute } = await import("@/app/api/admin/sms/broadcast/route");
 
-    // Simulate a run that died mid-loop after the first of 2 recipients:
-    // one DELAY row sent, batch counters showing 1 of 2 processed.
+    // Simulate a run that died mid-loop after the first of 2 recipients
+    // (pA = 0550300101, first in audience order): one DELAY row sent, batch
+    // counters showing 1 of 2 processed.
     const partial = await getPrisma().smsBroadcast.create({
       data: {
         date: seed.today,
@@ -399,7 +414,7 @@ describe("POST /api/admin/sms/broadcast", () => {
     });
     await getPrisma().smsMessage.create({
       data: {
-        to: "+213550000001",
+        to: "+213550300101",
         body: "partial",
         type: SmsMessageType.DELAY,
         batchId: partial.id,
@@ -420,12 +435,14 @@ describe("POST /api/admin/sms/broadcast", () => {
     const body = await retry.json();
     expect(body.batchId).toBe(partial.id);
     expect(body.alreadySent).toBe(false);
-    // Only the remaining recipient was messaged: 1 old + 1 new row.
-    expect(
-      await getPrisma().smsMessage.count({
-        where: { batchId: partial.id, type: SmsMessageType.DELAY },
-      }),
-    ).toBe(2);
+    // Per-recipient resume: pA skipped (already has this batch's row), pC
+    // messaged — 1 old + 1 new row, each phone exactly once.
+    const rows = await getPrisma().smsMessage.findMany({
+      where: { batchId: partial.id, type: SmsMessageType.DELAY },
+    });
+    expect(rows).toHaveLength(2);
+    expect(rows.filter((r) => r.to === "+213550300101")).toHaveLength(1);
+    expect(rows.filter((r) => r.to === "+213550300103")).toHaveLength(1);
     const batch = await getPrisma().smsBroadcast.findUnique({
       where: { id: partial.id },
     });

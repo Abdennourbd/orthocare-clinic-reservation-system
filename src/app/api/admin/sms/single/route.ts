@@ -62,14 +62,19 @@ export async function POST(request: NextRequest) {
 
   // Domain check BEFORE any write: the patient must exist AND be usable — a
   // deactivated or anonymized patient (RGPD soft path) must not receive a
-  // staff-written SMS, same rule as a new booking. Only the phone is fetched:
-  // the dispatcher owns delivery, the route never touches provider details.
+  // staff-written SMS, same rule as a new booking. `messagingOptOut` is
+  // enforced HERE (not in the dispatcher): MANUAL is transactional by design
+  // (a staff member deliberately writing to a specific patient), so the
+  // dispatcher's non-transactional-only gate never sees it — without this
+  // check an opted-out patient could still be messaged by hand. Only the
+  // phone is fetched: the dispatcher owns delivery, the route never touches
+  // provider details.
   const patient = await getPrisma().patient.findFirst({
-    where: { id: patientId, active: true, anonymizedAt: null },
+    where: { id: patientId, active: true, anonymizedAt: null, messagingOptOut: false },
     select: { id: true, phoneE164: true },
   });
   if (!patient) {
-    return errorResponse(404, "NOT_FOUND", "Patient introuvable ou inactif.");
+    return errorResponse(404, "NOT_FOUND", "Patient introuvable, inactif ou désinscrit.");
   }
 
   // The dispatcher never throws on a provider failure — it records the row

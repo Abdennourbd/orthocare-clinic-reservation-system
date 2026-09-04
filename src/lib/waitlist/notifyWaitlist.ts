@@ -117,6 +117,19 @@ export async function handleSlotFreed(
         });
         notified++;
       } catch (e) {
+        // A throw AFTER the claim (e.g. transient DB error in sendMessage's
+        // row update) must release the claim: the entry was never notified,
+        // so it keeps its place for the next opportunity. Guarded to only
+        // resurrect an un-notified entry — never one another path consumed.
+        try {
+          await getPrisma().waitlistEntry.updateMany({
+            where: { id: entry.id, active: false, notifiedAt: null },
+            data: { active: true },
+          });
+        } catch {
+          // Restoration itself failed — report and move on; the entry stays
+          // consumed rather than risking a double-notify on retry.
+        }
         // PII-safe: entry id only, never the patient or the error object
         // (a Prisma/provider error can serialize field values).
         reportError("waitlist_notify_entry_failed", e);

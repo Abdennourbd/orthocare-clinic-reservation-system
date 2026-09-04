@@ -4,7 +4,7 @@ import {
   AuditActorType,
   type Prisma,
 } from "@/generated/prisma/client";
-import * as Sentry from "@sentry/nextjs";
+import { reportError } from "@/lib/monitoring/reportError";
 
 // Shared audit trail (plan.md §Audit logging). Every state-changing staff
 // action, patient-initiated action and SYSTEM (cron) action goes through this
@@ -55,7 +55,9 @@ export async function logAction(
  * (status change, reschedule, cancellation, export…) must never surface as
  * a 500 just because its audit row failed — the client would retry into
  * 409/410 confusion while the write already happened. Failures are reported
- * to Sentry with action/entity labels only, never `detail` (patient data).
+ * through the shared PII-safe reporter (error class only, never the raw
+ * Prisma error object — a validation error can serialize the `detail`
+ * payload, which may carry patient data).
  */
 export async function logActionSafe(
   actor: AuditActor,
@@ -68,12 +70,6 @@ export async function logActionSafe(
   try {
     await logAction(actor, action, entityType, entityId, detail, ipAddress);
   } catch (e) {
-    try {
-      Sentry.captureException(e, {
-        tags: { scope: "audit-log", action, entityType },
-      });
-    } catch {
-      // Reporting must never throw either.
-    }
+    reportError(`audit_log_failed:${action}`, e);
   }
 }

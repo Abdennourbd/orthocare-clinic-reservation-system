@@ -39,8 +39,9 @@ export type StaffGuardResult =
  * SameSite=Lax, so this is defense in depth, not the only line.
  *
  * Allowed: Origin matching the request's own Host (same-origin, works on any
- * deployment), localhost, or the configured `APP_URL`. Anything else fails
- * closed.
+ * deployment), the configured `APP_URL`, or localhost outside production
+ * (dev/test convenience — never trusted in production, where a loopback
+ * Origin can only arrive via DNS rebinding). Anything else fails closed.
  */
 export function assertSameOriginStrict(request: Request): boolean {
   const value =
@@ -54,9 +55,8 @@ export function assertSameOriginStrict(request: Request): boolean {
     return false;
   }
   if (
-    hostname === "localhost" ||
-    hostname === "127.0.0.1" ||
-    hostname === "::1"
+    process.env.NODE_ENV !== "production" &&
+    (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1")
   ) {
     return true;
   }

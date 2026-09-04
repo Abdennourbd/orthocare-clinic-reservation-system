@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { getPrisma } from "@/lib/db";
 import {
   SmsMessageType,
@@ -316,6 +316,37 @@ describe("handleSlotFreed (Task 17.1)", () => {
       where: { id: entry.id },
     });
     expect(after!.active).toBe(false);
+  });
+
+  it("releases the claim when the send itself throws (entry keeps its place)", async () => {
+    const service = await createService();
+    const patient = await createPatient();
+    const entry = await getPrisma().waitlistEntry.create({
+      data: {
+        patientId: patient.id,
+        serviceId: service.id,
+        preferredDates: [utcMidnight("2026-09-02")],
+        source: WaitlistSource.STAFF,
+      },
+    });
+    // A transient DB failure inside the dispatcher's row write: sendMessage
+    // throws instead of returning a row.
+    const spy = vi
+      .spyOn(getPrisma().smsMessage, "create")
+      .mockRejectedValueOnce(new Error("db down"));
+
+    await expect(
+      handleSlotFreed(slotEvent(service.id, new Date("2026-09-02T10:00:00.000Z"))),
+    ).resolves.not.toThrow();
+    spy.mockRestore();
+
+    // Claim released: still active, never notified — the next freed slot
+    // retries instead of silently dropping the patient's offer.
+    const after = await getPrisma().waitlistEntry.findUnique({
+      where: { id: entry.id },
+    });
+    expect(after!.active).toBe(true);
+    expect(after!.notifiedAt).toBeNull();
   });
 
   it("subscribeWaitlist notifies on emit and returns an unsubscribe", async () => {

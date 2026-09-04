@@ -1,4 +1,4 @@
-import { revalidateTag } from "next/cache";
+import { revalidateTagSafe } from "@/lib/cache/revalidate";
 import { NextRequest } from "next/server";
 import { getPrisma } from "@/lib/db";
 import { errorResponse, ok } from "@/lib/api/http";
@@ -92,7 +92,7 @@ export async function PATCH(request: NextRequest, context: Ctx) {
     throw e;
   }
 
-  revalidateTag("gallery", "max");
+  revalidateTagSafe("gallery", "max");
 
   await logActionSafe(
     { type: AuditActorType.STAFF, userId: guard.user.id },
@@ -133,7 +133,7 @@ export async function DELETE(request: NextRequest, context: Ctx) {
   }
 
   await getPrisma().galleryItem.delete({ where: { id } });
-  revalidateTag("gallery", "max");
+  revalidateTagSafe("gallery", "max");
 
   await logActionSafe(
     { type: AuditActorType.STAFF, userId: guard.user.id },

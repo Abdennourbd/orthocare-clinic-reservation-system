@@ -178,8 +178,8 @@ export async function previewBroadcast(
 /**
  * Open the batch row for a broadcast: create it, or on idempotency-key
  * collision return the existing row. A COMPLETE existing batch means
- * `alreadySent`; an INCOMPLETE one resumes from the first unprocessed
- * recipient offset.
+ * `alreadySent`; an INCOMPLETE one resumes with the set of already-messaged
+ * phones so only the remainder is sent.
  */
 async function openBroadcast(
   prisma: ReturnType<typeof getPrisma>,
@@ -187,7 +187,7 @@ async function openBroadcast(
   recipientCount: number,
 ): Promise<
   | { alreadySent: true; broadcast: SmsBroadcast }
-  | { alreadySent: false; broadcast: SmsBroadcast; startOffset: number }
+  | { alreadySent: false; broadcast: SmsBroadcast; sentPhones: Set<string> }
 > {
   try {
     const broadcast = await prisma.smsBroadcast.create({
@@ -199,7 +199,7 @@ async function openBroadcast(
         sentById: input.sentById,
       },
     });
-    return { alreadySent: false, broadcast, startOffset: 0 };
+    return { alreadySent: false, broadcast, sentPhones: new Set() };
   } catch (e) {
     if (!isUniqueViolation(e)) throw e;
     const existing = await prisma.smsBroadcast.findFirst({
@@ -211,7 +211,21 @@ async function openBroadcast(
     if (done >= existing.recipientCount) {
       return { alreadySent: true, broadcast: existing };
     }
-    return { alreadySent: false, broadcast: existing, startOffset: done };
+    // Incomplete batch: a previous run died mid-loop. Resume per-recipient
+    // (not positional): the audience is re-derived live and may have shifted
+    // since the crash (new booking, cancellation), so an offset would
+    // double-send or skip. DELAY rows carry no appointmentId by design, but
+    // they do carry `to` + batchId — the phones already messaged in this
+    // batch are skipped exactly, regardless of order shifts.
+    const rows = await prisma.smsMessage.findMany({
+      where: { batchId: existing.id, type: SmsMessageType.DELAY },
+      select: { to: true },
+    });
+    return {
+      alreadySent: false,
+      broadcast: existing,
+      sentPhones: new Set(rows.map((r) => r.to)),
+    };
   }
 }
 
@@ -224,9 +238,8 @@ async function openBroadcast(
  *     was already started — if its counters show every recipient processed,
  *     return the existing counts with `alreadySent: true` and ZERO sends;
  *     if it is INCOMPLETE (a previous run died mid-loop on a serverless
- *     timeout), RESUME from the first unprocessed recipient instead of
- *     abandoning the tail. The deterministic audience order makes the offset
- *     (`sent+suppressed+failed`) stable across attempts.
+ *     timeout), RESUME by skipping the phones this batch already messaged
+ *     (per-recipient, order-independent) instead of abandoning the tail.
  *  3. Send sequentially (NOT Promise.all — one provider request at a time is
  *     gentle on the provider's rate limits; a whole clinic's phones firing at
  *     once would trip them). The dispatcher owns the opt-out gate: DELAY is
@@ -260,14 +273,18 @@ export async function runBroadcast(input: {
       alreadySent: true,
     };
   }
-  const { broadcast, startOffset } = opened;
+  const { broadcast, sentPhones } = opened;
 
   // Counters resume from the existing row so a resumed run accumulates
   // (a fresh run starts from zeros, which is what a new row holds).
   let sentCount = broadcast.sentCount;
   let suppressedCount = broadcast.suppressedCount;
   let failedCount = broadcast.failedCount;
-  for (const recipient of audience.recipients.slice(startOffset)) {
+  for (const recipient of audience.recipients) {
+    // Resume path: this phone already got this batch's message (the crashed
+    // run sent it and recorded the row). Skipping by phone — not by position —
+    // survives audience shifts between attempts.
+    if (sentPhones.has(recipient.phone)) continue;
     // NEVER pass appointmentId here: the (appointmentId, type) unique index
     // would turn a second delay broadcast on the same day into silent
     // no-ops (see SmsMessage comment in schema.prisma).

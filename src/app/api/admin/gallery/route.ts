@@ -1,4 +1,4 @@
-import { revalidateTag } from "next/cache";
+import { revalidateTagSafe } from "@/lib/cache/revalidate";
 import { NextRequest } from "next/server";
 import { getPrisma } from "@/lib/db";
 import { errorResponse, ok } from "@/lib/api/http";
@@ -97,7 +97,7 @@ export async function POST(request: NextRequest) {
     throw e;
   }
 
-  revalidateTag("gallery", "max");
+  revalidateTagSafe("gallery", "max");
 
   await logActionSafe(
     { type: AuditActorType.STAFF, userId: guard.user.id },

@@ -35,8 +35,13 @@ export function isSameSiteOrigin(request: Request): boolean {
     return false;
   }
 
-  if (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1") {
-    return true;
+  // Loopback origins are a dev/test convenience (local browsers, integration
+  // tests) — never trust them in production, where a loopback Origin can
+  // only arrive via DNS rebinding or a local page, never from the real site.
+  if (process.env.NODE_ENV !== "production") {
+    if (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1") {
+      return true;
+    }
   }
 
   // Deployment-origin match (same logic as the strict admin guard in
