@@ -227,7 +227,7 @@
     "dayCarouselLabel": "Choose a day — use the left and right arrow keys",
     "prevDay": "Previous day",
     "nextDay": "Next day",
-    "availableSlots": "Available slots",
+    "availableSlots": "Slots for {date}",
     "reservedSlots": "Already reserved",
     "reservedLabel": "Reserved",
     "noSlots": "No slots available on that day.",

@@ -227,7 +227,7 @@
     "dayCarouselLabel": "اختر يوماً — استخدم مفتاحي السهم الأيسر والأيمن",
     "prevDay": "اليوم السابق",
     "nextDay": "اليوم التالي",
-    "availableSlots": "الأوقات المتاحة",
+    "availableSlots": "الأوقات المتاحة ليوم {date}",
     "reservedSlots": "محجوزة بالفعل",
     "reservedLabel": "محجوز",
     "noSlots": "لا توجد أوقات متاحة في هذا اليوم.",

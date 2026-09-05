@@ -19,6 +19,15 @@ type TimeGridProps = {
  * buttons; already-reserved slots stay in their natural time position and
  * render red, disabled, with a visible "Reserved" label — state is conveyed
  * by text + the disabled control + line-through, never by color alone.
+ *
+ * Human-tester fix (task 6R, step "date visible"): `dateLabel` used to feed
+ * only the per-slot `aria-label`s below, so a screen-reader user heard which
+ * day the grid belonged to but a sighted user never saw it — switching days
+ * on a carousel that repeats the same opening hours looked broken. The
+ * fieldset `<legend>` (already the grid's accessible name) now doubles as
+ * that visible anchor via the existing `availableSlots` message, so no
+ * second heading is stacked above the grid. No new prop, no date math here —
+ * `dateLabel` is still computed once in `BookingWizard.tsx` via `clinicNoon`.
  */
 export default function TimeGrid({
   dateLabel,
@@ -65,7 +74,9 @@ export default function TimeGrid({
 
   return (
     <fieldset>
-      <legend className="sr-only">{t("selectSlot")}</legend>
+      <legend className="text-sm font-semibold text-zinc-900">
+        {t("availableSlots", { date: dateLabel })}
+      </legend>
       <div className="mt-2 grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-5">
         {merged.map((slot) => {
           const reserved = slot.status === "occupied";

@@ -227,7 +227,7 @@
     "dayCarouselLabel": "Choisir un jour — utilisez les flèches gauche et droite",
     "prevDay": "Jour précédent",
     "nextDay": "Jour suivant",
-    "availableSlots": "Créneaux disponibles",
+    "availableSlots": "Créneaux du {date}",
     "reservedSlots": "Créneaux déjà réservés",
     "reservedLabel": "Réservé",
     "noSlots": "Aucun créneau disponible ce jour-là.",
