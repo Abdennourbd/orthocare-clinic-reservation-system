@@ -12,7 +12,7 @@ import { useLocale, useTranslations } from "next-intl";
 import { bookingInputSchema } from "@/schemas/booking";
 import { addClinicDays, clinicNoon } from "@/lib/time/clinicTime";
 import type { PublicService } from "@/lib/public/services";
-import DayPicker from "./DayPicker";
+import DayCarousel from "./DayCarousel";
 import PatientForm, {
   type PatientFormErrors,
   type PatientFormValue,
@@ -31,6 +31,11 @@ export type BookingWizardInitialData = {
 type SlotResponse = { available: SlotDto[]; occupied: SlotDto[] };
 
 type Step = 1 | 2 | 3 | 4 | "success";
+
+/** Trailing debounce delay (ms) before `loadSlots` actually fires the
+ *  network request for a cache-miss day. See `loadSlots` below and
+ *  DayCarousel's header comment — Task 6R étape 4 closure condition. */
+const LOAD_SLOTS_DEBOUNCE_MS = 280;
 
 const stepCardClass =
   "step-enter mt-6 rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm sm:p-7";
@@ -163,6 +168,53 @@ export default function BookingWizard({
   }, [serviceId]);
   const cacheKey = (svcId: string, d: string) => `${svcId}:${d}`;
 
+  /** Pending trailing-debounce timer for `loadSlots` (Task 6R étape 4 closure
+   *  condition). A day-to-day sweep (arrow keys, chip clicks) no longer fires
+   *  one `/api/slots` request per day visited — see `loadSlots` below. */
+  const loadSlotsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Holds the `AbortController` for the `/api/slots` request `runSlotFetch`
+   *  most recently started. Tour de correction final (MAJEUR 1): this is no
+   *  longer used to cancel a day the patient has since left — `runSlotFetch`
+   *  used to unconditionally abort whatever this ref held before starting a
+   *  new request, which sounds harmless but is not: it aborts ANY previous
+   *  request regardless of which day it belonged to, including one for a
+   *  DIFFERENT day that is still legitimately in flight. On a slow
+   *  connection (dwell time between day switches < round-trip latency,
+   *  ordinary on mobile in Algiers) that request never gets a chance to
+   *  land, so it never fills `slotsCache` — the day gets re-requested from
+   *  scratch every time it's revisited, and the abort()ed request is billed
+   *  against the rate limiter without ever paying off in a cache entry.
+   *  Measured before this fix: 150-207 requests/minute on a slow-network
+   *  sweep, unbounded by the ~91-day window. Leaving previous requests to
+   *  land (this ref is now only ever assigned, never used to `.abort()` a
+   *  day-to-day request) lets every distinct day requested actually reach
+   *  the cache once, which is what bounds the real volume — see `loadSlots`
+   *  below. `selectService`/`reset` still call `.abort()` on this ref
+   *  directly (not through `runSlotFetch`): switching service or resetting
+   *  the whole wizard IS a legitimate reason to drop a request whose result
+   *  can never apply anymore, and that is unrelated to this fix. This ref
+   *  is still assigned on every `runSlotFetch` call and read by the
+   *  stale-response guard there as an IDENTITY token — a superseded call
+   *  must not overwrite a newer one's result — see that guard's comment. */
+  const loadSlotsAbortRef = useRef<AbortController | null>(null);
+  /** In-flight `/api/slots` requests keyed like `slotsCache`, so a request
+   *  already underway for a given service+date (e.g. started by
+   *  `prefetchWeek`) is reused instead of duplicated when `loadSlots` lands
+   *  on the same day a moment later. Stores the request's `AbortSignal`
+   *  alongside its promise (Tour de correction 1, BLOQUANT): `abort()` sets
+   *  `signal.aborted` SYNCHRONOUSLY, but the aborted `fetch()` promise only
+   *  rejects on a later microtask, and the `finally` below that clears this
+   *  map entry runs later still. Without checking `signal.aborted` here,
+   *  `runSlotFetch` could abort its own previous request and then, in the
+   *  very next line, dedupe against that same now-doomed promise — reusing a
+   *  request that is guaranteed to resolve `null` and paint an error banner
+   *  on the day the patient just re-selected. A missing/undefined `signal`
+   *  (every call from `prefetchWeek`, which never aborts) is never treated
+   *  as aborted, so background prefetch dedup is unaffected. */
+  const inFlightRef = useRef<
+    Map<string, { promise: Promise<SlotResponse | null>; signal?: AbortSignal }>
+  >(new Map());
+
   const selectedService = useMemo(
     () => services.find((s) => s.id === serviceId) ?? null,
     [services, serviceId],
@@ -170,35 +222,168 @@ export default function BookingWizard({
 
   /** Fetch one day's slots, cache them, and record zero-availability for the
    *  cancellation-watch suggestions. Returns null on failure (caller decides
-   *  whether to surface an error). */
+   *  whether to surface an error). Deduplicates against `inFlightRef`: a
+   *  request already underway for the same service+date (from
+   *  `prefetchWeek`, or a previous call here) is reused rather than
+   *  duplicated — this is the "in-flight request dedup" half of the Task 6R
+   *  étape 4 closure condition. `signal` is only ever passed by `loadSlots`'
+   *  own trailing-debounced fetch; a shared/deduped promise (started by
+   *  `prefetchWeek`, which never aborts) ignores it, at best "by
+   *  construction" in one direction only (Tour de correction 1, MINEUR):
+   *  the underlying `fetch()` call only ever honours the FIRST caller's
+   *  signal, so a `signal` passed by a SECOND, deduped caller is silently
+   *  dropped rather than actually wired to anything — nothing guarantees
+   *  that caller's own abort later does anything either. */
   const fetchAndCache = useCallback(
-    async (svcId: string, d: string): Promise<SlotResponse | null> => {
-      try {
-        const res = await fetch(
-          `/api/slots?serviceId=${encodeURIComponent(svcId)}&date=${d}&locale=${locale}`,
-        );
-        if (!res.ok) throw new Error(`slots: ${res.status}`);
-        const body: SlotResponse = await res.json();
-        // Keyed by service: a stale response for a previous service lands in
-        // its own namespace and can never overwrite the current one. Watch
-        // suggestions only count when the fetch is still current.
-        slotsCache.current.set(cacheKey(svcId, d), body);
-        if (body.available.length === 0 && svcId === serviceIdRef.current) {
-          setSuggestedWatchDates((prev) =>
-            prev.includes(d) ? prev : [...prev, d],
+    (svcId: string, d: string, signal?: AbortSignal): Promise<SlotResponse | null> => {
+      const key = cacheKey(svcId, d);
+      const existing = inFlightRef.current.get(key);
+      // Tour de correction 1 (BLOQUANT): never dedupe against a request
+      // whose signal is already aborted — see the `inFlightRef` comment
+      // above for why this can't just be "delete on abort" or "delete in
+      // finally" alone.
+      if (existing && !existing.signal?.aborted) return existing.promise;
+      // `entry` (not the bare promise) is what identifies THIS call's map
+      // slot below — the `finally` block needs to compare against it before
+      // `entry.promise` itself is assigned, which a direct self-reference to
+      // a `const promise = (async () => { ...promise... })()` can't do
+      // (TS2454: used before being assigned — the closure runs after
+      // `await`, safely past that point at runtime, but TS can't see that).
+      const entry: { promise: Promise<SlotResponse | null>; signal?: AbortSignal } = {
+        promise: null as unknown as Promise<SlotResponse | null>,
+        signal,
+      };
+      // Tour de correction final (MINEUR 4): the map entry is registered
+      // BEFORE `entry.promise` is assigned below, not after. If `fetch()`
+      // ever threw synchronously (never happens with the browser's own
+      // `fetch`, which only ever rejects — but nothing in this file's types
+      // guarantees that), the async IIFE's `catch`/`finally` would run to
+      // completion synchronously, before control ever reaches the old
+      // `inFlightRef.current.set(key, entry)` call that used to sit after
+      // it. The `finally`'s `inFlightRef.current.get(key) === entry` check
+      // would then find nothing (the entry was never registered yet) and
+      // skip cleanup — and the subsequent `.set()` would then plant an
+      // already-settled entry that no `finally` will ever remove, making
+      // every future call for this key dedupe against a promise stuck
+      // forever on its resolved value. Registering first closes that gap.
+      inFlightRef.current.set(key, entry);
+      entry.promise = (async () => {
+        try {
+          const res = await fetch(
+            `/api/slots?serviceId=${encodeURIComponent(svcId)}&date=${d}&locale=${locale}`,
+            signal ? { signal } : undefined,
           );
+          if (!res.ok) throw new Error(`slots: ${res.status}`);
+          const body: SlotResponse = await res.json();
+          // Keyed by service: a stale response for a previous service lands
+          // in its own namespace and can never overwrite the current one.
+          // Watch suggestions only count when the fetch is still current.
+          slotsCache.current.set(key, body);
+          if (body.available.length === 0 && svcId === serviceIdRef.current) {
+            setSuggestedWatchDates((prev) =>
+              prev.includes(d) ? prev : [...prev, d],
+            );
+          }
+          return body;
+        } catch {
+          // Covers both a real network/HTTP failure and an aborted request
+          // (loadSlots left this day before the fetch finished) — either
+          // way there is nothing to render for this day, and the caller
+          // already checks whether it still cares before touching state.
+          return null;
+        } finally {
+          // Only clear the map entry if it's still THIS call's entry — an
+          // aborted request's `finally` must never wipe out a newer,
+          // still-in-flight request for the same key that replaced it (see
+          // the dedup check above).
+          if (inFlightRef.current.get(key) === entry) {
+            inFlightRef.current.delete(key);
+          }
         }
-        return body;
-      } catch {
-        return null;
-      }
+      })();
+      return entry.promise;
     },
     [locale],
   );
 
-  /** Render the slots for the active day (cache hit → instant). */
-  const loadSlots = useCallback(
+  /** Fires the actual `/api/slots` request for `loadSlots`' trailing
+   *  debounce, once the patient has stopped moving for
+   *  `LOAD_SLOTS_DEBOUNCE_MS`. Tour de correction final (MAJEUR 1):
+   *  deliberately does NOT cancel a previous in-flight request anymore — see
+   *  `loadSlotsAbortRef`'s comment for why that abort() was itself the cause
+   *  of the request-budget overshoot it was meant to prevent. Do not
+   *  reintroduce it here. */
+  const runSlotFetch = useCallback(
     async (svcId: string, d: string) => {
+      const controller = new AbortController();
+      loadSlotsAbortRef.current = controller;
+      const body = await fetchAndCache(svcId, d, controller.signal);
+      // Stale-response guard. Two independent reasons a settled response can
+      // no longer be trusted:
+      //  1. `d`/`svcId` mismatch — the patient moved to a different day or
+      //     service during the debounce/fetch.
+      //  2. `loadSlotsAbortRef.current !== controller` (Tour de correction 1,
+      //     found while testing the BLOQUANT fix): re-arriving on the SAME
+      //     day whose earlier request is still in flight aborts it and starts
+      //     a fresh one, but the OLDER call is still sitting on this very
+      //     `await` — it does not know it's been superseded. Its own
+      //     `controller` was aborted, `body` resolves to `null`, and without
+      //     this check it would still pass the `d`/`svcId` check (the day
+      //     never changed) and paint a transient error banner on the exact
+      //     day the patient is looking at, moments before the fresh request
+      //     for that same day resolves successfully and overwrites it. This
+      //     is the "no slotsError" scenario a fresh day A → B → back-to-A
+      //     round trip must never produce.
+      if (
+        d !== activeDateRef.current ||
+        svcId !== serviceIdRef.current ||
+        loadSlotsAbortRef.current !== controller
+      ) {
+        return;
+      }
+      if (body) {
+        setSlots(body);
+        setSlotsError(false);
+      } else {
+        setSlotsError(true);
+        setSlots(null);
+      }
+      setSlotsLoading(false);
+    },
+    [fetchAndCache],
+  );
+
+  /** Render the slots for the active day. A cache hit is instant — no
+   *  network, no debounce, the day change on screen must never wait for one.
+   *  A cache miss shows the loading state immediately (the visual change
+   *  stays instant) but only actually schedules the `/api/slots` request
+   *  after `LOAD_SLOTS_DEBOUNCE_MS` of no further day change.
+   *
+   *  Task 6R étape 4 closure condition (MAJOR 3): DayCarousel's old
+   *  per-emission throttle bounded the CADENCE of day changes (one every
+   *  ~150ms) but not the total VOLUME of a sweep — a thorough patient could
+   *  still visit dozens of distinct days, each a cache miss, each its own
+   *  request. The real overshoot was `slotsCache` being wiped on every
+   *  service change (`selectService`/`reset` below): comparing two services
+   *  inside one minute cost ~182 requests against the 120/min/IP cap on
+   *  `GET /api/slots` (src/app/api/slots/route.ts). A TRAILING debounce
+   *  helps: a fast sweep across many days that never lingers
+   *  `LOAD_SLOTS_DEBOUNCE_MS` on any one of them fires no request at all
+   *  until the patient actually stops, instead of one per chip visited by
+   *  the old leading throttle. Tour de correction final (MAJEUR 1)
+   *  correction: this does NOT mean "sweeping the whole ~90-day window
+   *  costs exactly ONE request" — that was only true if `fetch()` latency
+   *  never exceeds the time spent settled on a day, which does not hold on
+   *  a slow connection (ordinary on mobile in Algiers: 400-1200ms). The
+   *  actual bound on request volume is "at most one real request per
+   *  DISTINCT day the patient ever settles on for `LOAD_SLOTS_DEBOUNCE_MS`",
+   *  enforced by `slotsCache` (settled days are never refetched) and
+   *  `inFlightRef`'s dedup (a day already in flight is never refetched
+   *  either) — NOT by the debounce timer alone, and NOT by aborting
+   *  superseded requests (removed, see `loadSlotsAbortRef`). */
+  const loadSlots = useCallback(
+    (svcId: string, d: string) => {
+      if (loadSlotsTimerRef.current) clearTimeout(loadSlotsTimerRef.current);
       const cached = slotsCache.current.get(cacheKey(svcId, d));
       if (cached) {
         setSlotsError(false);
@@ -210,18 +395,11 @@ export default function BookingWizard({
       setSlotsLoading(true);
       setSlotsError(false);
       setSlot(null);
-      const body = await fetchAndCache(svcId, d);
-      if (d !== activeDateRef.current) return; // user moved on — don't stomp
-      if (body) {
-        setSlots(body);
-        setSlotsError(false);
-      } else {
-        setSlotsError(true);
-        setSlots(null);
-      }
-      setSlotsLoading(false);
+      loadSlotsTimerRef.current = setTimeout(() => {
+        void runSlotFetch(svcId, d);
+      }, LOAD_SLOTS_DEBOUNCE_MS);
     },
-    [fetchAndCache],
+    [runSlotFetch],
   );
 
   /** Prefetch the next 7 days' slots in parallel the moment the user enters
@@ -261,9 +439,45 @@ export default function BookingWizard({
     [fetchAndCache],
   );
 
+  /** Tour de correction final (MAJEUR 3): rebuilds the cancellation-watch
+   *  suggestions for a service from whatever `slotsCache` already holds,
+   *  instead of always starting from `[]`. `fetchAndCache` is the ONLY
+   *  writer of `suggestedWatchDates`, and it only runs on a cache MISS — so
+   *  once a day is cached, revisiting it (even under a re-selected service)
+   *  never calls `fetchAndCache` again and can never re-add it. Without
+   *  this, browsing service A (accumulating zero-availability days),
+   *  switching to B, then back to A left the summary step with NO
+   *  suggestions at all for A's already-cached days, silently, for the rest
+   *  of the session. Scanning the cache for this service's own
+   *  zero-availability entries reconstructs exactly what a fresh fetch
+   *  would have reported. */
+  const suggestedWatchDatesFromCache = (svcId: string): string[] => {
+    const prefix = `${svcId}:`;
+    const dates: string[] = [];
+    for (const [key, body] of slotsCache.current) {
+      if (key.startsWith(prefix) && body.available.length === 0) {
+        dates.push(key.slice(prefix.length));
+      }
+    }
+    return dates;
+  };
+
   const selectService = (id: string) => {
+    // Cancel any debounced/in-flight fetch left over from the previous
+    // service — it targets a service the patient just left, and its result
+    // (if any) must never land as this new service's slots.
+    if (loadSlotsTimerRef.current) clearTimeout(loadSlotsTimerRef.current);
+    loadSlotsAbortRef.current?.abort();
     setServiceId(id);
-    slotsCache.current = new Map();
+    // Tour de correction 1 (MAJEUR 2): deliberately NOT wiping `slotsCache`
+    // here. Its keys are already namespaced `${serviceId}:${date}` (see
+    // `cacheKey` above), so a cached day from a previous service can never
+    // be served for this one — wiping the whole map on every service change
+    // was a redundant defense that doubled the worst-case request volume a
+    // patient could rack up (comparing two services inside one minute used
+    // to cost every day revisited twice against the 120/min/IP cap on
+    // `GET /api/slots`). `reset()` below still wipes it: a full restart
+    // ("book another appointment") has no reason to hold onto any of it.
     const firstDay = today;
     activeDateRef.current = firstDay;
     setActiveDate(firstDay);
@@ -271,7 +485,9 @@ export default function BookingWizard({
     setSlot(null);
     setSlots(null);
     setSlotsError(false);
-    setSuggestedWatchDates([]);
+    // Tour de correction final (MAJEUR 3): rebuild from cache rather than
+    // reset to `[]` — see `suggestedWatchDatesFromCache` above.
+    setSuggestedWatchDates(suggestedWatchDatesFromCache(id));
     setWatchDates([]);
     setFormError(null);
     setSlotsLoading(true);
@@ -411,6 +627,18 @@ export default function BookingWizard({
         return;
       }
       if (res.status === 409) {
+        // Tour de correction final (MAJEUR 2): the slot just lost is still
+        // sitting in `slotsCache` marked available — without invalidating
+        // it, the patient lands back on step 2 seeing the exact slot they
+        // just failed to book, re-picks it, and gets another 409. Wiping
+        // only this one service+date entry (never the whole cache — that
+        // was the regression the previous round already fixed) and
+        // reloading it, same pattern as the step-3 BackButton above, makes
+        // the grid reflect reality again.
+        if (serviceId && date) {
+          slotsCache.current.delete(cacheKey(serviceId, date));
+          void loadSlots(serviceId, date);
+        }
         setFormError(t("errorConflict"));
         setStep(2);
         return;
@@ -445,6 +673,8 @@ export default function BookingWizard({
   };
 
   const reset = () => {
+    if (loadSlotsTimerRef.current) clearTimeout(loadSlotsTimerRef.current);
+    loadSlotsAbortRef.current?.abort();
     setStep(1);
     setServiceId(null);
     setActiveDate(today);
@@ -572,11 +802,11 @@ export default function BookingWizard({
           <p className="mt-1 text-sm text-zinc-600">{t("chooseDateHint")}</p>
           <div className="mt-4">
             {selectedService && (
-              <DayPicker
+              <DayCarousel
                 today={today}
                 maxDate={maxDate}
-                selectedDate={activeDate}
-                onSelect={onActiveDateChange}
+                activeDate={activeDate}
+                onActiveDayChange={onActiveDateChange}
               />
             )}
           </div>

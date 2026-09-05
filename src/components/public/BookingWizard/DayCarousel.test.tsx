@@ -92,16 +92,7 @@ describe("DayCarousel", () => {
     expect(onActiveDayChange).toHaveBeenCalledWith("2026-09-06");
   });
 
-  // `stepByDays` throttles emissions (>= STEP_THROTTLE_MS apart) to survive a
-  // held arrow key or a held Enter on a chevron — see DayCarousel's header
-  // comment. Two deliberate, separate key presses in a real session are
-  // always further apart than that, so this test waits out the throttle
-  // window between the two key presses with a real timer (no fake timers
-  // needed) to keep asserting two genuinely distinct presses, not a
-  // burst that the fix is specifically meant to collapse.
-  const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-  it("LTR (fr): ArrowRight moves to the next day, ArrowLeft to the previous day", async () => {
+  it("LTR (fr): ArrowRight moves to the next day, ArrowLeft to the previous day", () => {
     const onActiveDayChange = vi.fn();
     renderCarousel({ activeDate: "2026-09-06", onActiveDayChange, locale: "fr" });
     const strip = getStrip();
@@ -109,14 +100,13 @@ describe("DayCarousel", () => {
     fireEvent.keyDown(strip, { key: "ArrowRight" });
     expect(onActiveDayChange).toHaveBeenNthCalledWith(1, "2026-09-07");
 
-    await wait(160);
     fireEvent.keyDown(strip, { key: "ArrowLeft" });
     expect(onActiveDayChange).toHaveBeenNthCalledWith(2, "2026-09-05");
 
     expect(onActiveDayChange).toHaveBeenCalledTimes(2);
   });
 
-  it("RTL (ar): ArrowLeft moves to the next day, ArrowRight to the previous day (reversed)", async () => {
+  it("RTL (ar): ArrowLeft moves to the next day, ArrowRight to the previous day (reversed)", () => {
     const onActiveDayChange = vi.fn();
     renderCarousel({ activeDate: "2026-09-06", onActiveDayChange, locale: "ar" });
     const strip = getStrip();
@@ -124,14 +114,22 @@ describe("DayCarousel", () => {
     fireEvent.keyDown(strip, { key: "ArrowLeft" });
     expect(onActiveDayChange).toHaveBeenNthCalledWith(1, "2026-09-07");
 
-    await wait(160);
     fireEvent.keyDown(strip, { key: "ArrowRight" });
     expect(onActiveDayChange).toHaveBeenNthCalledWith(2, "2026-09-05");
 
     expect(onActiveDayChange).toHaveBeenCalledTimes(2);
   });
 
-  it("ignores a repeated (auto-repeat) ArrowRight keydown, and stays throttled until STEP_THROTTLE_MS has passed", async () => {
+  // Task 6R étape 4 closure condition (MAJOR 3): the per-emission throttle
+  // that used to live in DayCarousel was removed once BookingWizard gained a
+  // trailing debounce on the actual `/api/slots` fetch (see DayCarousel's
+  // header comment) — the volume guard now lives one layer up, where the
+  // network request actually happens. At THIS layer, a fresh (non-repeat)
+  // press fires immediately, with no throttle window to wait out. The
+  // `e.repeat` guard is untouched by this change: it's a separate defense
+  // (a held key is harmless regardless of any throttle) and still drops
+  // every auto-repeated keydown from a single held press.
+  it("ignores a repeated (auto-repeat) ArrowRight keydown, but a fresh subsequent press fires immediately (no throttle at this layer)", () => {
     const onActiveDayChange = vi.fn();
     renderCarousel({ activeDate: "2026-09-06", onActiveDayChange, locale: "fr" });
     const strip = getStrip();
@@ -142,14 +140,9 @@ describe("DayCarousel", () => {
     fireEvent.keyDown(strip, { key: "ArrowRight", repeat: true });
     fireEvent.keyDown(strip, { key: "ArrowRight", repeat: true });
     expect(onActiveDayChange).toHaveBeenCalledTimes(1);
+    expect(onActiveDayChange).toHaveBeenNthCalledWith(1, "2026-09-07");
 
-    // Even a fresh (non-repeat) press right after is still inside the
-    // throttle window and must also be dropped.
-    fireEvent.keyDown(strip, { key: "ArrowRight" });
-    expect(onActiveDayChange).toHaveBeenCalledTimes(1);
-
-    // Once the throttle window has elapsed, a genuine next press goes through.
-    await wait(160);
+    // A fresh (non-repeat) press right after fires immediately.
     fireEvent.keyDown(strip, { key: "ArrowRight" });
     expect(onActiveDayChange).toHaveBeenCalledTimes(2);
     expect(onActiveDayChange).toHaveBeenNthCalledWith(2, "2026-09-07");
@@ -276,18 +269,121 @@ describe("DayCarousel", () => {
     fireEvent.change(input, { target: { value: "0002-09-04" } });
     expect(onActiveDayChange).not.toHaveBeenCalled();
 
-    // Well-formed but outside [today, maxDate] — must not fire either, and
-    // the DOM value is forced back to the last accepted date (see
-    // DayCarousel's `otherDate` onChange comment) rather than left showing
-    // the rejected out-of-window date.
+    // Well-formed but outside [today, maxDate] — must not fire. Human-tester
+    // fix, round 2: the field is uncontrolled, so `onChange` never touches
+    // its DOM value at all — the browser's own value stays ON SCREEN as
+    // typed until the field is blurred. See the dedicated test below for why
+    // an immediate revert here would be wrong (it's exactly what broke
+    // typing a new date digit by digit in a real browser).
     fireEvent.change(input, { target: { value: "2026-12-25" } });
     expect(onActiveDayChange).not.toHaveBeenCalled();
+    expect(input.value).toBe("2026-12-25");
+
+    // Only onBlur judges a still out-of-window value as final and reverts it.
+    fireEvent.blur(input);
     expect(input.value).toBe(TODAY);
 
     // A valid in-window date does go through.
     fireEvent.change(input, { target: { value: "2026-09-08" } });
     expect(onActiveDayChange).toHaveBeenCalledTimes(1);
     expect(onActiveDayChange).toHaveBeenCalledWith("2026-09-08");
+  });
+
+  // Human-tester fix, round 1: locks the FIRST defect a real browser test
+  // found. Typing a new date segment by segment can pass through a complete,
+  // well-formed ISO value that is momentarily OUTSIDE [today, maxDate]
+  // before the next keystroke completes a valid one (e.g. the first digit of
+  // month "11" reads as "01", landing before `today`). The round-1-broken
+  // implementation bound the input's `value` straight to `activeDate` and
+  // did nothing in `onChange` for this case, believing that "left the DOM
+  // untouched" — but for a CONTROLLED input, doing nothing does NOT mean
+  // nothing happens: the component re-renders often (driven by the parent's
+  // slot-loading state in the real app), and the very next render reasserted
+  // `value={activeDate}` on the DOM, erasing the digit just typed before a
+  // second one could land.
+  // ⚠️ This test does NOT, and cannot, cover round 2 (a controlled input's
+  // re-render resetting the browser's native per-segment editing cursor,
+  // even when the reasserted value is correct) — jsdom has no rendering
+  // engine and does not model segment-by-segment date editing at all. Round
+  // 2's fix (making the field fully uncontrolled) is why this test still
+  // passes trivially: with no `value` prop and no `setState` in `onChange`,
+  // there is no re-render for a stray value to survive. This test remains a
+  // useful regression guard (a future change back to `value={activeDate}`
+  // would fail it again, for the same round-1 reason), but the caret-jump
+  // symptom round 2 fixed can only be confirmed by a human in a real
+  // browser — see étape 5 of the relay file.
+  it("keeps a genuinely intermediate, momentarily out-of-window keystroke on screen instead of erasing it", () => {
+    const onActiveDayChange = vi.fn();
+    renderCarousel({ activeDate: TODAY, onActiveDayChange });
+    const input = screen.getByLabelText(fr.Booking.otherDate) as HTMLInputElement;
+
+    // Simulates the first digit of typing a new month "11" digit by digit:
+    // the browser reports a complete but momentarily out-of-window value
+    // ("2026-01-04" is before TODAY, "2026-09-04") before the second digit
+    // ever lands.
+    fireEvent.change(input, { target: { value: "2026-01-04" } });
+    expect(onActiveDayChange).not.toHaveBeenCalled();
+    expect(input.value).toBe("2026-01-04");
+  });
+
+  // Task 6R étape 4 (MAJOR 1): onBlur must not revert a value the parent has
+  // actually accepted — only a still-invalid/out-of-window value is judged
+  // final and reverted. Needs `rerender` (not the plain mock in
+  // `renderCarousel`) so the DOM can genuinely show a value other than the
+  // ORIGINAL `activeDate` prop before blur happens.
+  it("otherDate input: blurring after the parent accepts a valid change does not revert it", () => {
+    const onActiveDayChange = vi.fn();
+    const { rerender } = render(
+      <NextIntlClientProvider locale="fr" messages={fr}>
+        <DayCarousel today={TODAY} maxDate={MAX_DATE} activeDate={TODAY} onActiveDayChange={onActiveDayChange} />
+      </NextIntlClientProvider>,
+    );
+    const input = screen.getByLabelText(fr.Booking.otherDate) as HTMLInputElement;
+
+    fireEvent.change(input, { target: { value: "2026-09-08" } });
+    expect(onActiveDayChange).toHaveBeenCalledWith("2026-09-08");
+
+    // Simulate the parent reacting, like a real BookingWizard's setActiveDate.
+    rerender(
+      <NextIntlClientProvider locale="fr" messages={fr}>
+        <DayCarousel today={TODAY} maxDate={MAX_DATE} activeDate="2026-09-08" onActiveDayChange={onActiveDayChange} />
+      </NextIntlClientProvider>,
+    );
+    expect(input.value).toBe("2026-09-08");
+
+    fireEvent.blur(input);
+    expect(input.value).toBe("2026-09-08");
+  });
+
+  // Property 6 of the round-2 human-tester fix: a chip click / arrow key /
+  // chevron must update the (uncontrolled) `otherDate` field, not leave it
+  // stuck on a stale value. This exercises the DOM-sync `useEffect` directly,
+  // with the input NOT focused — the common case, since the patient's focus
+  // is on the chip they just clicked, not on this text input. The
+  // focus-skipping branch of that same effect is already covered by "Home
+  // while already on today is a no-op..." below.
+  it("otherDate input reflects an activeDate change from outside it (e.g. a chip click) while unfocused", () => {
+    const onActiveDayChange = vi.fn();
+    const { rerender } = render(
+      <NextIntlClientProvider locale="fr" messages={fr}>
+        <DayCarousel today={TODAY} maxDate={MAX_DATE} activeDate={TODAY} onActiveDayChange={onActiveDayChange} />
+      </NextIntlClientProvider>,
+    );
+    const strip = getStrip();
+    const input = screen.getByLabelText(fr.Booking.otherDate) as HTMLInputElement;
+    expect(input.value).toBe(TODAY);
+
+    const chips = Array.from(strip.querySelectorAll("button"));
+    fireEvent.click(chips[2]); // 2026-09-06
+    expect(onActiveDayChange).toHaveBeenCalledWith("2026-09-06");
+
+    // Simulate the parent reacting, like a real BookingWizard's setActiveDate.
+    rerender(
+      <NextIntlClientProvider locale="fr" messages={fr}>
+        <DayCarousel today={TODAY} maxDate={MAX_DATE} activeDate="2026-09-06" onActiveDayChange={onActiveDayChange} />
+      </NextIntlClientProvider>,
+    );
+    expect(input.value).toBe("2026-09-06");
   });
 
   // Tour 2 audit [CRITIQUE]: the regex/format check never actually exercised
@@ -306,33 +402,54 @@ describe("DayCarousel", () => {
     expect(onActiveDayChange).not.toHaveBeenCalled();
   });
 
-  // Tour 2 audit [CRITIQUE]: this is the core regression test. A held
+  // Task 6R étape 4 closure condition (MAJOR 2 + MAJOR 3): a held
   // ArrowUp/ArrowDown on the native date-segment spinner fires a `change`
-  // per repeat, each with a different, well-formed, in-window value — so
-  // neither of the two guards above would ever catch it. Only routing
-  // `otherDate`'s onChange through the same `emit()` funnel as the arrow
-  // keys and chevrons closes this; before Tour 2, `otherDate` sat outside
-  // `stepByDays`'s throttle entirely.
-  it("otherDate input: a burst of well-formed in-window changes (spinner auto-repeat) is throttled by emit()", async () => {
+  // per repeat, each with a different, well-formed, in-window value. Before
+  // Tour 2, `otherDate` sat outside `stepByDays`'s throttle entirely; since
+  // étape 4, there is no throttle left at THIS layer at all (moved to
+  // BookingWizard's `loadSlots` debounce — see DayCarousel's header
+  // comment), so every one of these values is forwarded — the scenario
+  // MAJOR 2 originally described (a throttle silently DROPPING a valid
+  // value while the DOM had already advanced past it) no longer exists at
+  // this layer now that the throttle is gone; nothing here discards a
+  // value anymore. What MAJOR 2 also asked for — an `input.value` assertion
+  // that was missing before — is added below: it now proves the general
+  // "no display/action mismatch" invariant once the parent reacts, using
+  // `rerender` (a plain mock never changes `activeDate`, so the DOM can't
+  // show anything other than the original prop without one — see the
+  // `blurring after the parent accepts` test above for the same reason).
+  it("otherDate input: forwards every well-formed in-window change from a burst to onActiveDayChange, and the DOM matches once the parent reacts", () => {
     const onActiveDayChange = vi.fn();
-    renderCarousel({ activeDate: "2026-09-06", onActiveDayChange });
+    const { rerender } = render(
+      <NextIntlClientProvider locale="fr" messages={fr}>
+        <DayCarousel today={TODAY} maxDate={MAX_DATE} activeDate="2026-09-06" onActiveDayChange={onActiveDayChange} />
+      </NextIntlClientProvider>,
+    );
     const input = screen.getByLabelText(fr.Booking.otherDate) as HTMLInputElement;
 
     fireEvent.change(input, { target: { value: "2026-09-07" } });
     fireEvent.change(input, { target: { value: "2026-09-08" } });
     fireEvent.change(input, { target: { value: "2026-09-09" } });
-    expect(onActiveDayChange).toHaveBeenCalledTimes(1);
-    expect(onActiveDayChange).toHaveBeenCalledWith("2026-09-07");
+    expect(onActiveDayChange).toHaveBeenCalledTimes(3);
+    expect(onActiveDayChange).toHaveBeenNthCalledWith(1, "2026-09-07");
+    expect(onActiveDayChange).toHaveBeenNthCalledWith(2, "2026-09-08");
+    expect(onActiveDayChange).toHaveBeenNthCalledWith(3, "2026-09-09");
 
-    await wait(160);
-    fireEvent.change(input, { target: { value: "2026-09-08" } });
-    expect(onActiveDayChange).toHaveBeenCalledTimes(2);
-    expect(onActiveDayChange).toHaveBeenCalledWith("2026-09-08");
+    // Simulate the parent reacting to the last accepted value (a real
+    // BookingWizard's setActiveDate does this synchronously).
+    rerender(
+      <NextIntlClientProvider locale="fr" messages={fr}>
+        <DayCarousel today={TODAY} maxDate={MAX_DATE} activeDate="2026-09-09" onActiveDayChange={onActiveDayChange} />
+      </NextIntlClientProvider>,
+    );
+    // MAJOR 2: the DOM value matches the last value sent — no mismatch.
+    expect(input.value).toBe("2026-09-09");
   });
 
-  // Tour 2 audit: defense-in-depth companion to the throttle above — the
-  // browser is told outright not to bother auto-repeating the spinner while
-  // a key is held on the input itself.
+  // Tour 2 audit: defense-in-depth companion to the burst-forwarding test
+  // above — the browser is told outright not to bother auto-repeating the
+  // spinner while a key is held on the input itself, independently of
+  // whatever guards (or lack thereof) live downstream of `onChange`.
   it("otherDate input: a repeated (auto-repeat) keydown is prevented", () => {
     renderCarousel({ activeDate: TODAY, onActiveDayChange: vi.fn() });
     const input = screen.getByLabelText(fr.Booking.otherDate) as HTMLInputElement;
@@ -340,22 +457,22 @@ describe("DayCarousel", () => {
     expect(notCancelled).toBe(false);
   });
 
-  // Tour 2 audit [MAJEUR]: chip clicks and chevrons must go through the same
-  // `emit()` funnel as the arrow keys, so a rapid-fire burst of clicks (a
-  // mouse "auto-repeat" of sorts, or a script) is bounded the same way.
-  it("nextDay chevron clicks funnel through the same throttle as arrow keys", async () => {
+  // Task 6R étape 4 closure condition (MAJOR 3): chip clicks and chevrons
+  // still go through the same `emit()` funnel as the arrow keys, but that
+  // funnel no longer throttles (see DayCarousel's header comment) — the
+  // volume guard for the resulting network traffic now lives in
+  // BookingWizard's `loadSlots` debounce. Two rapid clicks both fire
+  // immediately at this layer.
+  it("nextDay chevron clicks emit immediately, with no per-click throttle at this layer", () => {
     const onActiveDayChange = vi.fn();
     renderCarousel({ activeDate: "2026-09-06", onActiveDayChange, locale: "fr" });
     const nextButton = screen.getByRole("button", { name: fr.Booking.nextDay });
 
     fireEvent.click(nextButton);
     fireEvent.click(nextButton);
-    expect(onActiveDayChange).toHaveBeenCalledTimes(1);
-    expect(onActiveDayChange).toHaveBeenCalledWith("2026-09-07");
-
-    await wait(160);
-    fireEvent.click(nextButton);
     expect(onActiveDayChange).toHaveBeenCalledTimes(2);
+    expect(onActiveDayChange).toHaveBeenNthCalledWith(1, "2026-09-07");
+    expect(onActiveDayChange).toHaveBeenNthCalledWith(2, "2026-09-07");
   });
 
   it("Home moves the active day back to today", () => {

@@ -9,7 +9,8 @@ import { addClinicDays, clinicNoon } from "@/lib/time/clinicTime";
  * covering the full reservable window (`today` → `maxDate`, driven by the
  * clinic's `maxHorizonDays` setting — never a hard-coded day count here).
  * Per plan.md §Refinement: Task 6 — Booking UI/UX, this replaces the old
- * fixed 7-day `DayPicker` grid.
+ * fixed 7-day day-grid component (removed once this carousel was wired into
+ * BookingWizard — étape 4).
  *
  * Design notes:
  * - Native CSS `scroll-snap` + a small keyboard/pointer handler, not a
@@ -24,39 +25,40 @@ import { addClinicDays, clinicNoon } from "@/lib/time/clinicTime";
  *   could get a legitimate patient rate-limited by their own clinic. The
  *   active day only ever changes on an explicit action: a chip click, an
  *   arrow key, a chevron, or the `otherDate` input.
- * - The SAME rate-limit risk applies to a held key or a held chevron click,
- *   not just to scroll: `keydown` auto-repeats 15-30 times/second while a
- *   key is held, and a native `<button>` fires one `click` per repeat while
- *   `Enter` is held too (Chrome/Firefox; `Space` is exempt because it fires
- *   on `keyup`). Two independent guards close this: `handleKeyDown` ignores
- *   `e.repeat` outright, and every activeDate change funnels through the
- *   single `emit()` below, which throttles to one emission every
- *   `STEP_THROTTLE_MS`. Do not remove either as "just a repaint nicety":
- *   without them, sweeping the ~90-day window in a few seconds fires dozens
- *   of `/api/slots` requests. A 429 on that path is NOT silently swallowed —
- *   `onActiveDateChange` in the parent calls `loadSlots`, whose failure sets
- *   `slotsError` and renders a `role="alert"` banner (BookingWizard.tsx) — so
- *   the patient does see something, but a burst of dozens of requests in a
- *   few seconds from one visitor is still the thing to prevent, not just to
- *   report. Only the parent's *background* `prefetchWeek` calls swallow a
- *   failure silently (`fetchAndCache`'s `catch { return null }`), because
- *   they're speculative pre-loads for days the patient hasn't asked to see
- *   yet.
- * - **The throttle and the equality guard live on `emit()`, the single point
- *   where `onActiveDayChange` is actually called — not on a "step" helper.**
- *   A Tour 2 audit found that `stepByDays` guarded arrow keys and chevrons
- *   but NOT the `otherDate` `<input type="date">`: that input sits in a
- *   sibling `<div>` outside the keyboard-handled `role="group"`, so its
- *   `onChange` never went through `stepByDays` at all. A held `ArrowUp` on
- *   the browser's native date-segment spinner auto-repeats exactly like a
- *   held keyboard arrow, firing a well-formed, in-window `change` event
- *   15-30 times/second — which passed both of `otherDate`'s validation
- *   guards (format, bounds) every time, because those guard the *value*, not
- *   the *rate*. Placing the guard on a step function instead of the emission
- *   point is exactly the kind of gap that reopens: any future emitter (a
- *   swipe gesture, a "jump to date" shortcut, …) that doesn't happen to call
- *   `stepByDays` would silently bypass the whole defense again. `emit()` is
- *   now the only function that calls `onActiveDayChange`, from every source
+ * - **Task 6R étape 4 update: the per-emission rate throttle that used to
+ *   live here has moved to the parent.** Earlier revisions of this component
+ *   throttled every `emit()` call (leading-edge, ~150ms) because each day
+ *   change used to trigger its own `/api/slots` request immediately, and a
+ *   swept keyboard/chevron/otherDate burst could fire dozens of them fast
+ *   enough to hit the 120/min/IP cap. A security audit on étape 4 found that
+ *   throttle bounded only the CADENCE of requests, not the total VOLUME of a
+ *   sweep — and that the real budget overshoot came from
+ *   `BookingWizard.tsx`'s `slotsCache` being wiped on every service change
+ *   (comparing two services in one minute cost ~182 requests against the
+ *   120/min cap). The fix was to give `BookingWizard.tsx`'s `loadSlots` a
+ *   trailing debounce on the actual network fetch (one request per sweep,
+ *   not one per day visited), plus in-flight request dedup and an
+ *   `AbortController` for a day the patient has since left — see that
+ *   file's `loadSlots`/`fetchAndCache`. Once that existed, the throttle here
+ *   became redundant *and* harmful: it also ate one deliberate keystroke on
+ *   a controlled component with no local state to catch it. **Do not
+ *   re-add a per-emission throttle in this file** — the volume guard now
+ *   lives where the network request actually happens, one layer up.
+ * - `handleKeyDown` still ignores `e.repeat` outright (a held key does not
+ *   need a throttle to be harmless: dropping every repeated keydown means
+ *   at most one call per physical press, regardless of how long it's held).
+ *   This guard is unrelated to rate-limiting and stays.
+ * - **The equality guard lives on `emit()`, the single point where
+ *   `onActiveDayChange` is actually called — not on a "step" helper.** A
+ *   Tour 2 audit (back when a throttle also lived here) found that
+ *   `stepByDays` guarded arrow keys and chevrons but NOT the `otherDate`
+ *   `<input type="date">`: that input sits in a sibling `<div>` outside the
+ *   keyboard-handled `role="group"`, so its `onChange` never went through
+ *   `stepByDays` at all. Placing a guard on a step function instead of the
+ *   emission point is exactly the kind of gap that reopens: any future
+ *   emitter (a swipe gesture, a "jump to date" shortcut, …) that doesn't
+ *   happen to call `stepByDays` would silently bypass it again. `emit()` is
+ *   the only function that calls `onActiveDayChange`, from every source
  *   (chips, arrow keys, chevrons, `Home`, `otherDate`) — new call sites must
  *   go through it too.
  * - Roving tabindex on the day chips (only the active chip has
@@ -81,17 +83,46 @@ import { addClinicDays, clinicNoon } from "@/lib/time/clinicTime";
  *   `{ preventScroll: true }`: the same effect already calls
  *   `scrollIntoView({ behavior: "smooth" })`, and a focus-triggered scroll
  *   racing the smooth one causes a visible stutter.
- * - Base chips intentionally drop `DayPicker`'s `font-semibold` and reserve
+ * - **Human-tester fix, round 1 (post-étape-4, SUPERSEDED — kept here so the
+ *   next reader understands why round 2 exists): `otherDate` was first moved
+ *   off `value={activeDate}` onto a local draft state (`dateDraft`), resynced
+ *   from `activeDate` with a render-time adjustment.** That was only half a
+ *   fix. It stopped the field from being wiped on every keystroke, but
+ *   `setDateDraft(value)` inside `onChange` is itself a `setState` — so React
+ *   still re-rendered on every single keystroke. A round-2 human test found
+ *   the *next* symptom: typing a digit into the day segment jumped the
+ *   caret straight to the month segment, so a two-digit day could never be
+ *   typed. Re-rendering `<input type="date">` and reassigning its `value`
+ *   prop resets the browser's native, per-segment editing cursor — it
+ *   doesn't matter that the reasserted value was correct (it now mirrored
+ *   the just-typed digit instead of the stale `activeDate`); the mere act of
+ *   writing the `value` prop again is what resets the native widget's
+ *   editing state.
+ * - **Human-tester fix, round 2 (current): `otherDate` is UNCONTROLLED.** No
+ *   `value` prop at all — `defaultValue={activeDate}` seeds it once at
+ *   mount, and a `ref` (`otherDateInputRef`) is the only thing that ever
+ *   touches its DOM value afterward. `onChange` reads `e.target.value`,
+ *   applies the same format + `[today, maxDate]` bounds guards as before,
+ *   and calls `emit(value)` when both pass — and does **nothing else**: no
+ *   `setState`, so no re-render, so the native date-segment editor is never
+ *   disturbed by this component while the patient is mid-keystroke. Syncing
+ *   the field when `activeDate` changes for a reason OUTSIDE this input (a
+ *   chip click, an arrow key, a chevron) is handled by a small `useEffect`
+ *   that writes `inputRef.current.value = activeDate` imperatively — and
+ *   only when the input does NOT currently have focus
+ *   (`document.activeElement !== inputRef.current`), so an in-progress edit
+ *   is never overwritten by an external change. `onBlur` is the only place
+ *   left that judges the field: once editing is actually finished, a
+ *   malformed or out-of-window value is reverted to `activeDate` directly on
+ *   `e.target.value` (legitimate here — the edit is over). `emit()` remains
+ *   the only path to `onActiveDayChange` (`grep -c "onActiveDayChange("` is
+ *   still 1), and only a value that passes both the format regex and the
+ *   `[today, maxDate]` bounds check ever reaches it from `onChange` — this
+ *   guard did not move or weaken across either round of this fix.
+ * - Base chips intentionally drop the old grid's `font-semibold` and reserve
  *   `font-bold` for the active day alone: on top of `aria-current`, it's a
  *   second, non-color signal of which day is selected (WCAG — see below).
  */
-
-/**
- * Minimum time between two `emit()` calls — the single funnel every
- * activeDate change goes through (chips, arrow keys, chevrons, `Home`,
- * `otherDate`). See the header comment for why this exists.
- */
-const STEP_THROTTLE_MS = 150;
 
 type DayCarouselProps = {
   /** Clinic-local today (YYYY-MM-DD), the lower bound of the window. */
@@ -173,10 +204,6 @@ export default function DayCarousel({
   }, [today, maxDate]);
 
   const activeRef = useRef<HTMLButtonElement | null>(null);
-  // Timestamp (ms) of the last emission through `emit()`, shared by every
-  // source of an activeDate change — see header comment for the rate-limit
-  // rationale behind throttling it.
-  const lastStepAtRef = useRef(0);
   // Holds the *date* that a keyboard-driven interaction (arrow key, chevron,
   // Home) just requested, or `null` when idle. Consumed by the effect below,
   // which only moves DOM focus if `activeDate` matches this exactly. Storing
@@ -212,23 +239,37 @@ export default function DayCarousel({
     }
   }, [activeDate]);
 
+  // `otherDate` is uncontrolled (see header comment, "round 2") — this ref is
+  // the only handle this component keeps on its DOM value.
+  const otherDateInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Keeps the `otherDate` input in sync with an `activeDate` change that
+  // originated OUTSIDE it (a chip click, an arrow key, a chevron, `Home`).
+  // Deliberately skipped while the input has focus: overwriting it mid-edit
+  // is exactly the bug round 2 fixes, just triggered from the other
+  // direction (an external prop change instead of this component's own
+  // `setState`). `el.value !== activeDate` avoids a no-op write on mount
+  // (where `defaultValue` already seeded the correct value) — not required
+  // for correctness (assigning `.value` to its own current value is
+  // harmless), just avoids touching the DOM for nothing.
+  useEffect(() => {
+    const el = otherDateInputRef.current;
+    if (!el) return;
+    if (document.activeElement === el) return;
+    if (el.value !== activeDate) el.value = activeDate;
+  }, [activeDate]);
+
   // Single funnel for every activeDate change this component can produce —
-  // see header comment for why the throttle and equality guard live HERE
-  // and not in a "step" helper. `focus: true` is passed only by
-  // keyboard-originated callers (arrow keys, chevrons, Home); a chip click
-  // or an `otherDate` edit already has the pointer/input focus where the
-  // patient put it and must not move it.
+  // see header comment for why the equality guard lives HERE and not in a
+  // "step" helper. `focus: true` is passed only by keyboard-originated
+  // callers (arrow keys, chevrons, Home); a chip click or an `otherDate`
+  // edit already has the pointer/input focus where the patient put it and
+  // must not move it. There is deliberately no rate throttle here anymore —
+  // see header comment: that guard now lives on BookingWizard's `loadSlots`
+  // debounce, which is where the actual network request happens.
   const emit = useCallback(
     (nextDate: string, options?: { focus?: boolean }) => {
       if (nextDate === activeDate) return;
-      // Throttle: a held arrow key, a held Enter on a chevron, or a held
-      // ArrowUp/ArrowDown on the native <input type="date"> spinner all
-      // auto-repeat many times per second (see header comment). Without
-      // this, sweeping the window would fire a burst of /api/slots requests
-      // fast enough to hit the 120/min/IP limit.
-      const now = Date.now();
-      if (now - lastStepAtRef.current < STEP_THROTTLE_MS) return;
-      lastStepAtRef.current = now;
       if (options?.focus) focusRequestedDateRef.current = nextDate;
       onActiveDayChange(nextDate);
     },
@@ -291,15 +332,14 @@ export default function DayCarousel({
           role="group"
           aria-label={t("dayCarouselLabel")}
           onKeyDown={handleKeyDown}
-          className="flex flex-1 snap-x snap-mandatory gap-1 overflow-x-auto scroll-smooth focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-600 sm:gap-2"
+          className="flex flex-1 snap-x snap-mandatory gap-1 overflow-x-auto scroll-smooth sm:gap-2"
         >
           {days.map((d) => {
             // Defensive guard, not a live branch today: `days` is already
             // built bounded to [today, maxDate] above, so this is always
             // false. Kept (rather than dropped) in case a future change
             // grows `days` from a wider source without re-checking bounds
-            // here — inherited from DayPicker, where a fixed 7-day grid
-            // genuinely could run past the window.
+            // here.
             const disabled = d < today || d > maxDate;
             const active = d === activeDate;
             // Roving-tabindex fallback: if `activeDate` isn't in `days` (see
@@ -373,54 +413,57 @@ export default function DayCarousel({
         <input
           id="booking-date"
           type="date"
+          ref={otherDateInputRef}
           min={today}
           max={maxDate}
-          value={activeDate}
+          defaultValue={activeDate}
           onKeyDown={(e) => {
-            // Defense in depth, not the primary guard: a held ArrowUp/
-            // ArrowDown on the native date-segment spinner auto-repeats
-            // `keydown` (and a matching `change` per repeat) just like a
-            // held keyboard arrow on the strip. The real protection is
-            // `emit()`'s throttle below, which every `onChange` value —
-            // repeat-driven or not — has to pass through; this just stops
-            // the browser from bothering to spin the value at all while the
-            // component is mid-throttle.
+            // Defense in depth: a held ArrowUp/ArrowDown on the native
+            // date-segment spinner auto-repeats `keydown` (and a matching
+            // `change` per repeat) just like a held keyboard arrow on the
+            // strip. This just stops the browser from bothering to spin the
+            // value at all while the key is held; the actual volume guard
+            // for the resulting `/api/slots` traffic lives one layer up, in
+            // BookingWizard's `loadSlots` debounce (see header comment).
             if (e.repeat) e.preventDefault();
           }}
           onChange={(e) => {
+            // Uncontrolled input (see header comment, "round 2"): no
+            // `setState` here at all. The browser already holds whatever it
+            // just reported in `e.target.value` — nothing needs to mirror it
+            // back. This is exactly what stops the native per-segment editor
+            // from being disturbed: no `setState` means no re-render, means
+            // nothing ever reassigns the input's `value`.
             const value = e.target.value;
             // `min`/`max` on <input type="date"> are validity hints, not a
-            // filter: the browser still fires `change` with an out-of-range
-            // value (and once per keystroke while typing a year digit by
-            // digit, or repeatedly while a spinner arrow is held — see the
-            // `onKeyDown` above and the header comment). Reject anything
-            // malformed or outside the reservable window before it reaches
-            // `emit()` — an out-of-window date also has no matching chip,
-            // which would strand the carousel with both chevrons disabled.
-            // No message is shown for a rejected value — that would need a
-            // string in all 3 locales for what is normally mid-typing noise
-            // (see below). Deliberate split between the two rejections:
-            // - Malformed (typically an EMPTY value: the browser holds "" on
-            //   its native <input type="date"> until every segment is
-            //   filled): left alone, value untouched. This branch fires on
-            //   every keystroke while a segment is incomplete, so forcing
-            //   `e.target.value` back to `activeDate` here would fight the
-            //   patient's own typing and make it impossible to ever finish
-            //   entering a new date by keyboard.
-            // - Well-formed but out-of-window (a complete date from a
-            //   spinner-arrow repeat, or a fully typed out-of-range date):
-            //   forced back to `activeDate` right away. `value={activeDate}`
-            //   only re-syncs the DOM on React's NEXT render, and nothing
-            //   here re-renders DayCarousel when a value is rejected (the
-            //   parent's `activeDate` didn't change) — without this line the
-            //   browser would keep showing the rejected, out-of-window date
-            //   on screen indefinitely, with no chip to match it either.
+            // filter — the browser does not stop `change` from firing with
+            // an out-of-range or incomplete value (native segment editing
+            // routinely passes through both while still mid-edit). Malformed
+            // or out-of-window values are simply never forwarded to
+            // `emit()` — this is the ONLY guard standing between a typed
+            // value and `GET /api/slots`, and it is unchanged by the
+            // uncontrolled rewrite: still a format regex, then the
+            // `[today, maxDate]` bounds check, both before `emit()`.
             if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return;
-            if (value < today || value > maxDate) {
-              e.target.value = activeDate;
-              return;
-            }
+            if (value < today || value > maxDate) return;
             emit(value);
+          }}
+          onBlur={(e) => {
+            // The field is judged only once editing is actually finished. A
+            // malformed value means the field was left mid-edit (e.g. tabbed
+            // away before completing a segment); an out-of-window value has
+            // no matching chip, which would otherwise strand the carousel
+            // with both chevrons disabled. Either way, reverting to the last
+            // accepted `activeDate` is the only sensible outcome — a valid,
+            // in-window value was already forwarded to `emit()` on change and
+            // is already equal to `activeDate` by the time blur fires, so
+            // this is a no-op for it. Writing `e.target.value` directly is
+            // legitimate here (unlike in `onChange`): the edit is over, so
+            // there is no native segment-editing state left to disturb.
+            const value = e.target.value;
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || value < today || value > maxDate) {
+              e.target.value = activeDate;
+            }
           }}
           className="rounded-lg border border-zinc-300 px-3 py-2 text-sm shadow-sm focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-teal-600"
         />
