@@ -1,32 +1,58 @@
 import { useTranslations } from "next-intl";
-import Reveal from "../motion/Reveal";
-import FloatCard from "../motion/FloatCard";
+import { CLINIC_IDENTITY } from "@/lib/settings/clinicIdentity";
+import { CalendarIcon, ClockIcon, StarIcon } from "../icons";
 
-// Floating stat cards shown right below the hero. Numbers are clinic stats;
-// labels come from the `Home.Stats` i18n namespace.
+// Proof bar (home-ui Task 2): three verifiable facts in normal flow — live
+// Google rating, real opening hours, booking promise with the clinic phone.
+// Replaces the old overlapping stat cards with invented figures
+// (5000+ / 98% appeared nowhere on clinicorthocare.com). Static on purpose:
+// no FloatCard, no stagger, no overlap.
 export default function TrustStrip() {
-  const t = useTranslations("Home.Stats");
-  const stats = [
-    { value: "10+", label: t("years") },
-    { value: "5000+", label: t("patients") },
-    { value: "4.9★", label: t("rating") },
-    { value: "98%", label: t("satisfaction") },
+  const t = useTranslations("Home");
+  const footer = useTranslations("Footer");
+  const location = useTranslations("Location");
+
+  const items = [
+    {
+      Icon: StarIcon,
+      iconClass: "bg-amber-50 text-amber-500",
+      value: t("heroRating"),
+      label: t("proofGoogle"),
+    },
+    {
+      Icon: ClockIcon,
+      iconClass: "bg-teal-50 text-teal-600",
+      value: footer("hours"),
+      label: location("hoursLabel"),
+    },
+    {
+      Icon: CalendarIcon,
+      iconClass: "bg-teal-50 text-teal-600",
+      value: t("proofBooking"),
+      label: CLINIC_IDENTITY.phone,
+    },
   ] as const;
 
   return (
-    <section aria-label="Clinic statistics" className="relative -mt-10 px-4">
-      <div className="mx-auto grid max-w-5xl grid-cols-2 gap-4 sm:grid-cols-4">
-        {stats.map((s, i) => (
-          <Reveal key={s.label} delay={i * 0.08}>
-            <FloatCard className="rounded-2xl border border-teal-100 bg-white p-6 text-center shadow-sm">
-              <p className="text-3xl font-extrabold text-teal-600 sm:text-4xl">
-                {s.value}
-              </p>
-              <p className="mt-1 text-sm font-medium text-zinc-500">{s.label}</p>
-            </FloatCard>
-          </Reveal>
+    <section aria-label={t("proofAria")} className="border-y border-zinc-200 bg-zinc-50">
+      <ul className="mx-auto grid max-w-6xl gap-6 px-4 py-6 sm:grid-cols-3 sm:px-6">
+        {items.map(({ Icon, iconClass, value, label }) => (
+          <li key={label} className="flex items-center gap-3">
+            <span
+              aria-hidden
+              className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${iconClass}`}
+            >
+              <Icon width={22} height={22} />
+            </span>
+            <span>
+              <span className="block text-sm font-semibold text-zinc-900">{value}</span>
+              <span className="block text-xs text-zinc-500" dir="auto">
+                {label}
+              </span>
+            </span>
+          </li>
         ))}
-      </div>
+      </ul>
     </section>
   );
 }

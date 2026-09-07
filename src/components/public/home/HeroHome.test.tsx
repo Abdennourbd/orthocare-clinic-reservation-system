@@ -24,7 +24,6 @@ vi.mock("@/i18n/navigation", () => ({
   getPathname: () => "/",
 }));
 
-// eslint-disable-next-line import/order -- must come after the vi.mock above
 import HeroHome from "./HeroHome";
 
 function renderHero(locale: string, messages: typeof fr) {

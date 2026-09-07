@@ -1,3 +1,4 @@
+import Image from "next/image";
 import { useTranslations } from "next-intl";
 import { Link } from "@/i18n/navigation";
 import Nav from "./Nav";
@@ -12,8 +13,14 @@ export default function Header() {
           href="/"
           className="flex items-center gap-2 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2"
         >
-          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-teal-600 text-sm font-bold text-white">
-            O
+          <span className="relative h-8 w-8 overflow-hidden rounded-full ring-1 ring-zinc-200">
+            <Image
+              src="/images/orthocare-logo-mark.png"
+              alt=""
+              width={150}
+              height={150}
+              className="h-8 w-8 object-cover"
+            />
           </span>
           <span className="text-lg font-semibold tracking-tight text-zinc-900">
             {t("Header.clinicName")}

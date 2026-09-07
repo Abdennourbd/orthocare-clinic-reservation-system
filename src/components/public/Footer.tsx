@@ -1,3 +1,4 @@
+import Image from "next/image";
 import { useTranslations } from "next-intl";
 import { Link } from "@/i18n/navigation";
 import { CLINIC_LOCATION } from "@/lib/settings/clinicLocation";
@@ -22,7 +23,16 @@ export default function Footer() {
     <footer className="border-t border-zinc-200 bg-zinc-50">
       <div className="mx-auto grid max-w-6xl gap-8 px-4 py-10 sm:px-6 md:grid-cols-3">
         <div>
-          <p className="text-lg font-semibold text-zinc-900">
+          <p className="flex items-center gap-2 text-lg font-semibold text-zinc-900">
+            <span className="relative h-7 w-7 overflow-hidden rounded-full ring-1 ring-zinc-200">
+              <Image
+                src="/images/orthocare-logo-mark.png"
+                alt=""
+                width={150}
+                height={150}
+                className="h-7 w-7 object-cover"
+              />
+            </span>
             {t("Header.clinicName")}
           </p>
           <p className="mt-2 text-sm text-zinc-600">{footer("tagline")}</p>
