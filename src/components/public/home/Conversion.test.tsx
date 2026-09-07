@@ -29,6 +29,8 @@ window.matchMedia ??= ((query: string) => ({
 
 import SmileResults from "./SmileResults";
 import ComfortSection from "./ComfortSection";
+import DoctorSection from "./DoctorSection";
+import ClinicSection from "./ClinicSection";
 
 function renderWithFr(ui: ReactNode) {
   return render(
@@ -48,6 +50,34 @@ describe("SmileResults", () => {
     expect(screen.getByRole("link", { name: "Prendre rendez-vous" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Voir plus de résultats" })).toBeTruthy();
     expect(container.querySelector('img[src*="smile-before"]')).toBeTruthy();
+    unmount();
+  });
+});
+
+describe("DoctorSection", () => {
+  it("renders kindness quote, credentials and about link", () => {
+    const { container, unmount } = renderWithFr(<DoctorSection />);
+    expect(screen.getByText("Dr Besma Moussaoui")).toBeTruthy();
+    expect(screen.getByText("Spécialiste ODF")).toBeTruthy();
+    expect(screen.getByText("Protocole PITTS")).toBeTruthy();
+    expect(screen.getByText("Aligneurs transparents")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Découvrir la clinique" })).toBeTruthy();
+    expect(container.querySelector('img[src*="dr-moussaoui-portrait"]')).toBeTruthy();
+    unmount();
+  });
+});
+
+describe("ClinicSection", () => {
+  it("renders all three hygiene photos with captions", () => {
+    const { container, unmount } = renderWithFr(<ClinicSection />);
+    expect(
+      screen.getByRole("heading", { level: 2, name: "Une clinique où l'on se sent bien" }),
+    ).toBeTruthy();
+    for (const src of ["clinic-waiting-room", "clinic-reception", "clinic-equipment"]) {
+      expect(container.querySelector(`img[src*="${src}"]`)).toBeTruthy();
+    }
+    expect(screen.getByText("Salle d'attente apaisante")).toBeTruthy();
+    expect(screen.getByText("Équipements modernes, hygiène rigoureuse")).toBeTruthy();
     unmount();
   });
 });
