@@ -1,142 +1,89 @@
 "use client";
 
-import { useRef } from "react";
+import Image from "next/image";
 import { useTranslations } from "next-intl";
-import { motion, useScroll, useTransform, useReducedMotion } from "framer-motion";
 import { Link } from "@/i18n/navigation";
-import { ToothIcon, SparkleIcon, StarIcon } from "../icons";
+import { CLINIC_IDENTITY } from "@/lib/settings/clinicIdentity";
+import { PhoneIcon, StarIcon } from "../icons";
+import HeroOrb from "./HeroOrb";
 
-// Decorative floating glyphs layered behind the hero copy. Positions are
-// hand-tuned; each drifts on a slow loop and shifts with scroll for parallax.
-type Floater = {
-  Icon: (props: { width: number; height: number }) => React.ReactElement;
-  size: number;
-  delay: number;
-  drift: number;
-  top?: string;
-  left?: string;
-  right?: string;
-  bottom?: string;
-};
-
-const floaters: Floater[] = [
-  { Icon: ToothIcon, top: "12%", left: "6%", size: 56, delay: 0, drift: 18 },
-  { Icon: SparkleIcon, top: "20%", right: "8%", size: 40, delay: 1.2, drift: 24 },
-  { Icon: ToothIcon, bottom: "16%", left: "12%", size: 72, delay: 0.6, drift: 14 },
-  { Icon: SparkleIcon, bottom: "22%", right: "14%", size: 48, delay: 1.8, drift: 20 },
-  { Icon: ToothIcon, top: "34%", right: "20%", size: 34, delay: 2.4, drift: 16 },
-];
+// Doctor-centric hero (home-ui Task 1): Dr Besma Moussaoui's name + promise
+// left, her portrait right with one ambient fluid-orb accent behind it.
+// Exactly four text elements (eyebrow, H1, subtext, CTAs) — proof lives in
+// the frosted card over the portrait and in the proof bar below, never in
+// the hero copy. No floaters, no parallax, no scroll cue, no gradient text.
+const DOCTOR_NAME = "Dr Besma Moussaoui";
 
 export default function HeroHome() {
   const t = useTranslations("Home");
-  const ref = useRef<HTMLElement>(null);
-  const shouldReduceMotion = useReducedMotion();
-
-  const { scrollYProgress } = useScroll({
-    target: ref,
-    offset: ["start start", "end start"],
-  });
-  const yText = useTransform(scrollYProgress, [0, 1], [0, 120]);
-  const opacity = useTransform(scrollYProgress, [0, 0.7], [1, 0]);
+  const telHref = `tel:${CLINIC_IDENTITY.phone.replace(/[\s-]/g, "")}`;
 
   return (
-    <section
-      ref={ref}
-      className="relative overflow-hidden bg-gradient-to-b from-teal-50 via-white to-white"
-    >
-      {/* Floating decorative icons */}
-      {floaters.map(({ Icon, top, left, right, bottom, size, delay, drift }, i) => (
-        <motion.div
-          key={i}
-          aria-hidden
-          className="absolute text-teal-300/70"
-          style={{ top, left, right, bottom }}
-          animate={shouldReduceMotion ? undefined : { y: [0, -drift, 0], rotate: [0, 8, 0] }}
-          transition={{
-            duration: 6,
-            repeat: Infinity,
-            ease: "easeInOut",
-            delay,
-          }}
-        >
-          <Icon width={size} height={size} />
-        </motion.div>
-      ))}
-
-      <motion.div
-        style={{ y: shouldReduceMotion ? 0 : yText, opacity }}
-        className="relative mx-auto flex max-w-5xl flex-col items-center px-4 py-24 text-center sm:px-6 md:py-36"
-      >
-        <span
-          style={{ animationDelay: "0ms" }}
-          className="hero-enter mb-6 inline-flex items-center gap-2 rounded-full border border-teal-200 bg-teal-50/80 px-4 py-1.5 text-sm font-medium text-teal-700"
-        >
-          <SparkleIcon width={16} height={16} />
-          {t("heroBadge")}
-        </span>
-
-        <h1
-          style={{ animationDelay: "50ms" }}
-          className="hero-enter max-w-4xl text-4xl font-bold tracking-tight text-zinc-900 sm:text-6xl md:text-7xl"
-        >
-          {t("heroTitle")}{" "}
-          <span className="bg-gradient-to-r from-teal-600 to-emerald-500 bg-clip-text text-transparent">
-            {t("heroTitleAccent")}
-          </span>
-        </h1>
-
-        <p
-          style={{ animationDelay: "150ms" }}
-          className="hero-enter mt-6 max-w-2xl text-lg text-zinc-600 sm:text-xl"
-        >
-          {t("heroSubtitle")}
-        </p>
-
-        <div
-          style={{ animationDelay: "250ms" }}
-          className="hero-enter mt-10 flex flex-col gap-3 sm:flex-row"
-        >
-          <Link
-            href="/book"
-            className="rounded-full bg-teal-600 px-8 py-4 text-base font-semibold text-white shadow-lg shadow-teal-600/25 transition-all hover:-translate-y-0.5 hover:bg-teal-700 hover:shadow-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2"
-          >
-            {t("cta")}
-          </Link>
-          <Link
-            href="/services"
-            className="rounded-full border border-zinc-300 bg-white px-8 py-4 text-base font-semibold text-zinc-800 transition-all hover:-translate-y-0.5 hover:bg-zinc-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2"
-          >
-            {t("secondaryCta")}
-          </Link>
-        </div>
-
-        <div
-          style={{ animationDelay: "400ms" }}
-          className="hero-enter mt-10 flex items-center gap-2 text-sm text-zinc-500"
-        >
-          <span className="flex text-amber-400" aria-hidden>
-            {Array.from({ length: 5 }).map((_, i) => (
-              <StarIcon key={i} width={16} height={16} fill="currentColor" stroke="none" />
-            ))}
-          </span>
-          <span>{t("heroRating")}</span>
-        </div>
-      </motion.div>
-
-      {/* Scroll cue */}
-      <motion.div
+    <section className="relative overflow-hidden bg-white">
+      {/* Calm spa wash (glass-over-aurora language, CodeFronts MIT): static CSS only. */}
+      <div
         aria-hidden
-        className="relative mx-auto flex w-max flex-col items-center gap-2 pb-10 text-teal-500"
-        animate={shouldReduceMotion ? {} : { y: [0, 8, 0] }}
-        transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }}
-      >
-        <span className="text-xs font-medium uppercase tracking-widest text-zinc-400">
-          {t("scrollHint")}
-        </span>
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M12 5v14M6 13l6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      </motion.div>
+        className="pointer-events-none absolute -top-32 end-0 h-96 w-96 rounded-full bg-teal-100/70 blur-3xl"
+      />
+      <div className="relative mx-auto grid max-w-6xl items-center gap-10 px-4 pb-16 pt-14 sm:px-6 lg:grid-cols-[1.02fr_0.98fr] lg:pb-24 lg:pt-20">
+        <div className="max-w-xl">
+          <p className="hero-enter text-xs font-semibold uppercase tracking-[0.18em] text-teal-700">
+            {t("heroEyebrow")}
+          </p>
+          <h1
+            style={{ animationDelay: "60ms" }}
+            className="hero-enter mt-4 text-4xl font-bold tracking-tight text-zinc-900 md:text-5xl lg:text-6xl"
+          >
+            {DOCTOR_NAME}
+          </h1>
+          <p
+            style={{ animationDelay: "140ms" }}
+            className="hero-enter mt-4 max-w-[52ch] text-lg leading-relaxed text-zinc-600"
+          >
+            {t("heroSubtitle")}
+          </p>
+          <div
+            style={{ animationDelay: "220ms" }}
+            className="hero-enter mt-8 flex flex-col gap-3 sm:flex-row sm:items-center"
+          >
+            <Link
+              href="/book"
+              className="rounded-full bg-teal-600 px-8 py-4 text-base font-semibold text-white shadow-lg shadow-teal-600/25 transition-all hover:-translate-y-0.5 hover:bg-teal-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2"
+            >
+              {t("cta")}
+            </Link>
+            <a
+              href={telHref}
+              className="inline-flex items-center justify-center gap-2 rounded-full border border-zinc-300 bg-white px-8 py-4 text-base font-semibold text-zinc-800 transition-all hover:-translate-y-0.5 hover:bg-zinc-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2"
+            >
+              <PhoneIcon width={18} height={18} aria-hidden />
+              {t("heroCall")}
+            </a>
+          </div>
+        </div>
+
+        <div className="relative mx-auto w-full max-w-[420px]">
+          <HeroOrb size={300} className="-top-10 -end-6 sm:-end-10" />
+          <Image
+            src="/images/dr-moussaoui-portrait.png"
+            alt={t("heroPortraitAlt")}
+            width={768}
+            height={1092}
+            priority
+            sizes="(max-width: 1024px) 100vw, 420px"
+            className="relative h-auto w-full rounded-[1.75rem] object-cover shadow-xl ring-1 ring-zinc-900/10"
+          />
+          <div className="absolute inset-x-4 bottom-4 rounded-2xl border border-white/60 bg-white/80 px-4 py-3 shadow-lg backdrop-blur">
+            <p className="flex items-center gap-1.5 text-sm font-semibold text-zinc-900">
+              <span className="flex text-amber-400" aria-hidden>
+                <StarIcon width={16} height={16} fill="currentColor" stroke="none" />
+              </span>
+              {t("heroRating")}
+            </p>
+            <p className="mt-0.5 text-xs text-zinc-600">{CLINIC_IDENTITY.address}</p>
+          </div>
+        </div>
+      </div>
     </section>
   );
 }

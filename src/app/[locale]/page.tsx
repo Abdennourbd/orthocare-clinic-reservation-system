@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { getTranslations } from "next-intl/server";
 import { pageMetadata } from "@/lib/seo/pageMetadata";
-import CursorGlow from "@/components/public/motion/CursorGlow";
 import HeroHome from "@/components/public/home/HeroHome";
 import TrustStrip from "@/components/public/home/TrustStrip";
 import ServicesPreview from "@/components/public/home/ServicesPreview";
@@ -29,7 +28,6 @@ export async function generateMetadata({
 export default function HomePage() {
   return (
     <>
-      <CursorGlow />
       <HeroHome />
       <TrustStrip />
       <ServicesPreview />
