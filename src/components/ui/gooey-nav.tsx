@@ -16,10 +16,11 @@
 // desktop usage wraps this in dir="ltr" (see Nav.tsx). Reduced motion is
 // honored internally (springs jump, single static frame).
 // Palette adaptation (2026-09-07, explicit human request to match the site):
-// bar + seam color are teal-50 (#f0fdfa) instead of stock gray, inactive
-// labels are zinc-600 with a teal hover instead of #868593, and the dead
-// dark: variants are removed (the project has no dark mode). Active color
-// stays a prop (Nav passes teal-600).
+// the bar is plain white like the header — inactive state reads as clean
+// floating labels, and only the teal active pill carries color. Dead dark:
+// variants removed (the project has no dark mode). Active color stays a
+// prop (Nav passes teal-600); the active segment gets a soft teal shadow
+// so the pill lifts off the page during morphs.
 "use client";
 
 import {
@@ -47,8 +48,8 @@ const NECK_H = 100;
 const FADE_IN = "transition-colors duration-[400ms]";
 const FADE_OUT = "transition-colors duration-0";
 
-const BAR = "bg-[#f0fdfa]";
-const BAR_TEXT = "text-[#f0fdfa]";
+const BAR = "bg-white";
+const BAR_TEXT = "text-white";
 
 const SIZES = {
   xs: {
@@ -286,7 +287,11 @@ export function GooeyNav({
                 borderTopRightRadius: open(i + 1) ? corner : 0,
                 borderBottomRightRadius: open(i + 1) ? corner : 0,
               }}
-              className={cn(BAR, isActive ? FADE_IN : FADE_OUT)}
+              className={cn(
+                BAR,
+                isActive ? FADE_IN : FADE_OUT,
+                isActive && "shadow-md shadow-teal-600/25",
+              )}
               style={{ backgroundColor: isActive ? activeColor : undefined }}
             >
               <NavLabel

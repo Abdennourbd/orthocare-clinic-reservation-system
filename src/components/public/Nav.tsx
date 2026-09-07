@@ -40,18 +40,22 @@ export default function Nav() {
     <>
       {/* Desktop: gooey pill nav (rare-ui, teal active). The seam geometry
           uses physical margins, so the container is pinned dir="ltr" even in
-          the Arabic locale; the mobile menu below stays fully RTL-native. */}
-      <div className="hidden lg:block" dir="ltr">
+          the Arabic locale; the mobile menu below stays fully RTL-native.
+          xl breakpoint: 7 labels + logo + actions genuinely don't fit 1024px,
+          so the hamburger owns everything below 1280. */}
+      <div className="hidden xl:block" dir="ltr">
         <GooeyNav
           aria-label="Primary"
           size="sm"
+          separation={18}
+          radius={12}
           activeColor="#0d9488"
           activeLabelColor="#ffffff"
           items={items.map((item) => ({ label: t(item.key), href: item.href }))}
         />
       </div>
 
-      <div className="lg:hidden">
+      <div className="xl:hidden">
         <button
           ref={buttonRef}
           type="button"
