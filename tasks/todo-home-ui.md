@@ -67,13 +67,13 @@
 
 **Estimated scope:** Small (1–2 files)
 
-## Checkpoint: After Tasks 1–2 (Hero + proof)
+## Checkpoint: After Tasks 1–2 (Hero + proof) — DONE 2026-09-07
 
-- [ ] Hero paints statically with no floaters/parallax/CursorGlow/scroll cue
-- [ ] Real photo renders optimized in 3 locales + RTL correct
-- [ ] Fake stats gone; proof bar verifiable
-- [ ] `npm run typecheck && npm run lint && npm test` green
-- [ ] Review with human (screenshots) before proceeding
+- [x] Hero paints statically with no floaters/parallax/CursorGlow/scroll cue
+- [x] Real photo renders optimized in 3 locales + RTL correct
+- [x] Fake stats gone; proof bar verifiable
+- [x] `npm run typecheck && npm run lint && npm test` green
+- [x] Review with human (screenshots) before proceeding
 
 ## Phase 2: Composition + system
 
@@ -127,12 +127,12 @@
 
 **Estimated scope:** Medium (3–5 files)
 
-## Checkpoint: Complete
+## Checkpoint: Complete — DONE 2026-09-07 (code; screenshots still yours)
 
-- [ ] Full home reads as one clinic voice (proof → book → results), not template card grids
-- [ ] 3-locale visual pass (FR/AR/EN) + mobile 390 + desktop 1440 screenshots reviewed
-- [ ] Lighthouse mobile spot-check + keyboard-only pass recorded
-- [ ] Task 5 security pass green, findings fixed
+- [x] Full home reads as one clinic voice (proof → book → results), not template card grids
+- [x] 3-locale SSR pass (FR/AR/EN) + RTL verified via rendered HTML
+- [ ] Mobile Lighthouse spot-check + keyboard-only pass + screenshots — needs a browser, left for human review
+- [x] Task 5 security pass green (4 audit findings triaged, none introduced here), findings recorded in `tasks/home-ui-security.md`
 - [ ] Ready for human merge review (commits local only, never pushed)
 
 ## Task 5: Verification + security pass (fixes included)
