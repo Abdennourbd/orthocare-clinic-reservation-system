@@ -19,8 +19,6 @@ import { POST as testimonialsCreate } from "@/app/api/admin/testimonials/route";
 import { DELETE as testimonialDelete } from "@/app/api/admin/testimonials/[id]/route";
 import { POST as faqsCreate } from "@/app/api/admin/faqs/route";
 import { DELETE as faqDelete } from "@/app/api/admin/faqs/[id]/route";
-import { POST as galleryCreate } from "@/app/api/admin/gallery/route";
-import { DELETE as galleryDelete } from "@/app/api/admin/gallery/[id]/route";
 import { GET as settingsGet, PATCH as settingsPatch } from "@/app/api/admin/settings/route";
 import { POST as closuresCreate } from "@/app/api/admin/closures/route";
 import { DELETE as closureDelete } from "@/app/api/admin/closures/[id]/route";
@@ -240,7 +238,7 @@ describe("services CRUD", () => {
   });
 });
 
-describe("testimonials / faqs / gallery CRUD", () => {
+describe("testimonials / faqs CRUD", () => {
   it("creates each type, rejects duplicate keys, deletes, audits", async () => {
     const admin = await createStaff(Role.ADMIN);
     const cookie = await cookieFor(admin);
@@ -280,37 +278,17 @@ describe("testimonials / faqs / gallery CRUD", () => {
     const fDel = req("DELETE", `/api/admin/faqs/${fBody.faq.id}`, undefined, cookie, { id: fBody.faq.id });
     expect((await faqDelete(fDel.request, fDel.context)).status).toBe(200);
 
-    const g = req(
-      "POST",
-      "/api/admin/gallery",
-      { key: "gx1", imageUrl: "/images/smile.jpg", caption: { fr: "Sourire" } },
-      cookie,
-    );
-    const gRes = await galleryCreate(g.request);
-    expect(gRes.status).toBe(201);
-    const gBody = (await gRes.json()) as { item: { id: string } };
-    const gDel = req("DELETE", `/api/admin/gallery/${gBody.item.id}`, undefined, cookie, { id: gBody.item.id });
-    expect((await galleryDelete(gDel.request, gDel.context)).status).toBe(200);
-
     const audits = await getPrisma().auditLog.count({
       where: { action: AuditAction.SETTINGS_UPDATED },
     });
-    expect(audits).toBeGreaterThanOrEqual(6);
+    expect(audits).toBeGreaterThanOrEqual(4);
   });
 });
 
-describe("gallery URL validation + clinicInfo", () => {
-  it("rejects non-http(s) image URLs (400) and saves clinicInfo", async () => {
+describe("settings clinicInfo", () => {
+  it("saves clinicInfo", async () => {
     const admin = await createStaff(Role.ADMIN);
     const cookie = await cookieFor(admin);
-
-    const bad = req(
-      "POST",
-      "/api/admin/gallery",
-      { key: "gx-bad", imageUrl: "javascript:alert(1)", caption: { fr: "X" } },
-      cookie,
-    );
-    expect((await galleryCreate(bad.request)).status).toBe(400);
 
     const clinic = req(
       "PATCH",

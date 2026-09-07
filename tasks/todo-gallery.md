@@ -13,7 +13,9 @@ Details + rationale live in `tasks/plan-gallery.md`. Implement strictly in order
 
 ## Phase 1: Foundation + admin backbone
 
-## Task G1: Schema, migration, seed, public fetchers
+## Task G1: Schema, migration, seed, public fetchers — DONE (2026-09-07)
+
+**Description:** (as above; migration hand-written in repo style because the dev Neon DB is unreachable from this environment — apply with `prisma migrate deploy` where reachable; applied + verified on the local test DB. Upload cap set to 4 Mo, not ~5 Mo — Vercel body limit ~4.5 Mo; see `src/lib/gallery/images.ts`.)
 
 **Description:** Add `SmileCase` (key unique, title/description as per-locale JSON — free text written by the admin: what the patient had, how it was treated; beforeImageUrl, afterImageUrl, active, sortOrder, featured bool + featuredOrder, consentConfirmed, consentAt) and `SmileCaseImage` (caseId FK, imageUrl, caption JSON, sortOrder) models; migrate; seed 3 clearly synthetic cases; add `listActiveSmileCases` + `listFeaturedCases` + `getSmileCaseByKey` fetchers in `src/lib/public/content.ts` using `localized()` and the `gallery` cache tag, with unit tests for ordering, active-filtering, featured ordering, and locale fallback.
 
@@ -38,7 +40,9 @@ Details + rationale live in `tasks/plan-gallery.md`. Implement strictly in order
 
 **Estimated scope:** Medium (3–5 files)
 
-## Task G2: Admin API (CRUD + image upload)
+## Task G2: Admin API (CRUD + image upload) — DONE (2026-09-07)
+
+**Description:** (as above; 12 integration tests + 7 new authz-matrix rows, 267 matrix tests green. Non-allow-listed MIME rejected at the Zod metadata gate with 400 — same convention as patient documents.)
 
 **Description:** Vertical slice of the admin backbone: `GET/POST /api/admin/cases`, `GET/PATCH/DELETE /api/admin/cases/[id]`, extras `POST/DELETE /api/admin/cases/[id]/images` (max 8 extras per case — 9th rejected), featuring `PATCH` capped at 4 featured cases (5th rejected), and `POST /api/admin/cases/upload` (multipart → Vercel Blob public, JPEG/PNG/WebP, ~5 MB cap, extension/content-type agreement, blob written only after validation). ADMIN-only, CSRF + rate limits (existing content limits), `SETTINGS_UPDATED` audit, `revalidateTagSafe("gallery")` on writes. Hard rule: `active=true` rejected without `consentConfirmed=true`. Authz-matrix rows + route-level integration tests.
 
@@ -77,7 +81,9 @@ Details + rationale live in `tasks/plan-gallery.md`. Implement strictly in order
 
 ## Phase 2: Admin control + public experience
 
-## Task G3: Admin UI — case management
+## Task G3: Admin UI — case management — DONE (2026-09-07)
+
+**Description:** (as above; "Cas patients" tab added to ContentDashboard — old gallery tab removal deferred to G5. List route extended to include ordered extras so the edit form needs no extra endpoint.)
 
 **Description:** The admin-facing control the requester asked for: a cases section in the dashboard (extend `ContentDashboard` with a "Cas patients" tab or a dedicated `/admin/cases` page) listing all cases with visibility + featured status; create/edit form with free-text **title** + **description** fields (FR required, AR/EN optional — "this patient had this, we treated it with that"), before-image and after-image pickers (upload new file or paste URL, with thumbnail preview), extras manager (add/remove/reorder, max 8), **featured toggle** (mark for home page, live count shown with 2–4 guidance, API caps at 4), explicit consent checkbox (required to publish), show/hide toggle, sort-order control, and two-step delete (reuse `ConfirmPanel`). FR-only, same visual language as `GalleryTab`.
 
@@ -102,7 +108,9 @@ Details + rationale live in `tasks/plan-gallery.md`. Implement strictly in order
 
 **Estimated scope:** Medium (2–4 files)
 
-## Task G4: Public gallery rework + before/after slider
+## Task G4: Public gallery rework + before/after slider — DONE (2026-09-07)
+
+**Description:** (as above + CTA block; slider mechanics isolated with dir="ltr", keyboard support role="slider", i18n parity green.)
 
 **Description:** Rework `/[locale]/gallery` from the caption-paired grid into case cards: each card shows the new `BeforeAfterSlider` (draggable divider, pointer + touch, arrow-key control with `role="slider"`, RTL-aware, Before/Après labels per locale), title + short description, and a "Voir plus" link to the detail page. Below the grid a CTA block ("see more cases — find a patient who had the same problem as you", linking to booking/contact). New i18n strings in `messages/fr|ar|en.json`. Images via `next/image`, lazy-loaded, with `sizes` set. Retire `groupIntoBlocks` usage on this page.
 
@@ -126,7 +134,7 @@ Details + rationale live in `tasks/plan-gallery.md`. Implement strictly in order
 
 **Estimated scope:** Medium (3–5 files)
 
-## Task G5: Case detail page (more pictures) + home preview + GalleryItem deprecation
+## Task G5: Case detail page (more pictures) + home featured preview + GalleryItem deletion
 
 **Description:** New `/[locale]/gallery/[key]` detail page: large slider, full title + description (problem → treatment → procedure), extras grid (up to 8 "more pictures about the patient", e.g. procedure steps), back-to-gallery link, per-case metadata for SEO; 404 for unknown/inactive keys. Update home `GalleryPreview` to render the admin's **featured cases** (in `featuredOrder`; fallback to latest active if none featured) as after-image cards plus the CTA button, linking to `/gallery`. Delete the old path: remove `GalleryTab` from the dashboard, delete the `GalleryItem` API routes, drop the `GalleryItem` model via migration (deletes the 12 synthetic rows — human-approved), remove its seed block and `galleryBlocks.ts` + test (updating any remaining references). Add metadata strings to the 3 locales.
 

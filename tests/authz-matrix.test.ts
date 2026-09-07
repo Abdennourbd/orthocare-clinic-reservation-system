@@ -81,14 +81,6 @@ import {
   DELETE as faqDeleteRoute,
 } from "@/app/api/admin/faqs/[id]/route";
 import {
-  GET as galleryListRoute,
-  POST as galleryCreateRoute,
-} from "@/app/api/admin/gallery/route";
-import {
-  PATCH as galleryPatchRoute,
-  DELETE as galleryDeleteRoute,
-} from "@/app/api/admin/gallery/[id]/route";
-import {
   GET as casesListRoute,
   POST as casesCreateRoute,
 } from "@/app/api/admin/cases/route";
@@ -682,37 +674,6 @@ const ROUTES: RouteRow[] = [
     allowed: [Role.ADMIN],
     okStatus: 404,
     handler: faqDeleteRoute,
-  },
-  {
-    method: "GET",
-    scanPath: "/api/admin/gallery",
-    allowed: [Role.ADMIN],
-    handler: galleryListRoute,
-  },
-  {
-    method: "POST",
-    scanPath: "/api/admin/gallery",
-    allowed: [Role.ADMIN],
-    okStatus: 400,
-    handler: galleryCreateRoute,
-  },
-  {
-    method: "PATCH",
-    scanPath: "/api/admin/gallery/[id]",
-    requestPath: "/api/admin/gallery/does-not-exist",
-    params: { id: "does-not-exist" },
-    allowed: [Role.ADMIN],
-    okStatus: 400,
-    handler: galleryPatchRoute,
-  },
-  {
-    method: "DELETE",
-    scanPath: "/api/admin/gallery/[id]",
-    requestPath: "/api/admin/gallery/does-not-exist",
-    params: { id: "does-not-exist" },
-    allowed: [Role.ADMIN],
-    okStatus: 404,
-    handler: galleryDeleteRoute,
   },
   {
     method: "GET",

@@ -40,21 +40,6 @@ async function fetchTestimonials(locale: string) {
   }));
 }
 
-async function fetchGalleryItems(locale: string) {
-  // Gallery keys are zero-padded (g01, g02, … g12) precisely so this sort
-  // gives the intended editorial order, including consecutive before/after
-  // pairs — see prisma/seed.ts.
-  const rows = await getPrisma().galleryItem.findMany({
-    where: { active: true },
-    orderBy: { key: "asc" },
-  });
-  return rows.map((r) => ({
-    id: r.id,
-    imageUrl: r.imageUrl,
-    caption: localized(r.caption as LocalizedField, locale),
-  }));
-}
-
 export const listActiveFaqItems = isDev
   ? fetchFaqItems
   : unstable_cache(fetchFaqItems, ["faq-items"], { tags: ["faq"], revalidate: 3600 });
@@ -63,13 +48,6 @@ export const listActiveTestimonials = isDev
   ? fetchTestimonials
   : unstable_cache(fetchTestimonials, ["testimonials"], {
       tags: ["testimonial"],
-      revalidate: 3600,
-    });
-
-export const listActiveGalleryItems = isDev
-  ? fetchGalleryItems
-  : unstable_cache(fetchGalleryItems, ["gallery-items"], {
-      tags: ["gallery"],
       revalidate: 3600,
     });
 

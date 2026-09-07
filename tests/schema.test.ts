@@ -140,14 +140,28 @@ describe("Schema smoke test (Task 3a)", () => {
     });
     expect(asLocales(faq.question).en).toBe("Question");
 
-    const gallery = await prisma.galleryItem.create({
+    const smileCase = await prisma.smileCase.create({
       data: {
-        key: "g-test",
-        imageUrl: "https://example.com/photo.jpg",
-        caption: { fr: "Photo", ar: "صورة", en: "Photo" },
+        key: "c-test",
+        title: { fr: "Cas test", ar: "حالة اختبار", en: "Test case" },
+        description: { fr: "Description" },
+        beforeImageUrl: "/images/beforewhitening.jpeg",
+        afterImageUrl: "https://example.com/photo.jpg",
+        active: true,
+        consentConfirmed: true,
+        featured: true,
       },
     });
-    expect(gallery.imageUrl).toBe("https://example.com/photo.jpg");
+    expect(smileCase.afterImageUrl).toBe("https://example.com/photo.jpg");
+
+    const extra = await prisma.smileCaseImage.create({
+      data: {
+        caseId: smileCase.id,
+        imageUrl: "/images/smile.jpg",
+        caption: { fr: "Étape" },
+      },
+    });
+    expect(extra.caseId).toBe(smileCase.id);
 
     // Read back the closure with its creator relation.
     const fetched = await prisma.scheduleException.findUnique({

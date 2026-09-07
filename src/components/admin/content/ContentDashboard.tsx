@@ -4,7 +4,6 @@ import { useRef, useState } from "react";
 import ServicesTab from "./ServicesTab";
 import TestimonialsTab from "./TestimonialsTab";
 import FaqsTab from "./FaqsTab";
-import GalleryTab from "./GalleryTab";
 import CasesTab from "./CasesTab";
 
 // Task 21 — content dashboard shell (ADMIN): tabbed CRUD for services,
@@ -16,7 +15,6 @@ const TABS = [
   { id: "testimonials", label: "Témoignages" },
   { id: "faqs", label: "Questions fréquentes" },
   { id: "cases", label: "Cas patients" },
-  { id: "gallery", label: "Galerie" },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -41,7 +39,7 @@ export default function ContentDashboard() {
       <div>
         <h1 className="text-xl font-semibold text-slate-900">Contenu du site</h1>
         <p className="mt-1 text-sm text-slate-600">
-          Services, témoignages, questions fréquentes et galerie. Les modifications sont visibles sur le site public.
+          Services, témoignages, questions fréquentes et cas patients. Les modifications sont visibles sur le site public.
         </p>
       </div>
 
@@ -80,7 +78,6 @@ export default function ContentDashboard() {
         {tab === "testimonials" ? <TestimonialsTab /> : null}
         {tab === "faqs" ? <FaqsTab /> : null}
         {tab === "cases" ? <CasesTab /> : null}
-        {tab === "gallery" ? <GalleryTab /> : null}
       </div>
     </div>
   );

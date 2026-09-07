@@ -77,46 +77,7 @@ export const faqPatchSchema = z
     { message: "Aucune modification fournie." },
   );
 
-// --- Gallery ---
-
-// Images render as <img src> on the public gallery — only local paths and
-// http(s) URLs are allowed (never javascript:/data:/file: schemes).
-const imageUrlSchema = (required: boolean) => {
-  const base = z.string().trim().max(2000, "URL trop longue.");
-  const withMin = required
-    ? base.min(1, "L'URL de l'image est requise.")
-    : base.min(1, "L'URL ne peut pas être vide.");
-  return withMin.refine((u) => u.startsWith("/") || /^https?:\/\//i.test(u), {
-    message: "Seules les URLs http(s) ou les chemins locaux (/images/…) sont autorisés.",
-  });
-};
-
-export const galleryCreateSchema = z.object({
-  key: keySchema,
-  imageUrl: imageUrlSchema(true),
-  caption: localizedFieldSchema,
-  active: z.boolean().optional(),
-});
-
-export const galleryPatchSchema = z
-  .object({
-    key: keySchema.optional(),
-    imageUrl: imageUrlSchema(false).optional(),
-    caption: localizedFieldSchema.optional(),
-    active: z.boolean().optional(),
-  })
-  .refine(
-    (v) =>
-      v.key !== undefined ||
-      v.imageUrl !== undefined ||
-      v.caption !== undefined ||
-      v.active !== undefined,
-    { message: "Aucune modification fournie." },
-  );
-
 export type TestimonialCreateInput = z.infer<typeof testimonialCreateSchema>;
 export type TestimonialPatchInput = z.infer<typeof testimonialPatchSchema>;
 export type FaqCreateInput = z.infer<typeof faqCreateSchema>;
 export type FaqPatchInput = z.infer<typeof faqPatchSchema>;
-export type GalleryCreateInput = z.infer<typeof galleryCreateSchema>;
-export type GalleryPatchInput = z.infer<typeof galleryPatchSchema>;

@@ -150,6 +150,18 @@ describe("cases CRUD + consent gate", () => {
     expect((await casesCreate(request)).status).toBe(201);
   });
 
+  it("rejects non-http(s) image URLs", async () => {
+    const admin = await createStaff();
+    const cookie = await cookieFor(admin);
+    const bad = req(
+      "POST",
+      "/api/admin/cases",
+      caseBody("bad-url", { beforeImageUrl: "javascript:alert(1)" }),
+      cookie,
+    );
+    expect((await casesCreate(bad.request)).status).toBe(400);
+  });
+
   it("duplicate key is a 409; unknown id is a 404", async () => {
     const admin = await createStaff();
     const cookie = await cookieFor(admin);

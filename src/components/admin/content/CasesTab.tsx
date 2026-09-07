@@ -6,7 +6,7 @@ import CaseForm, { type CaseRow } from "./CaseForm";
 
 // G3 — "Cas patients" tab (ADMIN): list, create/edit with before/after
 // pickers, extras, consent gate, home-feature pick (max 4), show/hide,
-// delete. Same visual language as GalleryTab; form stays open above the
+// delete. Same visual language as the other content tabs; form stays open above the
 // list so the admin keeps context while editing.
 
 const buttonSecondaryClass =

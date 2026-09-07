@@ -2,7 +2,6 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import {
   listActiveFaqItems,
   listActiveTestimonials,
-  listActiveGalleryItems,
 } from "../src/lib/public/content";
 import {
   listActiveServices,
@@ -55,17 +54,6 @@ async function seedContent() {
       },
     ],
   });
-
-  await prisma.galleryItem.createMany({
-    data: [
-      {
-        key: "g01",
-        imageUrl: "/image1.jpg",
-        caption: { fr: "Légende 1 FR", en: "Caption 1 EN" },
-        active: true,
-      },
-    ],
-  });
 }
 
 describe("Public Content", () => {
@@ -94,13 +82,6 @@ describe("Public Content", () => {
     const items = await listActiveTestimonials("en");
     expect(items).toEqual([
       { id: expect.any(String), author: "Author 1 EN", content: "Content 1 EN", rating: 5 },
-    ]);
-  });
-
-  it("fetches active gallery items localized", async () => {
-    const items = await listActiveGalleryItems("fr");
-    expect(items).toEqual([
-      { id: expect.any(String), imageUrl: "/image1.jpg", caption: "Légende 1 FR" },
     ]);
   });
 });
