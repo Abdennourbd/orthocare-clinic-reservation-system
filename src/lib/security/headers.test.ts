@@ -35,7 +35,7 @@ describe("SECURITY_HEADERS (public pages)", () => {
   it("keeps the rest of the CSP strict by default", () => {
     const csp = cspOf(PUBLIC_RULE);
     expect(csp).toContain("default-src 'self'");
-    expect(csp).toContain("img-src 'self' data:");
+    expect(csp).toContain("img-src 'self' data: https://*.public.blob.vercel-storage.com");
     expect(csp).toContain("connect-src 'self'");
     expect(csp).toContain("frame-ancestors 'none'");
   });

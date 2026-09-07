@@ -134,7 +134,9 @@ Details + rationale live in `tasks/plan-gallery.md`. Implement strictly in order
 
 **Estimated scope:** Medium (3–5 files)
 
-## Task G5: Case detail page (more pictures) + home featured preview + GalleryItem deletion
+## Task G5: Case detail page (more pictures) + home featured preview + GalleryItem deletion — DONE (2026-09-07)
+
+**Description:** (as above. Verified live: FR/AR/EN gallery prerendered, detail 200 with extras, unknown key 404, home featured + CTA, full suite 1172 green, build clean. `next.config.ts` already allow-lists Blob hosts for next/image.)
 
 **Description:** New `/[locale]/gallery/[key]` detail page: large slider, full title + description (problem → treatment → procedure), extras grid (up to 8 "more pictures about the patient", e.g. procedure steps), back-to-gallery link, per-case metadata for SEO; 404 for unknown/inactive keys. Update home `GalleryPreview` to render the admin's **featured cases** (in `featuredOrder`; fallback to latest active if none featured) as after-image cards plus the CTA button, linking to `/gallery`. Delete the old path: remove `GalleryTab` from the dashboard, delete the `GalleryItem` API routes, drop the `GalleryItem` model via migration (deletes the 12 synthetic rows — human-approved), remove its seed block and `galleryBlocks.ts` + test (updating any remaining references). Add metadata strings to the 3 locales.
 

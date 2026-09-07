@@ -56,7 +56,11 @@ export const SECURITY_HEADERS: Header[] = [
           "default-src 'self'",
           scriptSrc(),
           "style-src 'self' 'unsafe-inline'",
-          "img-src 'self' data:",
+          // previews them with plain <img> (no optimizer), so the store host
+          // must be an explicit img-src source. Public pages are unaffected
+          // (next/image proxies through same-origin /_next/image). Token pages
+          // (below) deliberately do NOT gain this host.
+          "img-src 'self' data: https://*.public.blob.vercel-storage.com",
           "font-src 'self'",
           "connect-src 'self'",
           "frame-src https://www.google.com https://maps.google.com",
