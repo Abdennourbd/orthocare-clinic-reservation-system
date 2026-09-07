@@ -554,6 +554,97 @@ async function main() {
   }
   console.log(`Seeded ${galleryItems.length} gallery items.`);
 
+  // 9. Smile cases (SYNTHETIC demo content — invented titles, placeholder
+  // images reused from public/images, no real patient involved). The admin
+  // replaces these with real consented cases from the dashboard. The first
+  // two are featured so the home page preview has content immediately.
+  const smileCases = [
+    {
+      key: "demo-encombrement",
+      title: {
+        fr: "Encombrement sévère — 18 mois d'orthodontie",
+        ar: "ازدحام شديد — 18 شهرًا من تقويم الأسنان",
+        en: "Severe crowding — 18 months of orthodontics"
+      },
+      description: {
+        fr: "Chevauchement important des incisives. Traitement par appareil multi-attaches, contrôles mensuels, contention en fin de traitement.",
+        ar: "تداخل كبير في القواطع. العلاج بجهاز متعدد الحاصرات مع متابعة شهرية وتثبيت في النهاية.",
+        en: "Heavy overlapping of the front teeth. Treated with fixed braces, monthly check-ups and retention at the end."
+      },
+      beforeImageUrl: "/images/beforewhitening.jpeg",
+      afterImageUrl: "/images/afterwhitening.jpeg",
+      active: true,
+      sortOrder: 1,
+      featured: true,
+      featuredOrder: 1,
+      consentConfirmed: true,
+      consentAt: new Date("2026-01-15T00:00:00Z"),
+      images: [
+        { imageUrl: "/images/smile.jpg", caption: { fr: "Moulage initial", ar: "القالب الأولي", en: "Initial mould" }, sortOrder: 1 },
+        { imageUrl: "/images/smile.jpg", caption: { fr: "Pose de l'appareil", ar: "تركيب الجهاز", en: "Fitting the appliance" }, sortOrder: 2 },
+      ],
+    },
+    {
+      key: "demo-blanchiment",
+      title: {
+        fr: "Coloration tenace — blanchiment au cabinet",
+        ar: "تصبغ عنيد — تبييض في العيادة",
+        en: "Stubborn staining — in-office whitening"
+      },
+      description: {
+        fr: "Taches liées au thé et au café. Détartrage puis deux séances de blanchiment, teinte stabilisée au contrôle.",
+        ar: "بقع من الشاي والقهوة. تنظيف ثم جلستا تبييض مع ثبات اللون عند المراقبة.",
+        en: "Tea and coffee staining. Scaling then two whitening sessions, shade stable at review."
+      },
+      beforeImageUrl: "/images/beforewhitening.jpeg",
+      afterImageUrl: "/images/afterwhitening.jpeg",
+      active: true,
+      sortOrder: 2,
+      featured: true,
+      featuredOrder: 2,
+      consentConfirmed: true,
+      consentAt: new Date("2026-02-01T00:00:00Z"),
+      images: [],
+    },
+    {
+      key: "demo-diasteme",
+      title: {
+        fr: "Diastème antérieur — fermeture en 8 mois",
+        ar: "فراغ أمامي — إغلاق في 8 أشهر",
+        en: "Front gap — closed in 8 months"
+      },
+      description: {
+        fr: "Espace entre les deux incisives centrales. Fermeture par chaînettes élastomériques, résultat stable à un an.",
+        ar: "فراغ بين القاطعين المركزيين. إغلاق بسلاسل مرنة ونتيجة ثابتة بعد سنة.",
+        en: "Gap between the two central incisors. Closed with elastomeric chains, stable at one year."
+      },
+      beforeImageUrl: "/images/beforewhitening.jpeg",
+      afterImageUrl: "/images/smile.jpg",
+      active: true,
+      sortOrder: 3,
+      featured: false,
+      featuredOrder: 0,
+      consentConfirmed: true,
+      consentAt: new Date("2026-03-01T00:00:00Z"),
+      images: [],
+    },
+  ];
+
+  for (const { images, ...c } of smileCases) {
+    const row = await prisma.smileCase.upsert({
+      where: { key: c.key },
+      update: { ...c },
+      create: { ...c },
+    });
+    await prisma.smileCaseImage.deleteMany({ where: { caseId: row.id } });
+    if (images.length > 0) {
+      await prisma.smileCaseImage.createMany({
+        data: images.map((img) => ({ ...img, caseId: row.id })),
+      });
+    }
+  }
+  console.log(`Seeded ${smileCases.length} smile cases.`);
+
   console.log("Seed completed successfully.");
 }
 

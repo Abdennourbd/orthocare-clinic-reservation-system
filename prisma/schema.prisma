@@ -386,6 +386,65 @@ model GalleryItem {
 }
 
 // -----------------------------------------------------------------------------
+// Patient case gallery (before/after). Public trust-building content: each
+// case shows a before photo, an after photo (interactive slider on the public
+// site) and extra pictures (procedure steps, detail page).
+//
+// PRIVACY BY CONSTRUCTION. Cases are public pages. They must NEVER reference
+// the `Patient` model (no FK, no patientId): patient rows are health data
+// (names, phones, notes) and must never reach a public page, a log or a URL.
+// The admin types a free-text `title` + `description` ("this patient had X,
+// we treated it with Y") — never a real name. Publication additionally
+// requires `consentConfirmed` (written patient consent); the admin API
+// rejects `active=true` without it, so an unconsented case can only ever be
+// a draft.
+//
+// `featured` marks the cases the admin chose for the home page (max 4,
+// enforced by the admin API, ordered by `featuredOrder`).
+// -----------------------------------------------------------------------------
+
+model SmileCase {
+  id        String  @id @default(cuid())
+  key       String  @unique
+  title     Json    // {fr, ar, en} — free text, e.g. "Encombrement sévère — 18 mois"
+  description Json  // {fr, ar, en} — problem → treatment → procedure story
+  beforeImageUrl String
+  afterImageUrl  String
+  active    Boolean @default(false) // drafts are inactive by default: safe default
+  sortOrder Int     @default(0)
+
+  // Home-page feature pick (admin-chosen, max 4 — see admin API).
+  featured     Boolean @default(false)
+  featuredOrder Int    @default(0)
+
+  // Written patient-consent gate: only consented cases may be `active`.
+  consentConfirmed Boolean   @default(false)
+  consentAt        DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  images SmileCaseImage[]
+
+  @@index([active, sortOrder])
+  @@index([featured, featuredOrder])
+}
+
+model SmileCaseImage {
+  id      String @id @default(cuid())
+  caseId  String
+  smileCase SmileCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  imageUrl String
+  caption  Json    // {fr, ar, en}
+  sortOrder Int    @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([caseId, sortOrder])
+}
+
+// -----------------------------------------------------------------------------
 // Cancellation watch (patient-initiated waitlist, created at booking time)
 // and staff-added waitlist entries (Task 17). Both are notified by the
 // slot-freed event subscriber on matching cancellations.
