@@ -34,8 +34,9 @@
 **Files likely touched:**
 - `src/components/public/home/HeroHome.tsx`
 - `src/app/[locale]/page.tsx` (drop `CursorGlow` on home)
+- `public/images/dr-moussaoui-portrait.png` (768×1092) + rest of inventory in plan
 - `src/components/public/Header.tsx` (vendored logo replaces `O` circle)
-- `public/images/orthocare-logo.png`, `public/images/dr-moussaoui-portrait.png` (+ fallbacks per inventory)
+- `public/images/orthocare-logo-mark.png` (150×150 — header + footer; the `2025/01/logo.png` URL 404s)
 - `components.json` (standard shadcn, hand-written so future `shadcn add` works)
 - `src/lib/utils.ts` (`cn` via clsx + tailwind-merge — new deps, attributed to shadcn/rare-ui)
 - `src/components/ui/fluid-orb.tsx` (vendored rare-ui source, MIT attribution, teal default via `color` prop at call site)

@@ -95,9 +95,9 @@ Build order is bottom-up: hero first (the ask), then the strip that overlaps it 
 
 | Asset | Source URL (attribution only) | Local target | Used in |
 |---|---|---|---|
-| Logo (header, `logo.png`) | `https://clinicorthocare.com/wp-content/uploads/2025/01/logo.png` | `public/images/orthocare-logo.png` | Header |
+| Logo (header + footer, `logo.png` 404'd → use mark) | `…/2026/03/orthocare-clinic-logo-150x150.png` | `public/images/orthocare-logo-mark.png` | Header + Footer |
 | Logo alt (elementor thumb, fallback) | `…/elementor/thumbs/orthocare-logo-1-rl85jjpw6r4c2vlfipoj67q5l3eplu8seixl3v3fwg.png` | — (fallback only) | — |
-| Footer mark 150×150 | `…/2026/03/orthocare-clinic-logo-150x150.png` | `public/images/orthocare-logo-mark.png` | Footer |
+| Footer mark 150×150 | — (same file as above) | `public/images/orthocare-logo-mark.png` | Footer |
 | Dr Moussaoui portrait (HERO) | `…/2026/03/dr-moussaoui-b-orthodontiste-alger-orthocare-1-768x1092.png` | `public/images/dr-moussaoui-portrait.png` | Task 1 hero |
 | Waiting room | `…/2025/03/salle-dattente-moderne-orthocare-clinic-alger-1-scaled.jpg` | `public/images/clinic-waiting-room.jpg` | Hero alt / about |
 | Reception | `…/2026/03/orthocare-clinic-reception-dr-moussaoui-1024x843.jpg` | `public/images/clinic-reception.jpg` | Location/about |
