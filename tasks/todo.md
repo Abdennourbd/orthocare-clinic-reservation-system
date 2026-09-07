@@ -398,7 +398,7 @@ Task details + rationale live in `tasks/plan.md`. This is the working checklist.
 **Skill:** The available **xlsx** skill covers spreadsheet generation directly — use it rather than hand-rolling XLSX output.
 
 ## Task 20: Team management
-**Description:** Admin creates/edits/deactivates receptionist accounts and issues one-time password resets. Deactivation and reset both bump `tokenVersion` (revoking live sessions); a reset also sets `mustChangePassword`. There is deliberately **no public "forgot password" email flow** — fewer moving parts, smaller attack surface, and it matches how a small clinic actually operates. Routes: `GET/POST /api/admin/team`, `PATCH /api/admin/team/[id]`, `POST /api/admin/team/[id]/reset-password`.
+**Description:** Admin creates/edits/deactivates receptionist accounts and issues one-time password resets. Deactivation and reset both bump `tokenVersion` (revoking live sessions); a reset also sets `mustChangePassword`.  There is deliberately **no public "forgot password" email flow** — fewer moving parts, smaller attack surface, and it matches how a small clinic actually operates. Routes: `GET/POST /api/admin/team`, `PATCH /api/admin/team/[id]`, `POST /api/admin/team/[id]/reset-password`.
 **Acceptance criteria:**
 - [x] Admin can create receptionist
 - [x] Deactivated staff cannot log in; live session revoked
