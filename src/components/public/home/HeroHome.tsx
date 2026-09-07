@@ -63,7 +63,7 @@ export default function HeroHome() {
         </div>
 
         <div className="relative mx-auto w-full max-w-[420px]">
-          <HeroOrb size={300} className="-top-10 -end-6 sm:-end-10" />
+          <HeroOrb className="-top-20 -end-10 sm:-top-24 sm:-end-20" />
           <Image
             src="/images/dr-moussaoui-portrait.png"
             alt={t("heroPortraitAlt")}

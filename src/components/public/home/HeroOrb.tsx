@@ -9,7 +9,7 @@ import FluidOrb from "@/components/ui/fluid-orb";
 // when WebGL is missing, JS is disabled, or reduced motion is on (FluidOrb
 // itself renders a single static frame in that case).
 export default function HeroOrb({
-  size = 320,
+  size = 240,
   color = "#5eead4",
   className = "",
 }: {
@@ -35,7 +35,9 @@ export default function HeroOrb({
     <div ref={ref} aria-hidden className={`pointer-events-none absolute ${className}`}>
       <div className="absolute inset-0 rounded-full bg-teal-200/60 blur-2xl" />
       {inView ? (
-        <FluidOrb size={size} color={color} className="relative opacity-70" />
+        // Slight blur melts the shader's hard circular edge into the wash
+        // (screenshot-verified: without it the orb reads as a flat balloon).
+        <FluidOrb size={size} color={color} className="relative opacity-60 blur-[1.5px]" />
       ) : null}
     </div>
   );
