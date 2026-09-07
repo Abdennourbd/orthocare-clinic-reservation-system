@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Link } from "@/i18n/navigation";
+import { GooeyNav } from "@/components/ui/gooey-nav";
 
 const items = [
   { key: "home", href: "/" },
@@ -33,23 +34,24 @@ export default function Nav() {
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [open ]);
+  }, [open]);
 
   return (
     <>
-      <nav aria-label="Primary" className="hidden md:flex items-center gap-6">
-        {items.map((item) => (
-          <Link
-            key={item.key}
-            href={item.href}
-            className={`text-sm font-medium text-zinc-700 hover:text-teal-700 ${linkRing}`}
-          >
-            {t(item.key)}
-          </Link>
-        ))}
-      </nav>
+      {/* Desktop: gooey pill nav (rare-ui, teal active). The seam geometry
+          uses physical margins, so the container is pinned dir="ltr" even in
+          the Arabic locale; the mobile menu below stays fully RTL-native. */}
+      <div className="hidden lg:block" dir="ltr">
+        <GooeyNav
+          aria-label="Primary"
+          size="sm"
+          activeColor="#0d9488"
+          activeLabelColor="#ffffff"
+          items={items.map((item) => ({ label: t(item.key), href: item.href }))}
+        />
+      </div>
 
-      <div className="md:hidden">
+      <div className="lg:hidden">
         <button
           ref={buttonRef}
           type="button"
