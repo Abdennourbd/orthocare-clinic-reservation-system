@@ -111,12 +111,23 @@
   },
   "GalleryPage": {
     "title": "Gallery",
-    "subtitle": "A glimpse of our clinic and our care.",
-    "emptyTitle": "Photos coming soon",
-    "empty": "We will publish clinic photos soon.",
+    "subtitle": "Real results from real patients — compare before and after.",
+    "emptyTitle": "No cases yet",
+    "empty": "We will publish our first patient cases soon.",
     "beforeLabel": "Before",
     "afterLabel": "After",
-    "comparisonLabel": "Before / after comparison"
+    "comparisonLabel": "Before / after comparison",
+    "viewCase": "View case",
+    "sliderHint": "Drag the handle to compare",
+    "ctaTitle": "Same problem?",
+    "ctaText": "Browse our cases and find a patient who had the same problem as you — then book your consultation.",
+    "ctaButton": "Book an appointment"
+  },
+  "CasePage": {
+    "backToGallery": "Back to gallery",
+    "extrasTitle": "More photos",
+    "notFoundTitle": "Case not found",
+    "notFoundText": "This case does not exist or is no longer published."
   },
   "About": {
     "title": "About Ortho'Care Clinic",
