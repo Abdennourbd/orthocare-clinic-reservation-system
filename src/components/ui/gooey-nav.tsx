@@ -15,6 +15,11 @@
 // RTL note: seam geometry uses physical marginLeft/right-full, so the
 // desktop usage wraps this in dir="ltr" (see Nav.tsx). Reduced motion is
 // honored internally (springs jump, single static frame).
+// Palette adaptation (2026-09-07, explicit human request to match the site):
+// bar + seam color are teal-50 (#f0fdfa) instead of stock gray, inactive
+// labels are zinc-600 with a teal hover instead of #868593, and the dead
+// dark: variants are removed (the project has no dark mode). Active color
+// stays a prop (Nav passes teal-600).
 "use client";
 
 import {
@@ -42,8 +47,8 @@ const NECK_H = 100;
 const FADE_IN = "transition-colors duration-[400ms]";
 const FADE_OUT = "transition-colors duration-0";
 
-const BAR = "bg-[#F4F4F9] dark:bg-[#262626]";
-const BAR_TEXT = "text-[#F4F4F9] dark:text-[#262626]";
+const BAR = "bg-[#f0fdfa]";
+const BAR_TEXT = "text-[#f0fdfa]";
 
 const SIZES = {
   xs: {
@@ -195,7 +200,7 @@ function NavLabel({
       "flex cursor-pointer items-center whitespace-nowrap font-medium [&_svg]:shrink-0",
       isActive ? FADE_IN : FADE_OUT,
       SIZES[size].label,
-      !isActive && "text-[#868593]",
+      !isActive && "text-zinc-600 hover:text-teal-700",
     ),
     style: isActive ? { color: activeLabelColor } : undefined,
     onClick: onSelect,
