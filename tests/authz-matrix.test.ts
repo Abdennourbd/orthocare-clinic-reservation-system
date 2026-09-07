@@ -89,6 +89,19 @@ import {
   DELETE as galleryDeleteRoute,
 } from "@/app/api/admin/gallery/[id]/route";
 import {
+  GET as casesListRoute,
+  POST as casesCreateRoute,
+} from "@/app/api/admin/cases/route";
+import {
+  PATCH as casePatchRoute,
+  DELETE as caseDeleteRoute,
+} from "@/app/api/admin/cases/[id]/route";
+import {
+  POST as caseExtraAddRoute,
+  DELETE as caseExtraDeleteRoute,
+} from "@/app/api/admin/cases/[id]/images/route";
+import { POST as caseImageUploadRoute } from "@/app/api/admin/cases/upload/route";
+import {
   GET as settingsGetRoute,
   PATCH as settingsPatchRoute,
 } from "@/app/api/admin/settings/route";
@@ -700,6 +713,62 @@ const ROUTES: RouteRow[] = [
     allowed: [Role.ADMIN],
     okStatus: 404,
     handler: galleryDeleteRoute,
+  },
+  {
+    method: "GET",
+    scanPath: "/api/admin/cases",
+    allowed: [Role.ADMIN],
+    handler: casesListRoute,
+  },
+  {
+    method: "POST",
+    scanPath: "/api/admin/cases",
+    allowed: [Role.ADMIN],
+    okStatus: 400,
+    handler: casesCreateRoute,
+  },
+  {
+    method: "PATCH",
+    scanPath: "/api/admin/cases/[id]",
+    requestPath: "/api/admin/cases/does-not-exist",
+    params: { id: "does-not-exist" },
+    allowed: [Role.ADMIN],
+    okStatus: 400,
+    handler: casePatchRoute,
+  },
+  {
+    method: "DELETE",
+    scanPath: "/api/admin/cases/[id]",
+    requestPath: "/api/admin/cases/does-not-exist",
+    params: { id: "does-not-exist" },
+    allowed: [Role.ADMIN],
+    okStatus: 404,
+    handler: caseDeleteRoute,
+  },
+  {
+    method: "POST",
+    scanPath: "/api/admin/cases/[id]/images",
+    requestPath: "/api/admin/cases/does-not-exist/images",
+    params: { id: "does-not-exist" },
+    allowed: [Role.ADMIN],
+    okStatus: 400,
+    handler: caseExtraAddRoute,
+  },
+  {
+    method: "DELETE",
+    scanPath: "/api/admin/cases/[id]/images",
+    requestPath: "/api/admin/cases/does-not-exist/images",
+    params: { id: "does-not-exist" },
+    allowed: [Role.ADMIN],
+    okStatus: 400,
+    handler: caseExtraDeleteRoute,
+  },
+  {
+    method: "POST",
+    scanPath: "/api/admin/cases/upload",
+    allowed: [Role.ADMIN],
+    okStatus: 400,
+    handler: caseImageUploadRoute,
   },
   {
     method: "GET",

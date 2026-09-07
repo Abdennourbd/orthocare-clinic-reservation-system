@@ -17,18 +17,16 @@ describe("buildCaseImageKey", () => {
 });
 
 describe("blobKeyFromUrl", () => {
-  const suffix = "public.blob.vercel-storage.com";
-
   it("extracts the key from one of our blob URLs", () => {
-    expect(
-      blobKeyFromUrl("https://abc123.public.blob.vercel-storage.com/cases/uuid.jpg", suffix),
-    ).toBe("cases/uuid.jpg");
+    expect(blobKeyFromUrl("https://abc123.public.blob.vercel-storage.com/cases/uuid.jpg")).toBe(
+      "cases/uuid.jpg",
+    );
   });
 
   it("returns null for local paths, foreign hosts and non-case paths", () => {
-    expect(blobKeyFromUrl("/images/smile.jpg", suffix)).toBeNull();
-    expect(blobKeyFromUrl("https://evil.test/cases/uuid.jpg", suffix)).toBeNull();
-    expect(blobKeyFromUrl("https://abc.public.blob.vercel-storage.com/other/uuid.jpg", suffix)).toBeNull();
-    expect(blobKeyFromUrl("not a url", suffix)).toBeNull();
+    expect(blobKeyFromUrl("/images/smile.jpg")).toBeNull();
+    expect(blobKeyFromUrl("https://evil.test/cases/uuid.jpg")).toBeNull();
+    expect(blobKeyFromUrl("https://abc.public.blob.vercel-storage.com/other/uuid.jpg")).toBeNull();
+    expect(blobKeyFromUrl("not a url")).toBeNull();
   });
 });

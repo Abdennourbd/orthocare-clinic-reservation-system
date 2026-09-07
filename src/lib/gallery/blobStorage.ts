@@ -69,17 +69,19 @@ export async function deleteCaseImage(blobKey: string): Promise<void> {
 }
 
 /** Extracts the storage key from a blob URL previously returned by
- * `putCaseImage`, for deletion. Returns null when the URL is not one of
- * ours (local /images/… path or foreign host) — those need no blob cleanup. */
-export function blobKeyFromUrl(imageUrl: string, blobHostSuffix: string): string | null {
+ * `putCaseImage`, for deletion. Returns null when the URL is not one of our
+ * case blobs (local /images/… path, foreign host, non-/cases/ path) — those
+ * need no blob cleanup. The host check is intentionally broad
+ * (`*.blob.vercel-storage.com`): an unknown host fails safe to "orphan"
+ * rather than deleting the wrong object. */
+export function blobKeyFromUrl(imageUrl: string): string | null {
   let parsed: URL;
   try {
     parsed = new URL(imageUrl);
   } catch {
     return null;
   }
-  if (!parsed.hostname.endsWith(blobHostSuffix) || !parsed.pathname.startsWith("/cases/")) {
-    return null;
-  }
+  if (!parsed.hostname.endsWith(".blob.vercel-storage.com")) return null;
+  if (!parsed.pathname.startsWith("/cases/")) return null;
   return parsed.pathname.slice(1);
 }
