@@ -133,7 +133,10 @@ export default function BeforeAfterSlider({
         aria-valuenow={Math.round(position)}
         aria-valuetext={`${Math.round(position)}%`}
         onKeyDown={onKeyDown}
-        onPointerDown={(e) => e.stopPropagation()}
+        // No pointer handlers here on purpose: gestures bubble to the track
+        // container above, so grabbing the handle itself starts a drag.
+        // (Stopping propagation here would make the handle — the one place
+        // users grab — the only dead spot of the slider.)
         className="absolute top-1/2 flex h-10 w-10 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white text-teal-700 shadow-md outline-none transition-transform focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2"
         style={{ left: `${position}%` }}
       >

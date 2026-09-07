@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import BeforeAfterSlider from "./BeforeAfterSlider";
 
@@ -54,5 +54,19 @@ describe("BeforeAfterSlider", () => {
     const handle = screen.getByRole("slider");
     fireEvent.keyDown(handle, { key: "ArrowRight", shiftKey: true });
     expect(handle).toHaveAttribute("aria-valuenow", "60");
+  });
+
+  it("starts a drag from the handle itself (gesture bubbles to the track)", () => {
+    // Regression: the handle once stopped pointer-event propagation, making
+    // the one place users grab the only dead spot of the slider.
+    render(<BeforeAfterSlider {...props} />);
+    const handle = screen.getByRole("slider");
+    const track = handle.closest("[dir='ltr']") as HTMLElement;
+    vi.spyOn(track, "getBoundingClientRect").mockReturnValue({
+      left: 100,
+      width: 400,
+    } as DOMRect);
+    fireEvent.pointerDown(handle, { clientX: 180, pointerId: 1 });
+    expect(handle).toHaveAttribute("aria-valuenow", "20");
   });
 });
