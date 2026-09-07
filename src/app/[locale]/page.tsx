@@ -32,9 +32,9 @@ export default function HomePage() {
       <TrustStrip />
       <ServicesPreview />
       <ToothBrushGameSection />
-      <FeaturesSection />
-      <TestimonialsPreview />
       <GalleryPreview />
+      <TestimonialsPreview />
+      <FeaturesSection />
       <FaqPreview />
       <ReviewsSection />
       <LocationSection />

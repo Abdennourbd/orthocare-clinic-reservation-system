@@ -1,9 +1,10 @@
 import { useTranslations } from "next-intl";
 import Reveal from "../motion/Reveal";
 import FloatCard from "../motion/FloatCard";
-import { HeartIcon, ShieldIcon, UsersIcon, CalendarIcon } from "../icons";
+import { HeartIcon, ShieldIcon, UsersIcon } from "../icons";
 
-// "Why choose us" — a small grid of value props. Icon + title + blurb, each
+// "Why choose us" — three value props (the generic "easy booking" card was
+// cut: the hero already owns that message). Icon + title + blurb, each
 // on a floating card that reveals on scroll.
 export default function FeaturesSection() {
   const t = useTranslations("Home.Features");
@@ -11,7 +12,6 @@ export default function FeaturesSection() {
     { Icon: HeartIcon, title: t("gentle.title"), desc: t("gentle.desc") },
     { Icon: ShieldIcon, title: t("tech.title"), desc: t("tech.desc") },
     { Icon: UsersIcon, title: t("team.title"), desc: t("team.desc") },
-    { Icon: CalendarIcon, title: t("booking.title"), desc: t("booking.desc") },
   ] as const;
 
   return (
@@ -24,7 +24,7 @@ export default function FeaturesSection() {
           <p className="mx-auto mt-3 max-w-2xl text-zinc-600">{t("subtitle")}</p>
         </Reveal>
 
-        <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {items.map(({ Icon, title, desc }, i) => (
             <Reveal key={title} delay={i * 0.07}>
               <FloatCard className="h-full rounded-2xl border border-teal-100 bg-white p-6 shadow-sm">
