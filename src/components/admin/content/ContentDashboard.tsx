@@ -5,6 +5,7 @@ import ServicesTab from "./ServicesTab";
 import TestimonialsTab from "./TestimonialsTab";
 import FaqsTab from "./FaqsTab";
 import GalleryTab from "./GalleryTab";
+import CasesTab from "./CasesTab";
 
 // Task 21 — content dashboard shell (ADMIN): tabbed CRUD for services,
 // testimonials, FAQs and gallery. FR-only, same visual language as the
@@ -14,6 +15,7 @@ const TABS = [
   { id: "services", label: "Services" },
   { id: "testimonials", label: "Témoignages" },
   { id: "faqs", label: "Questions fréquentes" },
+  { id: "cases", label: "Cas patients" },
   { id: "gallery", label: "Galerie" },
 ] as const;
 
@@ -77,6 +79,7 @@ export default function ContentDashboard() {
         {tab === "services" ? <ServicesTab /> : null}
         {tab === "testimonials" ? <TestimonialsTab /> : null}
         {tab === "faqs" ? <FaqsTab /> : null}
+        {tab === "cases" ? <CasesTab /> : null}
         {tab === "gallery" ? <GalleryTab /> : null}
       </div>
     </div>

@@ -37,9 +37,18 @@ export async function GET(request: NextRequest) {
     throw e;
   }
 
+  // Extras included (ordered): the edit form manages them inline, and
+  // clinic volume is tiny — no separate detail endpoint needed.
   const cases = await getPrisma().smileCase.findMany({
     orderBy: [{ sortOrder: "asc" }, { key: "asc" }],
-    select: { ...caseRowSelect, _count: { select: { images: true } } },
+    select: {
+      ...caseRowSelect,
+      _count: { select: { images: true } },
+      images: {
+        orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
+        select: { id: true, imageUrl: true, caption: true, sortOrder: true },
+      },
+    },
   });
 
   return withRefreshedSession(ok({ cases }), guard);
