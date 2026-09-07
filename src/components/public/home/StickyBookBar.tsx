@@ -18,14 +18,14 @@ export default function StickyBookBar() {
       <div className="mx-auto flex max-w-6xl gap-3">
         <a
           href={telHref}
-          className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-full border border-zinc-300 bg-white px-4 py-3 text-sm font-semibold text-zinc-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2"
+          className="inline-flex flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-full border border-zinc-300 bg-white px-4 py-3 text-sm font-semibold text-zinc-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2"
         >
           <PhoneIcon width={16} height={16} aria-hidden />
           {t("heroCall")}
         </a>
         <Link
           href="/book"
-          className="inline-flex flex-[2] items-center justify-center rounded-full bg-teal-600 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-teal-600/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2"
+          className="inline-flex flex-[2] items-center justify-center whitespace-nowrap rounded-full bg-teal-600 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-teal-600/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2"
         >
           {t("cta")}
         </Link>

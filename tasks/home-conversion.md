@@ -57,3 +57,14 @@
 
 Rebrand beyond logo, pricing pages (cost question answered by "devis clair
 en consultation" copy only), online payment, patient portal.
+
+## Built 2026-09-07 (all verified: 1183 tests, typecheck, lint, build, SSR)
+
+Nav palette fix + SmileResults + ComfortSection + DoctorSection +
+ClinicSection + StickyBookBar + conversion page order. Commits:
+`c65664f`, `95ad144`, `6dbd397`, `87272d4` (+ fix below). All 8 vendored
+photos now used. Full review loop done: 1 eyebrow site-wide, max 2
+consecutive splits, no duplicate CTA intents, copy self-audit passed.
+Known follow-ups for a human with a browser: screenshots, Lighthouse,
+keyboard-only pass; primary-CTA contrast (white on teal-600) is a
+site-wide pre-existing pattern worth a design pass.
