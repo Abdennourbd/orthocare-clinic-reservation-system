@@ -69,15 +69,17 @@ export default function HeroHome() {
 
         <div className="hero-art-settle relative mx-auto w-full max-w-[420px]">
           <HeroOrb className="-top-20 -end-10 sm:-top-24 sm:-end-20" />
-          <Image
-            src="/images/dr-moussaoui-portrait.png"
-            alt={t("heroPortraitAlt")}
-            width={768}
-            height={1092}
-            priority
-            sizes="(max-width: 1024px) 100vw, 420px"
-            className="relative h-auto w-full rounded-[1.75rem] object-cover shadow-xl ring-1 ring-zinc-900/10"
-          />
+          <div className="arrive-rise">
+            <Image
+              src="/images/dr-moussaoui-portrait.png"
+              alt={t("heroPortraitAlt")}
+              width={768}
+              height={1092}
+              priority
+              sizes="(max-width: 1024px) 100vw, 420px"
+              className="relative h-auto w-full rounded-[1.75rem] object-cover shadow-xl ring-1 ring-zinc-900/10"
+            />
+          </div>
           <div className="absolute inset-x-4 bottom-4 rounded-2xl border border-white/60 bg-white/80 px-4 py-3 shadow-lg backdrop-blur">
             <p className="flex items-center gap-1.5 text-sm font-semibold text-zinc-900">
               <span className="flex text-amber-400" aria-hidden>
@@ -88,6 +90,15 @@ export default function HeroHome() {
             <p className="mt-0.5 text-xs text-zinc-600">{CLINIC_IDENTITY.address}</p>
           </div>
         </div>
+      </div>
+      {/* Scroll cue: thin line that drifts down 3× on load, then rests
+          invisible. Desktop only (mobile has the sticky booking bar and a
+          taller hero); aria-hidden, killed under reduced motion. */}
+      <div
+        aria-hidden
+        className="arrive-cue pointer-events-none absolute inset-x-0 bottom-5 hidden justify-center lg:flex"
+      >
+        <span className="block h-10 w-px bg-zinc-300" />
       </div>
     </section>
   );

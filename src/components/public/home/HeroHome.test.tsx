@@ -50,9 +50,14 @@ describe("HeroHome (doctor-centric)", () => {
       screen.getByAltText("Portrait du Dr Besma Moussaoui, orthodontiste à Rouiba"),
     ).toBeTruthy();
 
-    // One ambient canvas (fluid orb) — no other canvases, no scroll cue.
+    // One ambient canvas (fluid orb) — no other canvases; old bouncing
+    // scroll hint gone (replaced by the subtle arrival cue below).
     expect(container.querySelectorAll("canvas")).toHaveLength(1);
     expect(screen.queryByText("Faites défiler")).toBeNull();
+    // Arrival hooks: orb bloom + portrait rise + scroll cue present.
+    expect(container.querySelector(".arrive-bloom")).toBeTruthy();
+    expect(container.querySelector(".arrive-rise")).toBeTruthy();
+    expect(container.querySelector(".arrive-cue")).toBeTruthy();
     // Old slop copy is gone, verified rating is in.
     expect(screen.queryByText("4,9/5 sur Google")).toBeNull();
     expect(screen.getByText("4,8/5 sur Google · 37 avis")).toBeTruthy();

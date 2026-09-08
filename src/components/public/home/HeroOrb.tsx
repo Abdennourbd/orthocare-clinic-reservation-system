@@ -32,7 +32,7 @@ export default function HeroOrb({
   }, []);
 
   return (
-    <div ref={ref} aria-hidden className={`pointer-events-none absolute ${className}`}>
+    <div ref={ref} aria-hidden className={`arrive-bloom pointer-events-none absolute ${className}`}>
       <div className="absolute inset-0 rounded-full bg-teal-200/60 blur-2xl" />
       {inView ? (
         // Slight blur melts the shader's hard circular edge into the wash

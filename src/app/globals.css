@@ -139,7 +139,10 @@ body {
   .site-header-compact,
   .brand-collapse,
   .hero-copy,
-  .hero-art-settle {
+  .hero-art-settle,
+  .arrive-bloom,
+  .arrive-rise,
+  .arrive-cue {
     animation: none !important;
   }
 }
@@ -238,4 +241,59 @@ body {
   animation: hero-art-settle linear both;
   animation-timeline: --hero-exit;
   animation-range: exit 0% exit 100%;
+}
+
+/* Arrival choreography (load only, `arrive-*` prefix). Staged cascade:
+   orb bloom → portrait rise → copy (existing hero-enter) → cue. Total
+   ≤1s. Base styles stay natural so no-support browsers render the resting
+   state; `both` fill covers the delay window. One animation per element. */
+@keyframes arrive-bloom {
+  from {
+    opacity: 0;
+    transform: scale(0.82);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.arrive-bloom {
+  animation: arrive-bloom 700ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes arrive-rise {
+  from {
+    opacity: 0;
+    transform: translateY(28px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.arrive-rise {
+  animation: arrive-rise 800ms cubic-bezier(0.22, 1, 0.36, 1) 100ms both;
+}
+
+@keyframes arrive-cue {
+  0% {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  25% {
+    opacity: 1;
+  }
+  75% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+
+.arrive-cue {
+  animation: arrive-cue 1.8s ease-in-out 1s 3 both;
 }
