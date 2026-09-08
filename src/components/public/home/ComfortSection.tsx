@@ -42,15 +42,17 @@ export default function ComfortSection() {
         </Reveal>
 
         <Reveal delay={0.1} className="relative mx-auto mt-12 max-w-4xl">
-          <Image
-            src="/images/dr-treatment.jpg"
-            alt={t("comfortPhotoAlt")}
-            width={1024}
-            height={722}
-            loading="lazy"
-            sizes="(max-width: 1024px) 100vw, 896px"
-            className="h-auto w-full rounded-[1.75rem] object-cover shadow-xl ring-1 ring-zinc-900/10"
-          />
+          <div className="band-frame aspect-[16/10] overflow-hidden rounded-[1.75rem] shadow-xl ring-1 ring-zinc-900/10">
+            <Image
+              src="/images/dr-treatment.jpg"
+              alt={t("comfortPhotoAlt")}
+              width={1024}
+              height={722}
+              loading="lazy"
+              sizes="(max-width: 1024px) 100vw, 896px"
+              className="band-photo h-full w-full object-cover"
+            />
+          </div>
           <p className="absolute inset-x-4 bottom-4 rounded-2xl border border-white/60 bg-white/80 px-4 py-3 text-center text-sm font-medium text-zinc-800 shadow-lg backdrop-blur sm:inset-x-auto sm:bottom-6 sm:start-6 sm:max-w-sm sm:text-start">
             {t("comfortPhotoCaption")}
           </p>

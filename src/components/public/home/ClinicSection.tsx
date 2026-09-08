@@ -46,7 +46,7 @@ export default function ClinicSection() {
       <div className="mt-10 grid gap-5 sm:grid-cols-3">
         {photos.map((p, i) => (
           <Reveal key={p.src} delay={i * 0.07}>
-            <figure className="group overflow-hidden rounded-2xl bg-zinc-100 shadow-sm ring-1 ring-zinc-900/10">
+            <figure className="band-frame overflow-hidden rounded-2xl bg-zinc-100 shadow-sm ring-1 ring-zinc-900/10">
               <Image
                 src={p.src}
                 alt={p.caption}
@@ -54,7 +54,7 @@ export default function ClinicSection() {
                 height={p.h}
                 loading="lazy"
                 sizes="(max-width: 640px) 100vw, 33vw"
-                className="aspect-[4/3] w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                className="band-photo aspect-[4/3] w-full object-cover"
               />
               <figcaption className="bg-white px-4 py-3 text-sm font-semibold text-zinc-800">
                 {p.caption}

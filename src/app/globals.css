@@ -142,8 +142,13 @@ body {
   .hero-art-settle,
   .arrive-bloom,
   .arrive-rise,
-  .arrive-cue {
+  .arrive-cue,
+  .band-photo {
     animation: none !important;
+  }
+
+  .band-photo {
+    scale: none;
   }
 
   .journey-progress {
@@ -300,6 +305,31 @@ body {
 
 .arrive-cue {
   animation: arrive-cue 1.8s ease-in-out 1s 3 both;
+}
+
+/* Parallax photo bands (Task 4, `band-*` prefix): the inner image drifts
+   ±6% across its own viewport passage while the frame (fixed aspect +
+   overflow hidden) never moves — zero layout shift. Base scale 1.12 gives
+   headroom so frame edges never show. One animation per element. */
+@keyframes band-drift {
+  from {
+    transform: translateY(-6%);
+  }
+  to {
+    transform: translateY(6%);
+  }
+}
+
+.band-frame {
+  view-timeline-name: --band;
+  view-timeline-axis: block;
+}
+
+.band-photo {
+  scale: 1.12;
+  animation: band-drift linear both;
+  animation-timeline: --band;
+  animation-range: cover 0% cover 100%;
 }
 
 /* Journey hairline (Task 2, `journey-*` prefix): 3px teal progress bar

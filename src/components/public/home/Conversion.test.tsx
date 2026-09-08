@@ -82,6 +82,20 @@ describe("ClinicSection", () => {
   });
 });
 
+describe("Parallax bands (Task 4)", () => {
+  it("hooks one band-photo animation per image (comfort + clinic)", () => {
+    const comfort = renderWithFr(<ComfortSection />);
+    const clinic = renderWithFr(<ClinicSection />);
+    const photos = [
+      ...comfort.container.querySelectorAll("img.band-photo"),
+      ...clinic.container.querySelectorAll("img.band-photo"),
+    ];
+    expect(photos).toHaveLength(4);
+    comfort.unmount();
+    clinic.unmount();
+  });
+});
+
 describe("ComfortSection", () => {
   it("renders fear-killing copy, reassurances and treatment photo", () => {
     const { container, unmount } = renderWithFr(<ComfortSection />);
