@@ -131,4 +131,111 @@ body {
     transition-duration: 0s !important;
     transition-delay: 0s !important;
   }
+
+  /* Scroll-driven animations ignore duration (progress comes from the
+     scroll timeline), so the global collapse above cannot stop them —
+     kill them explicitly: full header, static hero. */
+  .site-header-shadow,
+  .site-header-compact,
+  .brand-collapse,
+  .hero-copy,
+  .hero-art-settle {
+    animation: none !important;
+  }
+}
+
+/* Condensing site header ("Exhale", pure CSS scroll-driven, no JS).
+   Over the first 120px of root scroll the brand name clips away into the
+   logo mark and the bar compacts 64→56px with a soft shadow. Progressive
+   enhancement: without animation-timeline support the declarations are
+   ignored and the full header simply stays. */
+@keyframes site-header-shadow {
+  from {
+    box-shadow: none;
+  }
+  to {
+    box-shadow: 0 1px 12px rgba(0, 0, 0, 0.08);
+  }
+}
+
+@keyframes site-header-compact {
+  from {
+    height: 4rem;
+  }
+  to {
+    height: 3.5rem;
+  }
+}
+
+@keyframes brand-collapse {
+  from {
+    max-width: 16rem;
+    opacity: 1;
+  }
+  to {
+    max-width: 0;
+    opacity: 0;
+  }
+}
+
+.site-header-shadow {
+  animation: site-header-shadow linear both;
+  animation-timeline: scroll();
+  animation-range: 0 120px;
+}
+
+.site-header-compact {
+  animation: site-header-compact linear both;
+  animation-timeline: scroll();
+  animation-range: 0 120px;
+}
+
+.brand-collapse {
+  display: inline-block;
+  overflow: hidden;
+  white-space: nowrap;
+  animation: brand-collapse linear both;
+  animation-timeline: scroll();
+  animation-range: 0 120px;
+}
+
+/* Hero "Exhale" (pure CSS view-timeline, no JS): the hero section names an
+   exit timeline; copy fades (first 75% of exit) and lifts (full exit) while
+   the portrait settles downward — transform/opacity only. Progressive
+   enhancement: without view-timeline support the hero simply stays. */
+@keyframes hero-copy {
+  0% {
+    opacity: 1;
+    transform: none;
+  }
+  75% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-70px);
+  }
+}
+
+@keyframes hero-art-settle {
+  to {
+    transform: translateY(50px);
+  }
+}
+
+.hero-parallax {
+  view-timeline-name: --hero-exit;
+  view-timeline-axis: block;
+}
+
+.hero-copy {
+  animation: hero-copy linear both;
+  animation-timeline: --hero-exit;
+  animation-range: exit 0% exit 100%;
+}
+
+.hero-art-settle {
+  animation: hero-art-settle linear both;
+  animation-timeline: --hero-exit;
+  animation-range: exit 0% exit 100%;
 }

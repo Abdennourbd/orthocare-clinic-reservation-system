@@ -8,7 +8,7 @@ export default function Header() {
   const t = useTranslations();
   return (
     <header className="sticky top-0 z-20 border-b border-zinc-200 bg-white/90 backdrop-blur">
-      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4 sm:px-6">
+      <div className="site-header-shadow site-header-compact mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4 sm:px-6">
         <Link
           href="/"
           className="flex items-center gap-2 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2"
@@ -22,7 +22,7 @@ export default function Header() {
               className="h-8 w-8 object-cover"
             />
           </span>
-          <span className="text-lg font-semibold tracking-tight text-zinc-900">
+          <span className="brand-collapse text-lg font-semibold tracking-tight text-zinc-900">
             {t("Header.clinicName")}
           </span>
         </Link>

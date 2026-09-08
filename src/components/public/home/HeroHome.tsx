@@ -18,15 +18,20 @@ export default function HeroHome() {
   const t = useTranslations("Home");
   const telHref = `tel:${CLINIC_IDENTITY.phone.replace(/[\s-]/g, "")}`;
 
+  // "Exhale": the first scroll pixels lift and fade the copy while the
+  // portrait settles downward — pure CSS view-timeline (see .hero-* in
+  // globals.css), transform/opacity only, static under reduced motion.
+  // The CSS hero-enter entrance lives on inner elements; the parallax
+  // classes sit on the column wrappers so the two never fight.
   return (
-    <section className="relative overflow-hidden bg-white">
+    <section className="hero-parallax relative overflow-hidden bg-white">
       {/* Calm spa wash (glass-over-aurora language, CodeFronts MIT): static CSS only. */}
       <div
         aria-hidden
         className="pointer-events-none absolute -top-32 end-0 h-96 w-96 rounded-full bg-teal-100/70 blur-3xl"
       />
       <div className="relative mx-auto grid max-w-6xl items-center gap-10 px-4 pb-16 pt-14 sm:px-6 lg:grid-cols-[1.02fr_0.98fr] lg:pb-24 lg:pt-20">
-        <div className="max-w-xl">
+        <div className="hero-copy max-w-xl">
           <p className="hero-enter text-xs font-semibold uppercase tracking-[0.18em] text-teal-700">
             {t("heroEyebrow")}
           </p>
@@ -62,7 +67,7 @@ export default function HeroHome() {
           </div>
         </div>
 
-        <div className="relative mx-auto w-full max-w-[420px]">
+        <div className="hero-art-settle relative mx-auto w-full max-w-[420px]">
           <HeroOrb className="-top-20 -end-10 sm:-top-24 sm:-end-20" />
           <Image
             src="/images/dr-moussaoui-portrait.png"
