@@ -63,6 +63,8 @@ describe("DoctorSection", () => {
     expect(screen.getByText("Aligneurs transparents")).toBeTruthy();
     expect(screen.getByRole("link", { name: "Découvrir la clinique" })).toBeTruthy();
     expect(container.querySelector('img[src*="dr-moussaoui-portrait"]')).toBeTruthy();
+    // Entry wipe hook on the portrait (Task 5).
+    expect(container.querySelector("img.wipe-media")).toBeTruthy();
     unmount();
   });
 });

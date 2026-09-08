@@ -17,7 +17,7 @@ export default function DoctorSection() {
     <section className="bg-white" aria-labelledby="doctor-title">
       <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 md:py-20">
         <Reveal>
-          <figure className="mx-auto max-w-4xl rounded-[1.75rem] border border-teal-100 bg-teal-50/50 p-6 sm:p-10">
+          <figure className="wipe-frame mx-auto max-w-4xl rounded-[1.75rem] border border-teal-100 bg-teal-50/50 p-6 sm:p-10">
             <div className="flex flex-col gap-6 sm:flex-row sm:items-center">
               <Image
                 src="/images/dr-moussaoui-portrait.png"
@@ -26,7 +26,7 @@ export default function DoctorSection() {
                 height={273}
                 loading="lazy"
                 sizes="192px"
-                className="h-auto w-32 shrink-0 rounded-2xl object-cover shadow-md ring-1 ring-zinc-900/10 sm:w-40"
+                className="wipe-media h-auto w-32 shrink-0 rounded-2xl object-cover shadow-md ring-1 ring-zinc-900/10 sm:w-40"
               />
               <div>
                 <blockquote className="text-lg font-medium leading-relaxed text-zinc-800 sm:text-xl">

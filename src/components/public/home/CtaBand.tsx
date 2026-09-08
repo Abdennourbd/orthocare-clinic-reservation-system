@@ -7,7 +7,11 @@ import { ToothIcon } from "../icons";
 export default function CtaBand() {
   const t = useTranslations("Home");
   return (
-    <section id="book" className="relative overflow-hidden bg-teal-600">
+    <section id="book" className="wipe-frame relative overflow-hidden bg-teal-600">
+      <div
+        aria-hidden
+        className="cta-aurora pointer-events-none absolute inset-0 bg-gradient-to-r from-transparent via-white/25 to-transparent"
+      />
       <div
         aria-hidden
         className="pointer-events-none absolute -right-16 -top-16 h-64 w-64 rounded-full bg-teal-500/40 blur-3xl"

@@ -143,7 +143,9 @@ body {
   .arrive-bloom,
   .arrive-rise,
   .arrive-cue,
-  .band-photo {
+  .band-photo,
+  .wipe-media,
+  .cta-aurora {
     animation: none !important;
   }
 
@@ -323,6 +325,60 @@ body {
 .band-frame {
   view-timeline-name: --band;
   view-timeline-axis: block;
+}
+
+/* Entry wipes + CTA finale (Task 5, `wipe-*`/`cta-*`). Wipe reveals media
+   from the reading-start edge (mirrored for RTL) on its own named timeline;
+   text keeps the existing Reveal. The CTA aurora sweeps once on entry and
+   rests — no new infinite loops. One animation per element. */
+@keyframes wipe-in {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+@keyframes wipe-in-rtl {
+  from {
+    clip-path: inset(0 0 0 100%);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+.wipe-frame {
+  view-timeline-name: --wipe;
+  view-timeline-axis: block;
+}
+
+.wipe-media {
+  animation: wipe-in linear both;
+  animation-timeline: --wipe;
+  animation-range: entry 0% entry 100%;
+}
+
+[dir="rtl"] .wipe-media {
+  animation-name: wipe-in-rtl;
+}
+
+@keyframes cta-aurora {
+  from {
+    opacity: 0;
+    transform: translateX(-25%);
+  }
+  to {
+    opacity: 0.55;
+    transform: none;
+  }
+}
+
+.cta-aurora {
+  animation: cta-aurora 1.2s ease-out both;
+  animation-timeline: --wipe;
+  animation-range: entry 0% entry 100%;
 }
 
 .band-photo {
