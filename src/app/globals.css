@@ -145,6 +145,10 @@ body {
   .arrive-cue {
     animation: none !important;
   }
+
+  .journey-progress {
+    display: none;
+  }
 }
 
 /* Condensing site header ("Exhale", pure CSS scroll-driven, no JS).
@@ -296,4 +300,27 @@ body {
 
 .arrive-cue {
   animation: arrive-cue 1.8s ease-in-out 1s 3 both;
+}
+
+/* Journey hairline (Task 2, `journey-*` prefix): 3px teal progress bar
+   riding the sticky header's bottom edge, scaleX driven by root scroll.
+   Origin follows reading direction; display:none under reduced motion. */
+@keyframes journey-progress {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+.journey-progress {
+  transform-origin: left center;
+  animation: journey-progress linear both;
+  animation-timeline: scroll();
+  animation-range: 0 100%;
+}
+
+[dir="rtl"] .journey-progress {
+  transform-origin: right center;
 }

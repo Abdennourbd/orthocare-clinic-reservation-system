@@ -44,6 +44,8 @@ describe("Header (condensing)", () => {
     const bar = container.querySelector(".site-header-shadow.site-header-compact");
     expect(bar).toBeTruthy();
     expect(screen.getByRole("link", { name: "Prendre rendez-vous" })).toBeTruthy();
+    // Journey hairline present (progress itself is scroll-driven CSS).
+    expect(container.querySelector(".journey-progress")).toBeTruthy();
     unmount();
   });
 });
