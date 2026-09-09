@@ -12,7 +12,7 @@ Details + rationale live in `tasks/plan-clinic-revamp.md`. Strictly sequential �
 
 ## Phase 1: Rebuild
 
-## Task C1: Editorial restructure + trilingual copy — DONE 2026-09-09
+## Task C1: Editorial restructure + trilingual copy — DONE 2026-09-09 — DONE 2026-09-09
 
 **Description:** Rewrite `ClinicSection.tsx` as a `zinc-50` band with three alternating photo/text rows (01 waiting room → 02 reception → 03 equipment), each with a moment title + one benefit line, numerals echoing `SmileResults` beats, and a closing Book + About (`/about`, reused `doctorAboutCta`) CTA row. Keep the same 3 photos with `band-photo` parallax untouched. Add 7 i18n keys (`clinicEyebrow`, `clinicStep{1,2,3}Title/Desc`) and refresh `clinicTitle`/`clinicDesc` values in FR/AR/EN; `clinicCap1-3` stay as photo alts.
 
@@ -35,7 +35,7 @@ Details + rationale live in `tasks/plan-clinic-revamp.md`. Strictly sequential �
 
 **Estimated scope:** Medium (4 files)
 
-## Task C2: Test update + static verification — DONE 2026-09-09
+## Task C2: Test update + static verification — DONE 2026-09-09 — DONE 2026-09-09
 
 **Description:** Update the `ClinicSection` block in `Conversion.test.tsx` (it asserts the old captions) to the new moment titles/copy and CTA links; run typecheck + lint + focused suites; take first screenshots and fix static issues (overflow, wrapping, alt text) before the full audit.
 
@@ -63,7 +63,7 @@ Details + rationale live in `tasks/plan-clinic-revamp.md`. Strictly sequential �
 
 ## Phase 2: Audit
 
-## Task C3: Browser audit + polish loop + full gate
+## Task C3: Browser audit + polish loop + full gate — DONE 2026-09-09 (verified: EN/AR × 1440/390, alternating rows, RTL mirror, zero overflow, console clean for this section, 1187 tests green, build clean; no findings requiring code changes)
 
 **Description:** Real-Chromium audit over `/fr`, `/ar`, `/en` × desktop + mobile 390: full-section screenshots, keyboard-only pass through both CTAs, contrast check on zinc-50, reduced-motion static run, failure-signature grep (double-animation). Fix every finding with small minimal-message commits (local only, never pushed); close with full `npm test` + `npm run build`.
 
