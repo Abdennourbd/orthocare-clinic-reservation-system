@@ -70,6 +70,16 @@ export type PublicSmileCaseDetail = PublicSmileCase & {
   images: { id: string; imageUrl: string; caption: string }[];
 };
 
+// Home showcase feed (H2): featured cases with a few extras for the strip.
+// Same ordering + fallback rule as GalleryPreview, capped at 4 cards.
+export type PublicHomeSmileCase = PublicSmileCase & {
+  images: { id: string; imageUrl: string; caption: string }[];
+};
+
+// Home showcase feed (H2): featured cases with a few extras for the strip.
+// Same ordering + fallback rule as GalleryPreview, capped at 4 cards.
+// Selects are inlined (not shared) so Prisma infers the images relation.
+
 const caseListSelect = {
   id: true,
   key: true,
@@ -142,6 +152,44 @@ async function fetchSmileCaseByKey(key: string, locale: string): Promise<PublicS
   };
 }
 
+async function fetchHomeSmileCases(locale: string): Promise<PublicHomeSmileCase[]> {
+  const toHomeCase = (r: SmileCaseListRow & { images: { id: string; imageUrl: string; caption: unknown }[] }) => ({
+    ...toPublicCase(r, locale),
+    images: r.images.map((i) => ({
+      id: i.id,
+      imageUrl: i.imageUrl,
+      caption: localized(i.caption as LocalizedField, locale),
+    })),
+  });
+  const featured = await getPrisma().smileCase.findMany({
+    where: { active: true, featured: true },
+    orderBy: [{ featuredOrder: "asc" }, { sortOrder: "asc" }],
+    select: {
+      ...caseListSelect,
+      images: {
+        orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
+        take: 4,
+        select: { id: true, imageUrl: true, caption: true },
+      },
+    },
+  });
+  const rows = featured.length > 0
+    ? featured
+    : await getPrisma().smileCase.findMany({
+        where: { active: true },
+        orderBy: [{ sortOrder: "asc" }, { key: "asc" }],
+        select: {
+          ...caseListSelect,
+          images: {
+            orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
+            take: 4,
+            select: { id: true, imageUrl: true, caption: true },
+          },
+        },
+      });
+  return rows.slice(0, 4).map((r) => toHomeCase(r));
+}
+
 export const listActiveSmileCases = isDev
   ? fetchActiveSmileCases
   : unstable_cache(fetchActiveSmileCases, ["smile-cases"], {
@@ -152,6 +200,13 @@ export const listActiveSmileCases = isDev
 export const listFeaturedSmileCases = isDev
   ? fetchFeaturedSmileCases
   : unstable_cache(fetchFeaturedSmileCases, ["smile-cases-featured"], {
+      tags: ["gallery"],
+      revalidate: 3600,
+    });
+
+export const listHomeSmileCases = isDev
+  ? fetchHomeSmileCases
+  : unstable_cache(fetchHomeSmileCases, ["smile-cases-home"], {
       tags: ["gallery"],
       revalidate: 3600,
     });

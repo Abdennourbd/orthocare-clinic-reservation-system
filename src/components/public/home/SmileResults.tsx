@@ -1,11 +1,12 @@
 "use client";
 
 import { useTranslations } from "next-intl";
+import Image from "next/image";
 import { Link } from "@/i18n/navigation";
 import Reveal from "../motion/Reveal";
 import BeforeAfterSlider from "../BeforeAfterSlider";
 import { StarIcon } from "../icons";
-import type { PublicSmileCase } from "@/lib/public/content";
+import type { PublicHomeSmileCase } from "@/lib/public/content";
 
 // Pinned transformation chapter (scroll-journey Task 3): on lg screens the
 // slider sticks (top-28, self-start) while three copy beats scroll past —
@@ -23,7 +24,7 @@ function BeatNumeral({ n }: { n: string }) {
   );
 }
 
-export default function SmileResults({ cases = [] }: { cases?: PublicSmileCase[] }) {
+export default function SmileResults({ cases = [] }: { cases?: PublicHomeSmileCase[] }) {
   const t = useTranslations("Home");
   const tGallery = useTranslations("GalleryPage");
 
@@ -111,6 +112,30 @@ export default function SmileResults({ cases = [] }: { cases?: PublicSmileCase[]
                     <h4 className="text-lg font-bold tracking-tight text-zinc-900">{c.title}</h4>
                     {c.description ? (
                       <p className="mt-2 line-clamp-2 leading-relaxed text-zinc-600">{c.description}</p>
+                    ) : null}
+                    {c.images.length > 0 ? (
+                      <div
+                        className="cases-extras mt-4 flex gap-2 overflow-x-auto pb-1"
+                        role="list"
+                        aria-label={c.title}
+                      >
+                        {c.images.map((img) => (
+                          <div
+                            key={img.id}
+                            role="listitem"
+                            className="relative h-16 w-24 shrink-0 overflow-hidden rounded-lg border border-zinc-200 bg-zinc-100"
+                          >
+                            <Image
+                              src={img.imageUrl}
+                              alt={img.caption || c.title}
+                              fill
+                              loading="lazy"
+                              sizes="96px"
+                              className="object-cover"
+                            />
+                          </div>
+                        ))}
+                      </div>
                     ) : null}
                     <Link
                       href={`/gallery/${c.key}`}
