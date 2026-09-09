@@ -52,6 +52,47 @@ describe("SmileResults", () => {
     expect(container.querySelector('img[src*="smile-before"]')).toBeTruthy();
     unmount();
   });
+
+  it("renders the admin-pinned cases rail with sliders, extras, links and controls", () => {
+    const demoCases = [
+      {
+        id: "c1",
+        key: "demo-one",
+        title: "Cas un",
+        description: "Description une",
+        beforeImageUrl: "/images/beforewhitening.jpeg",
+        afterImageUrl: "/images/afterwhitening.jpeg",
+        featured: true,
+        images: [{ id: "e1", imageUrl: "/images/smile.jpg", caption: "Étape 1" }],
+      },
+      {
+        id: "c2",
+        key: "demo-two",
+        title: "Cas deux",
+        description: "Description deux",
+        beforeImageUrl: "/images/beforewhitening.jpeg",
+        afterImageUrl: "/images/afterwhitening.jpeg",
+        featured: true,
+        images: [],
+      },
+    ];
+    const { container, unmount } = renderWithFr(<SmileResults cases={demoCases} />);
+    expect(container.querySelector('[aria-roledescription="carousel"]')).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Cas précédent" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Cas suivant" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Cas un — Voir le cas" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Cas deux — Voir le cas" })).toBeTruthy();
+    expect(container.querySelectorAll(".wipe-frame").length).toBe(2);
+    expect(container.querySelectorAll(".wipe-media").length).toBe(2);
+    expect(screen.getByAltText("Étape 1")).toBeTruthy();
+    unmount();
+  });
+
+  it("renders no rail when no cases are pinned", () => {
+    const { container, unmount } = renderWithFr(<SmileResults cases={[]} />);
+    expect(container.querySelector('[aria-roledescription="carousel"]')).toBeNull();
+    unmount();
+  });
 });
 
 describe("DoctorSection", () => {

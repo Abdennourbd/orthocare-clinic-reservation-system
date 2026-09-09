@@ -1,11 +1,12 @@
 "use client";
 
 import { useTranslations } from "next-intl";
+import { useRef } from "react";
 import Image from "next/image";
 import { Link } from "@/i18n/navigation";
 import Reveal from "../motion/Reveal";
 import BeforeAfterSlider from "../BeforeAfterSlider";
-import { StarIcon } from "../icons";
+import { StarIcon, ArrowRightIcon } from "../icons";
 import type { PublicHomeSmileCase } from "@/lib/public/content";
 
 // Pinned transformation chapter (scroll-journey Task 3): on lg screens the
@@ -27,6 +28,16 @@ function BeatNumeral({ n }: { n: string }) {
 export default function SmileResults({ cases = [] }: { cases?: PublicHomeSmileCase[] }) {
   const t = useTranslations("Home");
   const tGallery = useTranslations("GalleryPage");
+  const railRef = useRef<HTMLDivElement>(null);
+
+  const scrollRail = (dir: 1 | -1) => {
+    const rail = railRef.current;
+    if (!rail) return;
+    const smooth =
+      typeof window !== "undefined" &&
+      !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    rail.scrollBy({ left: dir * rail.clientWidth * 0.85, behavior: smooth ? "smooth" : "auto" });
+  };
 
   return (
     <section className="bg-white" aria-labelledby="results-title">
@@ -94,20 +105,51 @@ export default function SmileResults({ cases = [] }: { cases?: PublicHomeSmileCa
             <p className="mx-auto mt-2 max-w-2xl text-zinc-600">{t("gallerySubtitle")}</p>
           </Reveal>
 
-          <div className="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-2">
+          <div className="mt-6 flex justify-center gap-3 sm:hidden">
+            <button
+              type="button"
+              onClick={() => scrollRail(-1)}
+              aria-label={t("casesPrev")}
+              className="flex h-11 w-11 items-center justify-center rounded-full border border-zinc-300 bg-white text-zinc-700 transition-colors hover:bg-zinc-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2"
+            >
+              <ArrowRightIcon width={18} height={18} className="rotate-180 rtl:rotate-0" />
+            </button>
+            <button
+              type="button"
+              onClick={() => scrollRail(1)}
+              aria-label={t("casesNext")}
+              className="flex h-11 w-11 items-center justify-center rounded-full border border-zinc-300 bg-white text-zinc-700 transition-colors hover:bg-zinc-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2"
+            >
+              <ArrowRightIcon width={18} height={18} className="rtl:rotate-180" />
+            </button>
+          </div>
+
+          <div
+            ref={railRef}
+            role="region"
+            aria-roledescription="carousel"
+            aria-label={t("galleryTitle")}
+            className="cases-rail mt-8 flex snap-x snap-mandatory gap-6 overflow-x-auto pb-4 sm:grid sm:grid-cols-2 sm:overflow-visible sm:pb-0"
+          >
             {cases.map((c, i) => (
-              <Reveal key={c.id} delay={Math.min(i * 0.05, 0.2)} className="h-full">
-                <article className="flex h-full flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm">
-                  <BeforeAfterSlider
-                    beforeSrc={c.beforeImageUrl}
-                    afterSrc={c.afterImageUrl}
-                    beforeAlt={`${c.title} — ${tGallery("beforeLabel")}`}
-                    afterAlt={`${c.title} — ${tGallery("afterLabel")}`}
-                    beforeLabel={tGallery("beforeLabel")}
-                    afterLabel={tGallery("afterLabel")}
-                    sliderLabel={`${c.title} — ${tGallery("comparisonLabel")}`}
-                    sizes="(max-width: 640px) 100vw, 50vw"
-                  />
+              <Reveal
+                key={c.id}
+                delay={Math.min(i * 0.05, 0.2)}
+                className="h-full w-[85vw] shrink-0 snap-center sm:w-auto"
+              >
+                <article className="wipe-frame flex h-full flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm">
+                  <div className="wipe-media">
+                    <BeforeAfterSlider
+                      beforeSrc={c.beforeImageUrl}
+                      afterSrc={c.afterImageUrl}
+                      beforeAlt={`${c.title} — ${tGallery("beforeLabel")}`}
+                      afterAlt={`${c.title} — ${tGallery("afterLabel")}`}
+                      beforeLabel={tGallery("beforeLabel")}
+                      afterLabel={tGallery("afterLabel")}
+                      sliderLabel={`${c.title} — ${tGallery("comparisonLabel")}`}
+                      sizes="(max-width: 640px) 85vw, 50vw"
+                    />
+                  </div>
                   <div className="flex flex-1 flex-col p-5">
                     <h4 className="text-lg font-bold tracking-tight text-zinc-900">{c.title}</h4>
                     {c.description ? (
