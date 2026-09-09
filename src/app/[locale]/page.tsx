@@ -16,6 +16,8 @@ import ReviewsSection from "@/components/public/ReviewsSection";
 import LocationSection from "@/components/public/LocationSection";
 import CtaBand from "@/components/public/home/CtaBand";
 import StickyBookBar from "@/components/public/home/StickyBookBar";
+import { getAppLocale } from "@/lib/i18n/getLocale";
+import { listActiveSmileCases, listFeaturedSmileCases } from "@/lib/public/content";
 
 export const revalidate = 3600;
 
@@ -29,12 +31,18 @@ export async function generateMetadata({
   return pageMetadata(locale, "/", t("title"), t("description"));
 }
 
-export default function HomePage() {
+export default async function HomePage() {
+  // H1 (home-cases): admin-pinned feed for the SmileResults chapter.
+  // Featured first (admin order), fallback to latest active — same rule as
+  // GalleryPreview. Plain serializable rows passed to the client chapter.
+  const locale = await getAppLocale();
+  const featured = await listFeaturedSmileCases(locale);
+  const homeCases = (featured.length > 0 ? featured : await listActiveSmileCases(locale)).slice(0, 4);
   return (
     <>
       <HeroHome />
       <TrustStrip />
-      <SmileResults />
+      <SmileResults cases={homeCases} />
       <ComfortSection />
       <DoctorSection />
       <ServicesPreview />

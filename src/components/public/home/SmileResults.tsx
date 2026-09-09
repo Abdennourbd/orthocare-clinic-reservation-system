@@ -5,6 +5,7 @@ import { Link } from "@/i18n/navigation";
 import Reveal from "../motion/Reveal";
 import BeforeAfterSlider from "../BeforeAfterSlider";
 import { StarIcon } from "../icons";
+import type { PublicSmileCase } from "@/lib/public/content";
 
 // Pinned transformation chapter (scroll-journey Task 3): on lg screens the
 // slider sticks (top-28, self-start) while three copy beats scroll past —
@@ -22,7 +23,7 @@ function BeatNumeral({ n }: { n: string }) {
   );
 }
 
-export default function SmileResults() {
+export default function SmileResults({ cases = [] }: { cases?: PublicSmileCase[] }) {
   const t = useTranslations("Home");
   const tGallery = useTranslations("GalleryPage");
 
@@ -82,6 +83,58 @@ export default function SmileResults() {
           </Reveal>
         </div>
       </div>
+
+      {cases.length > 0 ? (
+        <div className="mx-auto max-w-6xl px-4 pb-16 sm:px-6 md:pb-20">
+          <Reveal className="text-center">
+            <h3 className="text-2xl font-bold tracking-tight text-zinc-900 sm:text-3xl">
+              {t("galleryTitle")}
+            </h3>
+            <p className="mx-auto mt-2 max-w-2xl text-zinc-600">{t("gallerySubtitle")}</p>
+          </Reveal>
+
+          <div className="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-2">
+            {cases.map((c, i) => (
+              <Reveal key={c.id} delay={Math.min(i * 0.05, 0.2)} className="h-full">
+                <article className="flex h-full flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm">
+                  <BeforeAfterSlider
+                    beforeSrc={c.beforeImageUrl}
+                    afterSrc={c.afterImageUrl}
+                    beforeAlt={`${c.title} — ${tGallery("beforeLabel")}`}
+                    afterAlt={`${c.title} — ${tGallery("afterLabel")}`}
+                    beforeLabel={tGallery("beforeLabel")}
+                    afterLabel={tGallery("afterLabel")}
+                    sliderLabel={`${c.title} — ${tGallery("comparisonLabel")}`}
+                    sizes="(max-width: 640px) 100vw, 50vw"
+                  />
+                  <div className="flex flex-1 flex-col p-5">
+                    <h4 className="text-lg font-bold tracking-tight text-zinc-900">{c.title}</h4>
+                    {c.description ? (
+                      <p className="mt-2 line-clamp-2 leading-relaxed text-zinc-600">{c.description}</p>
+                    ) : null}
+                    <Link
+                      href={`/gallery/${c.key}`}
+                      aria-label={`${c.title} — ${tGallery("viewCase")}`}
+                      className="mt-4 inline-flex items-center gap-1.5 text-base font-semibold text-teal-700 underline-offset-4 transition-colors hover:text-teal-800 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2"
+                    >
+                      {tGallery("viewCase")}
+                    </Link>
+                  </div>
+                </article>
+              </Reveal>
+            ))}
+          </div>
+
+          <Reveal className="mt-8 text-center">
+            <Link
+              href="/gallery"
+              className="inline-flex items-center gap-2 rounded-full bg-teal-700 px-7 py-3 text-base font-semibold text-white transition-colors hover:bg-teal-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2"
+            >
+              {t("galleryCtaButton")}
+            </Link>
+          </Reveal>
+        </div>
+      ) : null}
     </section>
   );
 }
