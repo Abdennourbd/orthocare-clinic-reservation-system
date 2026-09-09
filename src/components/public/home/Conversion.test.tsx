@@ -111,16 +111,24 @@ describe("DoctorSection", () => {
 });
 
 describe("ClinicSection", () => {
-  it("renders all three hygiene photos with captions", () => {
+  it("renders three alternating moments with benefit copy and closing CTAs", () => {
     const { container, unmount } = renderWithFr(<ClinicSection />);
     expect(
-      screen.getByRole("heading", { level: 2, name: "Une clinique où l'on se sent bien" }),
+      screen.getByRole("heading", { level: 2, name: "Votre première visite, avant même d'arriver" }),
     ).toBeTruthy();
+    for (const title of [
+      "Arrivez dans un lieu apaisé",
+      "Accueilli par une équipe souriante",
+      "Soigné avec des outils modernes",
+    ]) {
+      expect(screen.getByRole("heading", { level: 3, name: title })).toBeTruthy();
+    }
     for (const src of ["clinic-waiting-room", "clinic-reception", "clinic-equipment"]) {
       expect(container.querySelector(`img[src*="${src}"]`)).toBeTruthy();
     }
-    expect(screen.getByText("Salle d'attente apaisante")).toBeTruthy();
-    expect(screen.getByText("Équipements modernes, hygiène rigoureuse")).toBeTruthy();
+    expect(container.querySelectorAll("img.band-photo")).toHaveLength(3);
+    expect(screen.getByRole("link", { name: "Prendre rendez-vous" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Découvrir la clinique" })).toBeTruthy();
     unmount();
   });
 });
